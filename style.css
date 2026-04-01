@@ -1,0 +1,192 @@
+html{
+    font-size: 16px; /* sets a base font size for the entire document, 1rem=16px 2rem=32px */
+    font-family: "DM Sans", sans-serif; /* sets the font family for the entire document */
+    scrollbar-gutter: stable; /* prevents layout shifts when scrollbar appears/disappears */
+}
+
+.navbar{ /* styles for the navigation bar */
+    position: fixed; /* keeps navbar at the top when you scroll */
+    top: 0;
+    left: 0;
+    width: 100%;
+    background-color: #fff;
+    padding: 12px 30px;
+    display: flex;
+    align-items: center;
+    z-index: 1000; /* ensures navbar is above other content */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* adds a subtle shadow for depth */
+}
+
+.nav-logo img { /* styles for the logo image */
+    height: 100px; /* sets a consistent height for the logo */
+    width: auto; /* maintains aspect ratio */
+    margin-left: 40px;
+    display: block;
+}
+
+.nav-logo a{
+  display: inline-block; /* allows the logo to be clickable without affecting layout */
+}
+
+body{
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* makes body take up at least full screen */
+    padding-top: 120px; /* adds space at the top to prevent content from being hidden behind the navbar */
+}
+
+main{
+  flex: 1; /* allows main content to grow and fill available space, pushing footer to the bottom */
+}
+
+.nav-links{ /* styles for the navigation links container */
+    display: flex; /* arranges links in a row */
+    gap: 130px; /* adds space between links */
+    margin-left: auto; /* pushes links to the right */
+    margin-right: auto; /* centers the links horizontally */
+    list-style: none; /* removes default list styling */
+}
+
+.nav-links li a{ /* styles for the navigation links */
+    text-decoration: none; /* removes underline from links */
+    color: #333; /* sets link color */
+    font-size: 1.25rem; /* sets font size for links */
+    font-weight: 500; /* makes links slightly bolder */
+    transition: color 0.3s ease; /* smooth transition for hover effect */
+}
+
+.nav-links a:hover{
+    color: #1867bc; /* changes link color on hover */
+}
+
+h1{
+    text-align: center; /* centers the heading text */
+    margin-top: 20px; /* adds space above the heading */
+
+}
+
+#intro-text{ /* styles for the introductory text on home page */
+    text-align: center; /* centers the introductory text */
+    margin-top: 80px; /* adds space above the introductory text */
+    font-size: 1.8rem;
+    margin-left: 25%;
+    margin-right: 25%;
+}
+
+#features-list{ /* styles for list on home page */
+    display: inline-block; /* allows list items to be displayed in a row */
+    text-align: left; 
+    font-size: 1.2rem;
+    margin-top: 20px;
+    line-height: 200%;
+    padding: 50px;
+}
+
+#features-list a{
+    color: black;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+#features-list a:hover{
+    color: #1867bc;
+}
+
+.list-wrapper{
+    text-align: center;
+}
+
+.feedback-section {
+  max-width: 600px;
+  margin: 60px auto;    /* centers the section on the page */
+  padding: 40px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+}
+
+.feedback-section h2 {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.feedback-section p {
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+  color: #666;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.form-group input,
+.form-group textarea {
+  padding: 10px;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  outline: none;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  border-color: #0077cc;   /* highlight color when clicked */
+}
+
+button[type="submit"] {
+  background-color: #0077cc;
+  color: white;
+  padding: 12px 30px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button[type="submit"]:hover {
+  background-color: #005fa3;
+}
+
+.footer {
+  background-color: #f1f1f1;
+  text-align: center;
+  padding: 20px;
+  font-size: 0.875rem;
+  color: #666;
+  width: 100%;
+  margin-top: 60px; /* pushes footer away from content above */
+}
+
+.thankyou-text {
+  text-align: center;
+  margin-top: 75px;
+  font-size: 1.5rem;
+}
+
+.thankyou-logo{
+  display: block;
+  margin: 40px auto; /* centers the logo and adds space above and below */
+}
+
+.home-link {
+  display: block;
+  text-align: center;
+  margin-top: 10px;
+  font-size: 1rem;
+  color: #0077cc;
+  text-decoration: none;
+}
+
+.home-link:hover {
+  text-decoration: underline;
+  color: #005fa3;
+}
+

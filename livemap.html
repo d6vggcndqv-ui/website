@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADS-B Data</title>
+    <link rel="stylesheet" href="Styles/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <script src="Scripts/script.js"></script>
+</head>
+
+<body>
+  <nav class="navbar">
+        <div class="nav-logo">
+            <a href="https://www.fl-technologies.com" target="_blank"> 
+                <img src="Images/Screenshot 2026-03-30 at 1.10.54 PM.png" alt="Logo">
+            </a>
+        </div>
+        
+        <!-- Make sure this is the same list in every HTML file -->
+        <ul class="nav-links"> <!-- Add links to different pages on the site to this list-->
+            <li><a href="index.html">Home</a></li>
+            <li><a href="livemap.html">Live Map</a></li>
+            <li><a href="flighthistory.html">Flight History</a></li>
+            <li><a href="dashboard.html">Analytics Dashboard</a></li>
+        </ul>
+    </nav>
+
+    <main> <!-- Main content of page excluding navbar and footer-->
+        
+        <h1>Live Map</h1>
+
+        <iframe 
+            src="https://unpluralized-uninclosed-robbi.ngrok-free.dev"
+            width="100%"
+            height="600px"
+            frameborder="0">   
+        </iframe>
+
+    </main>
+
+
+    <footer class="footer"> <!-- Include in all HTML files -->
+        <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
+    </footer>
+
+</body>
+
+</html>
