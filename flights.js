@@ -41,7 +41,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 function isOnGround(alt) {
-  return alt === "ground" || (typeof alt === "number" && alt < 0);
+  return alt === "ground";
 }
 
 async function logFlight(callsign, category, event) {
@@ -89,7 +89,8 @@ async function fetchAndDetect() {
       const prevAlt = prev ? prev.alt_baro : null;
 
       // --- LANDING ---
-      if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) && !state.landingLogged) {
+      if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
+          typeof prevAlt === "number" && prevAlt > 200 && !state.landingLogged) {
         state.belowTouchAndGoThreshold = false;
         state.landingLogged = true;
         state.takeoffLogged = false;
@@ -101,15 +102,17 @@ async function fetchAndDetect() {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
+          state.belowTouchAndGoThreshold = false;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
 
-      // --- TAKEOFF option 2: first appears below 100ft and climbing ---
+      // --- TAKEOFF option 2: first appears below 100ft ---
       if (!prev && typeof currentAlt === "number" && currentAlt < 100) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
+          state.belowTouchAndGoThreshold = false;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
@@ -120,6 +123,7 @@ async function fetchAndDetect() {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
+          state.belowTouchAndGoThreshold = false;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
@@ -149,7 +153,3 @@ async function fetchAndDetect() {
 
 fetchAndDetect();
 setInterval(fetchAndDetect, 5000);
-
-
-
-
