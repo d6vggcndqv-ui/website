@@ -19,8 +19,8 @@ const db = getFirestore(app);
 
 const OWD_LAT = 42.1905;
 const OWD_LNG = -71.1728;
-const MAX_DISTANCE_KM = 500;
-const MAX_ALTITUDE_FT = 40000;
+const MAX_DISTANCE_KM = 3;
+const MAX_ALTITUDE_FT = 1000;
 
 let trackedAircraft = {};
 
