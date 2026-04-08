@@ -191,16 +191,16 @@ button[type="submit"]:hover {
 }
 
 .map-link {
-  display: block;
-  text-align: center;
-  margin-top: 10px;
-  margin-bottom: 10px;
-  font-size: .8rem;
-  color: #0077cc;
-  text-decoration: none;
+  display: block !important;
+  text-align: center !important;
+  margin-top: 10px !important;
+  margin-bottom: 10px !important;
+  font-size: .8rem !important;
+  color: #0077cc !important;
+  text-decoration: none !important;
 }
 
 .map-link:hover {
-  text-decoration: underline;
-  color: #005fa3;
+  text-decoration: underline !important;
+  color: #005fa3 !important;
 }
