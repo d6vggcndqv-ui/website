@@ -21,6 +21,13 @@ const OWD_LNG = -71.1728;
 const MAX_DISTANCE_KM = 3;
 const COOLDOWN_MS = 60000;
 
+// runway corridors
+const RUNWAYS = [
+  { lat1: 42.1937493, lon1: -71.1777631, lat2: 42.1839344, lon2: -71.1717076 }, // 17/35
+  { lat1: 42.1921429, lon1: -71.1784215, lat2: 42.1923323, lon2: -71.1638716 }  // 10/28
+];
+const RUNWAY_CORRIDOR_KM = 0.15; // 150 meters either side of runway
+
 const categoryMap = {
   "A1": "A1: Light",
   "A2": "A2: Small",
@@ -38,6 +45,21 @@ function getDistance(lat1, lon1, lat2, lon2) {
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLon/2) * Math.sin(dLon/2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// check if a point is within the corridor of a runway
+function isOnRunway(lat, lon) {
+  for (const rwy of RUNWAYS) {
+    // find closest point on runway line to aircraft
+    const dx = rwy.lat2 - rwy.lat1;
+    const dy = rwy.lon2 - rwy.lon1;
+    const t = Math.max(0, Math.min(1, ((lat - rwy.lat1) * dx + (lon - rwy.lon1) * dy) / (dx * dx + dy * dy)));
+    const closestLat = rwy.lat1 + t * dx;
+    const closestLon = rwy.lon1 + t * dy;
+    const dist = getDistance(lat, lon, closestLat, closestLon);
+    if (dist <= RUNWAY_CORRIDOR_KM) return true;
+  }
+  return false;
 }
 
 function isOnGround(alt) {
@@ -80,64 +102,41 @@ async function fetchAndDetect() {
       const prev = previousAircraft[flight.hex];
       const state = aircraftState[flight.hex] || {
         lastTakeoff: 0,
-        lastTouchAndGo: 0,
-        landingLogged: false,
-        belowTouchAndGoThreshold: false
+        lastLanding: 0,
+        landingLogged: false
       };
 
       const currentAlt = flight.alt_baro;
       const prevAlt = prev ? prev.alt_baro : null;
+      const currentGs = flight.gs || 0;
+      const prevGs = prev ? (prev.gs || 0) : 0;
 
       // --- LANDING ---
+      // aircraft transitions to "ground" from a positive altitude
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
-          typeof prevAlt === "number" && prevAlt > 200 && !state.landingLogged) {
-        state.belowTouchAndGoThreshold = false;
+          typeof prevAlt === "number" && prevAlt > 0 && !state.landingLogged) {
         state.landingLogged = true;
-        state.takeoffLogged = false;
+        state.lastLanding = now;
         logFlight(flight.flight, flight.category, "Landing");
       }
 
       // --- TAKEOFF option 1: was on ground, now airborne ---
-      if (prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) && typeof currentAlt === "number") {
+      if (prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
+          typeof currentAlt === "number" && currentAlt > 0) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
-          state.belowTouchAndGoThreshold = false;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
 
-      // --- TAKEOFF option 2: first appears below 100ft ---
-      if (!prev && typeof currentAlt === "number" && currentAlt < 100) {
+      // --- TAKEOFF option 2: on runway, not showing ground, accelerating above 40kts ---
+      if (!isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
+          currentGs > 40 && currentGs > prevGs) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
-          state.belowTouchAndGoThreshold = false;
           logFlight(flight.flight, flight.category, "Takeoff");
-        }
-      }
-
-      // --- TAKEOFF option 2b: existing aircraft below 100ft and climbing ---
-      if (prev && typeof currentAlt === "number" && typeof prevAlt === "number" &&
-          currentAlt < 100 && currentAlt > prevAlt) {
-        if ((now - state.lastTakeoff) > COOLDOWN_MS) {
-          state.lastTakeoff = now;
-          state.landingLogged = false;
-          state.belowTouchAndGoThreshold = false;
-          logFlight(flight.flight, flight.category, "Takeoff");
-        }
-      }
-
-      // --- TOUCH AND GO: went below 200ft but never hit ground ---
-      if (typeof currentAlt === "number" && currentAlt < 200 && !isOnGround(currentAlt)) {
-        state.belowTouchAndGoThreshold = true;
-      }
-
-      if (state.belowTouchAndGoThreshold && typeof currentAlt === "number" && currentAlt >= 200) {
-        if ((now - state.lastTouchAndGo) > COOLDOWN_MS) {
-          state.lastTouchAndGo = now;
-          state.belowTouchAndGoThreshold = false;
-          logFlight(flight.flight, flight.category, "Touch and Go");
         }
       }
 
