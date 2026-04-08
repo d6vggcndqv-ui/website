@@ -190,3 +190,17 @@ button[type="submit"]:hover {
   color: #005fa3;
 }
 
+.map-link {
+  display: block;
+  text-align: center;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  font-size: .8rem;
+  color: #0077cc;
+  text-decoration: none;
+}
+
+.map-link:hover {
+  text-decoration: underline;
+  color: #005fa3;
+}
