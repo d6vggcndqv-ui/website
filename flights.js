@@ -114,6 +114,9 @@ async function fetchAndDetect() {
       const prevGs = prev ? (prev.gs || 0) : 0;
       const isHelicopter = flight.category === "A7";
 
+      // track if a takeoff was logged in this iteration
+      let takeoffLoggedThisIteration = false;
+
       // --- LANDING ---
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
           typeof prevAlt === "number" && !state.landingLogged) {
@@ -135,6 +138,7 @@ async function fetchAndDetect() {
           state.minAltOnRunway = null;
           state.consecutiveClimbs = 0;
           state.helicopterClimbs = 0;
+          takeoffLoggedThisIteration = true;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
@@ -149,6 +153,7 @@ async function fetchAndDetect() {
           state.landingLogged = false;
           state.minAltOnRunway = null;
           state.consecutiveClimbs = 0;
+          takeoffLoggedThisIteration = true;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
@@ -167,13 +172,15 @@ async function fetchAndDetect() {
           state.lastTakeoff = now;
           state.landingLogged = false;
           state.helicopterClimbs = 0;
+          takeoffLoggedThisIteration = true;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
 
       // --- TOUCH AND GO detection ---
       if (!isHelicopter && !isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
-          typeof currentAlt === "number" && (now - state.lastTakeoff) > COOLDOWN_MS) {
+          typeof currentAlt === "number" && (now - state.lastTakeoff) > COOLDOWN_MS &&
+          !takeoffLoggedThisIteration) {
 
         if (state.minAltOnRunway === null || currentAlt < state.minAltOnRunway) {
           state.minAltOnRunway = currentAlt;
