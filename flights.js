@@ -147,6 +147,8 @@ async function fetchAndDetect() {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
@@ -171,7 +173,7 @@ async function fetchAndDetect() {
 
       // --- TOUCH AND GO detection ---
       if (!isHelicopter && !isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
-          typeof currentAlt === "number") {
+          typeof currentAlt === "number" && (now - state.lastTakeoff) > COOLDOWN_MS) {
 
         if (state.minAltOnRunway === null || currentAlt < state.minAltOnRunway) {
           state.minAltOnRunway = currentAlt;
