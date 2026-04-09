@@ -109,9 +109,9 @@ async function fetchAndDetect() {
       const prevGs = prev ? (prev.gs || 0) : 0;
 
       // --- LANDING ---
-      // aircraft transitions from any number to "ground"
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
           typeof prevAlt === "number" && !state.landingLogged) {
+        console.log('LANDING CONDITION MET for', flight.flight);
         state.landingLogged = true;
         state.lastLanding = now;
         logFlight(flight.flight, flight.category, "Landing");
@@ -148,4 +148,4 @@ async function fetchAndDetect() {
 }
 
 fetchAndDetect();
-setInterval(fetchAndDetect, 5000);
+setInterval(fetchAndDetect, 2000);
