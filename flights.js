@@ -21,12 +21,11 @@ const OWD_LNG = -71.1728;
 const MAX_DISTANCE_KM = 3;
 const COOLDOWN_MS = 60000;
 
-// runway corridors
 const RUNWAYS = [
-  { lat1: 42.1937493, lon1: -71.1777631, lat2: 42.1839344, lon2: -71.1717076 }, // 17/35
-  { lat1: 42.1921429, lon1: -71.1784215, lat2: 42.1923323, lon2: -71.1638716 }  // 10/28
+  { lat1: 42.1937493, lon1: -71.1777631, lat2: 42.1839344, lon2: -71.1717076 },
+  { lat1: 42.1921429, lon1: -71.1784215, lat2: 42.1923323, lon2: -71.1638716 }
 ];
-const RUNWAY_CORRIDOR_KM = 0.15; // 150 meters either side of runway
+const RUNWAY_CORRIDOR_KM = 0.15;
 
 const categoryMap = {
   "A1": "A1: Light",
@@ -47,10 +46,8 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-// check if a point is within the corridor of a runway
 function isOnRunway(lat, lon) {
   for (const rwy of RUNWAYS) {
-    // find closest point on runway line to aircraft
     const dx = rwy.lat2 - rwy.lat1;
     const dy = rwy.lon2 - rwy.lon1;
     const t = Math.max(0, Math.min(1, ((lat - rwy.lat1) * dx + (lon - rwy.lon1) * dy) / (dx * dx + dy * dy)));
@@ -112,17 +109,17 @@ async function fetchAndDetect() {
       const prevGs = prev ? (prev.gs || 0) : 0;
 
       // --- LANDING ---
-      // aircraft transitions to "ground" from a positive altitude
+      // aircraft transitions from any number to "ground"
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
-          typeof prevAlt === "number" && prevAlt > 0 && !state.landingLogged) {
+          typeof prevAlt === "number" && !state.landingLogged) {
         state.landingLogged = true;
         state.lastLanding = now;
         logFlight(flight.flight, flight.category, "Landing");
       }
 
-      // --- TAKEOFF option 1: was on ground, now airborne ---
+      // --- TAKEOFF option 1: was on ground, now showing a number ---
       if (prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
-          typeof currentAlt === "number" && currentAlt > 0) {
+          typeof currentAlt === "number") {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
