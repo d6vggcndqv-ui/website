@@ -127,15 +127,16 @@ async function fetchAndDetect() {
         }
       }
 
-      // --- TAKEOFF option 2: on runway, not showing ground, accelerating above 40kts ---
-      if (!isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
-          currentGs > 40 && currentGs > prevGs) {
-        if ((now - state.lastTakeoff) > COOLDOWN_MS) {
-          state.lastTakeoff = now;
-          state.landingLogged = false;
-          logFlight(flight.flight, flight.category, "Takeoff");
-        }
-      }
+      // --- TAKEOFF option 2: on runway, not showing ground, accelerating above 40kts and climbing ---
+if (!isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
+    currentGs > 40 && currentGs > prevGs &&
+    typeof currentAlt === "number" && typeof prevAlt === "number" && currentAlt > prevAlt) {
+  if ((now - state.lastTakeoff) > COOLDOWN_MS) {
+    state.lastTakeoff = now;
+    state.landingLogged = false;
+    logFlight(flight.flight, flight.category, "Takeoff");
+  }
+}
 
       aircraftState[flight.hex] = state;
     });
