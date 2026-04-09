@@ -100,7 +100,10 @@ async function fetchAndDetect() {
       const state = aircraftState[flight.hex] || {
         lastTakeoff: 0,
         lastLanding: 0,
-        landingLogged: false
+        lastTouchAndGo: 0,
+        landingLogged: false,
+        minAltOnRunway: null,
+        consecutiveClimbs: 0
       };
 
       const currentAlt = flight.alt_baro;
@@ -114,6 +117,8 @@ async function fetchAndDetect() {
         console.log('LANDING CONDITION MET for', flight.flight);
         state.landingLogged = true;
         state.lastLanding = now;
+        state.minAltOnRunway = null;
+        state.consecutiveClimbs = 0;
         logFlight(flight.flight, flight.category, "Landing");
       }
 
@@ -123,20 +128,60 @@ async function fetchAndDetect() {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
 
+      // --- TOUCH AND GO detection ---
+      if (!isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
+          typeof currentAlt === "number") {
+
+        // track the minimum altitude reached on the runway
+        if (state.minAltOnRunway === null || currentAlt < state.minAltOnRunway) {
+          state.minAltOnRunway = currentAlt;
+          state.consecutiveClimbs = 0;
+        }
+
+        // count consecutive climbs after reaching minimum
+        if (state.minAltOnRunway !== null && currentAlt > state.minAltOnRunway &&
+            prevAlt !== null && typeof prevAlt === "number" && currentAlt > prevAlt) {
+          state.consecutiveClimbs++;
+        } else if (prevAlt !== null && typeof prevAlt === "number" && currentAlt <= prevAlt) {
+          // reset consecutive climbs if altitude stops increasing
+          state.consecutiveClimbs = 0;
+        }
+
+        // log touch and go after 2 consecutive climbs
+        if (state.consecutiveClimbs >= 2) {
+          if ((now - state.lastTouchAndGo) > COOLDOWN_MS) {
+            state.lastTouchAndGo = now;
+            state.lastTakeoff = now; // prevent takeoff option 2 from double counting
+            state.landingLogged = false; // reset so future landing can be logged
+            state.minAltOnRunway = null;
+            state.consecutiveClimbs = 0;
+            logFlight(flight.flight, flight.category, "Touch and Go");
+          }
+        }
+      } else {
+        // aircraft left runway corridor — reset touch and go tracking
+        if (!isOnRunway(flight.lat, flight.lon)) {
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
+        }
+      }
+
       // --- TAKEOFF option 2: on runway, not showing ground, accelerating above 40kts and climbing ---
-if (!isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
-    currentGs > 40 && currentGs > prevGs &&
-    typeof currentAlt === "number" && typeof prevAlt === "number" && currentAlt > prevAlt) {
-  if ((now - state.lastTakeoff) > COOLDOWN_MS) {
-    state.lastTakeoff = now;
-    state.landingLogged = false;
-    logFlight(flight.flight, flight.category, "Takeoff");
-  }
-}
+      if (!isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
+          currentGs > 40 && currentGs > prevGs &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" && currentAlt > prevAlt) {
+        if ((now - state.lastTakeoff) > COOLDOWN_MS) {
+          state.lastTakeoff = now;
+          state.landingLogged = false;
+          logFlight(flight.flight, flight.category, "Takeoff");
+        }
+      }
 
       aircraftState[flight.hex] = state;
     });
