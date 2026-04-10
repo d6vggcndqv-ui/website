@@ -4,7 +4,7 @@ import { getFirestore, collection, addDoc } from "https://www.gstatic.com/fireba
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
-  authDomain: "owd-data.firebaseapp.omain",
+  authDomain: "owd-data.firebaseapp.com",
   projectId: "owd-data",
   storageBucket: "owd-data.firebasestorage.app",
   messagingSenderId: "912110224300",
@@ -118,7 +118,7 @@ async function fetchAndDetect() {
       let takeoffLoggedThisIteration = false;
       let touchAndGoLoggedThisIteration = false;
 
-      // --- LANDING ---
+      // --- LANDING option 1: transitions to "ground" ---
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
           typeof prevAlt === "number" && !state.landingLogged) {
         console.log('LANDING CONDITION MET for', flight.flight);
@@ -127,6 +127,21 @@ async function fetchAndDetect() {
         state.minAltOnRunway = null;
         state.consecutiveClimbs = 0;
         state.helicopterClimbs = 0;
+        state.wasDescendingOnRunway = false;
+        logFlight(flight.flight, flight.category, "Landing");
+      }
+
+      // --- LANDING option 2: near runway, was descending, now very slow (under 5kts) ---
+      if (!state.landingLogged && !isOnGround(currentAlt) &&
+          isOnRunway(flight.lat, flight.lon) &&
+          state.wasDescendingOnRunway &&
+          currentGs < 5 && currentGs !== 0 &&
+          (now - state.lastLanding) > COOLDOWN_MS) {
+        console.log('LANDING CONDITION 2 MET for', flight.flight);
+        state.landingLogged = true;
+        state.lastLanding = now;
+        state.minAltOnRunway = null;
+        state.consecutiveClimbs = 0;
         state.wasDescendingOnRunway = false;
         logFlight(flight.flight, flight.category, "Landing");
       }
