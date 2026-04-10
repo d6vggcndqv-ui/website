@@ -4,7 +4,7 @@ import { getFirestore, collection, addDoc } from "https://www.gstatic.com/fireba
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
-  authDomain: "owd-data.firebaseapp.com",
+  authDomain: "owd-data.firebaseapp.omain",
   projectId: "owd-data",
   storageBucket: "owd-data.firebasestorage.app",
   messagingSenderId: "912110224300",
@@ -116,6 +116,7 @@ async function fetchAndDetect() {
       const isHelicopter = flight.category === "A7";
 
       let takeoffLoggedThisIteration = false;
+      let touchAndGoLoggedThisIteration = false;
 
       // --- LANDING ---
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
@@ -157,12 +158,46 @@ async function fetchAndDetect() {
         state.wasDescendingOnRunway = false;
       }
 
-      // --- TAKEOFF option 2: fixed wing on runway, accelerating above 40kts, climbing, below 500ft, not previously descending ---
+      // --- TOUCH AND GO detection (runs before takeoff option 2) ---
+      if (!isHelicopter && !isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
+          typeof currentAlt === "number" && currentAlt < 500 &&
+          (now - state.lastTakeoff) > COOLDOWN_MS && !takeoffLoggedThisIteration) {
+
+        if (state.minAltOnRunway === null || currentAlt < state.minAltOnRunway) {
+          state.minAltOnRunway = currentAlt;
+          state.consecutiveClimbs = 0;
+        }
+
+        if (state.minAltOnRunway !== null && currentAlt > state.minAltOnRunway &&
+            prevAlt !== null && typeof prevAlt === "number" && currentAlt > prevAlt) {
+          state.consecutiveClimbs++;
+        } else if (prevAlt !== null && typeof prevAlt === "number" && currentAlt <= prevAlt) {
+          state.consecutiveClimbs = 0;
+        }
+
+        if (state.consecutiveClimbs >= 2) {
+          if ((now - state.lastTouchAndGo) > COOLDOWN_MS) {
+            state.lastTouchAndGo = now;
+            state.lastTakeoff = now;
+            state.landingLogged = false;
+            state.minAltOnRunway = null;
+            state.consecutiveClimbs = 0;
+            state.wasDescendingOnRunway = false;
+            touchAndGoLoggedThisIteration = true;
+            logFlight(flight.flight, flight.category, "Touch and Go");
+          }
+        }
+      } else if (!isOnRunway(flight.lat, flight.lon)) {
+        state.minAltOnRunway = null;
+        state.consecutiveClimbs = 0;
+      }
+
+      // --- TAKEOFF option 2: fixed wing on runway, accelerating above 40kts, climbing, below 500ft, not previously descending, no touch and go this iteration ---
       if (!isHelicopter && !isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
           currentGs > 40 && currentGs > prevGs &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
           currentAlt > prevAlt && currentAlt < 500 &&
-          !state.wasDescendingOnRunway) {
+          !state.wasDescendingOnRunway && !touchAndGoLoggedThisIteration) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
@@ -190,39 +225,6 @@ async function fetchAndDetect() {
           takeoffLoggedThisIteration = true;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
-      }
-
-      // --- TOUCH AND GO detection ---
-      if (!isHelicopter && !isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
-          typeof currentAlt === "number" && currentAlt < 500 &&
-          (now - state.lastTakeoff) > COOLDOWN_MS && !takeoffLoggedThisIteration) {
-
-        if (state.minAltOnRunway === null || currentAlt < state.minAltOnRunway) {
-          state.minAltOnRunway = currentAlt;
-          state.consecutiveClimbs = 0;
-        }
-
-        if (state.minAltOnRunway !== null && currentAlt > state.minAltOnRunway &&
-            prevAlt !== null && typeof prevAlt === "number" && currentAlt > prevAlt) {
-          state.consecutiveClimbs++;
-        } else if (prevAlt !== null && typeof prevAlt === "number" && currentAlt <= prevAlt) {
-          state.consecutiveClimbs = 0;
-        }
-
-        if (state.consecutiveClimbs >= 2) {
-          if ((now - state.lastTouchAndGo) > COOLDOWN_MS) {
-            state.lastTouchAndGo = now;
-            state.lastTakeoff = now;
-            state.landingLogged = false;
-            state.minAltOnRunway = null;
-            state.consecutiveClimbs = 0;
-            state.wasDescendingOnRunway = false;
-            logFlight(flight.flight, flight.category, "Touch and Go");
-          }
-        }
-      } else if (!isOnRunway(flight.lat, flight.lon)) {
-        state.minAltOnRunway = null;
-        state.consecutiveClimbs = 0;
       }
 
       aircraftState[flight.hex] = state;
