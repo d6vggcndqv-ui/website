@@ -131,9 +131,9 @@ async function fetchAndDetect() {
         logFlight(flight.flight, flight.category, "Landing");
       }
 
-      // --- LANDING option 2: near runway, was descending, now very slow (under 5kts) ---
+      // --- LANDING option 2: within airport area, was descending on runway, now very slow (under 5kts) ---
       if (!state.landingLogged && !isOnGround(currentAlt) &&
-          isOnRunway(flight.lat, flight.lon) &&
+          distance <= MAX_DISTANCE_KM &&
           state.wasDescendingOnRunway &&
           currentGs < 5 && currentGs !== 0 &&
           (now - state.lastLanding) > COOLDOWN_MS) {
