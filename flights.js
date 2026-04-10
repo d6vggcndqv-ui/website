@@ -168,7 +168,7 @@ async function fetchAndDetect() {
         state.wasDescendingOnRunway = true;
       }
 
-      // reset wasDescendingOnRunway if aircraft leaves runway corridor
+      // --- reset wasDescendingOnRunway if aircraft leaves runway corridor ---
       if (!isOnRunway(flight.lat, flight.lon)) {
         state.wasDescendingOnRunway = false;
       }
@@ -203,7 +203,10 @@ async function fetchAndDetect() {
             logFlight(flight.flight, flight.category, "Touch and Go");
           }
         }
-      } else if (!isOnRunway(flight.lat, flight.lon)) {
+      }
+
+      // --- reset touch and go tracking if aircraft leaves runway ---
+      if (!isOnRunway(flight.lat, flight.lon)) {
         state.minAltOnRunway = null;
         state.consecutiveClimbs = 0;
       }
