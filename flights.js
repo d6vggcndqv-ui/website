@@ -176,6 +176,7 @@ async function fetchAndDetect() {
       // --- TOUCH AND GO detection (runs before takeoff option 2) ---
       if (!isHelicopter && !isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
           typeof currentAlt === "number" && currentAlt < 500 &&
+          state.wasDescendingOnRunway &&
           (now - state.lastTakeoff) > COOLDOWN_MS && !takeoffLoggedThisIteration) {
 
         if (state.minAltOnRunway === null || currentAlt < state.minAltOnRunway) {
