@@ -105,7 +105,8 @@ async function fetchAndDetect() {
         landingLogged: false,
         minAltOnRunway: null,
         consecutiveClimbs: 0,
-        helicopterClimbs: 0
+        helicopterClimbs: 0,
+        wasDescendingOnRunway: false
       };
 
       const currentAlt = flight.alt_baro;
@@ -125,6 +126,7 @@ async function fetchAndDetect() {
         state.minAltOnRunway = null;
         state.consecutiveClimbs = 0;
         state.helicopterClimbs = 0;
+        state.wasDescendingOnRunway = false;
         logFlight(flight.flight, flight.category, "Landing");
       }
 
@@ -137,16 +139,30 @@ async function fetchAndDetect() {
           state.minAltOnRunway = null;
           state.consecutiveClimbs = 0;
           state.helicopterClimbs = 0;
+          state.wasDescendingOnRunway = false;
           takeoffLoggedThisIteration = true;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
 
-      // --- TAKEOFF option 2: fixed wing on runway, accelerating above 40kts, climbing, below 500ft ---
+      // --- track descending on runway ---
+      if (!isHelicopter && isOnRunway(flight.lat, flight.lon) &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" &&
+          currentAlt < prevAlt) {
+        state.wasDescendingOnRunway = true;
+      }
+
+      // reset wasDescendingOnRunway if aircraft leaves runway corridor
+      if (!isOnRunway(flight.lat, flight.lon)) {
+        state.wasDescendingOnRunway = false;
+      }
+
+      // --- TAKEOFF option 2: fixed wing on runway, accelerating above 40kts, climbing, below 500ft, not previously descending ---
       if (!isHelicopter && !isOnGround(currentAlt) && isOnRunway(flight.lat, flight.lon) &&
           currentGs > 40 && currentGs > prevGs &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
-          currentAlt > prevAlt && currentAlt < 500) {
+          currentAlt > prevAlt && currentAlt < 500 &&
+          !state.wasDescendingOnRunway) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
@@ -200,6 +216,7 @@ async function fetchAndDetect() {
             state.landingLogged = false;
             state.minAltOnRunway = null;
             state.consecutiveClimbs = 0;
+            state.wasDescendingOnRunway = false;
             logFlight(flight.flight, flight.category, "Touch and Go");
           }
         }
