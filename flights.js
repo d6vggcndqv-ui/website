@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-analytics.js";
-import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
@@ -67,6 +67,18 @@ function isOnGround(alt) {
 async function logFlight(callsign, category, event) {
   try {
     const now = new Date();
+    const cutoff = new Date(now.getTime() - COOLDOWN_MS).toISOString();
+    const dedupCheck = query(
+      collection(db, "flights"),
+      where("callsign", "==", callsign ? callsign.trim() : "Unknown"),
+      where("event", "==", event),
+      where("timestamp", ">=", cutoff)
+    );
+    const existing = await getDocs(dedupCheck);
+    if (!existing.empty) {
+      console.log(`Skipping duplicate ${event} for ${callsign}`);
+      return;
+    }
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const year = now.getFullYear();
