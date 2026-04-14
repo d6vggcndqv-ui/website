@@ -66,13 +66,17 @@ function isOnGround(alt) {
 
 async function logFlight(callsign, category, event) {
   try {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const year = now.getFullYear();
     await addDoc(collection(db, "flights"), {
       callsign: callsign ? callsign.trim() : "Unknown",
       aircraftType: categoryMap[category] || "Unknown",
       event: event,
-      timestamp: new Date().toISOString(),
-      date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString()
+      timestamp: now.toISOString(),
+      date: `${month}/${day}/${year}`,
+      time: now.toLocaleTimeString()
     });
     console.log(`Logged ${event} for ${callsign}`);
   } catch (error) {
