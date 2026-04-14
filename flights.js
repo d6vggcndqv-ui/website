@@ -76,7 +76,7 @@ async function logFlight(callsign, category, event) {
       event: event,
       timestamp: now.toISOString(),
       date: `${month}/${day}/${year}`,
-      time: now.toLocaleTimeString()
+      time: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })
     });
     console.log(`Logged ${event} for ${callsign}`);
   } catch (error) {
