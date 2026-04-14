@@ -70,13 +70,18 @@ async function logFlight(callsign, category, event) {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const year = now.getFullYear();
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
     await addDoc(collection(db, "flights"), {
       callsign: callsign ? callsign.trim() : "Unknown",
       aircraftType: categoryMap[category] || "Unknown",
       event: event,
       timestamp: now.toISOString(),
       date: `${month}/${day}/${year}`,
-      time: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })
+      time: `${hours}:${minutes}:${seconds} ${ampm}`
     });
     console.log(`Logged ${event} for ${callsign}`);
   } catch (error) {
