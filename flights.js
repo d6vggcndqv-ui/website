@@ -114,15 +114,9 @@ async function fetchAndDetect() {
     data.aircraft.forEach(flight => {
       if (!flight.lat || !flight.lon) return;
       const distance = getDistance(OWD_LAT, OWD_LNG, flight.lat, flight.lon);
-      const isHelicopter = flight.category === "A7";
-      const withinBoundary = distance <= MAX_DISTANCE_KM;
+      if (distance > MAX_DISTANCE_KM) return;
 
-      // For fixed wing, skip if outside boundary as before
-      // For helicopters, keep processing even outside boundary to track departures
-      if (!withinBoundary && !isHelicopter) return;
-
-      // Only add to currentAircraft if within boundary
-      if (withinBoundary) currentAircraft[flight.hex] = flight;
+      currentAircraft[flight.hex] = flight;
 
       const prev = previousAircraft[flight.hex];
       const state = aircraftState[flight.hex] || {
@@ -133,21 +127,20 @@ async function fetchAndDetect() {
         minAltOnRunway: null,
         consecutiveClimbs: 0,
         helicopterClimbs: 0,
-        wasDescendingOnRunway: false,
-        helicopterWasOnGround: false,
-        helicopterOutsideBoundary: false
+        wasDescendingOnRunway: false
       };
 
       const currentAlt = flight.alt_baro;
       const prevAlt = prev ? prev.alt_baro : null;
       const currentGs = flight.gs || 0;
       const prevGs = prev ? (prev.gs || 0) : 0;
+      const isHelicopter = flight.category === "A7";
 
       let takeoffLoggedThisIteration = false;
       let touchAndGoLoggedThisIteration = false;
 
-      // --- LANDING option 1: transitions to "ground" (fixed wing only) ---
-      if (!isHelicopter && isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
+      // --- LANDING option 1: transitions to "ground" ---
+      if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
           typeof prevAlt === "number" && !state.landingLogged) {
         console.log('LANDING CONDITION MET for', flight.flight);
         state.landingLogged = true;
@@ -174,8 +167,8 @@ async function fetchAndDetect() {
         logFlight(flight.flight, flight.category, "Landing");
       }
 
-      // --- TAKEOFF option 1: was on ground, now showing a number (fixed wing only) ---
-      if (!isHelicopter && prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
+      // --- TAKEOFF option 1: was on ground, now showing a number (all aircraft) ---
+      if (prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
           typeof currentAlt === "number") {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
@@ -255,40 +248,23 @@ async function fetchAndDetect() {
         }
       }
 
-      // --- HELICOPTER: track when on ground inside boundary ---
-      if (isHelicopter && withinBoundary && isOnGround(currentAlt)) {
-        state.helicopterWasOnGround = true;
+      // --- TAKEOFF option 3: helicopter within 500m, not on ground, climbing for 2 consecutive fetches ---
+      if (isHelicopter && !isOnGround(currentAlt) && distance <= HELICOPTER_DISTANCE_KM &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" && currentAlt > prevAlt) {
+        state.helicopterClimbs++;
+      } else if (isHelicopter && typeof currentAlt === "number" && typeof prevAlt === "number" &&
+                 currentAlt <= prevAlt) {
+        state.helicopterClimbs = 0;
       }
 
-      // --- HELICOPTER TAKEOFF: was on ground inside boundary, now outside boundary ---
-      if (isHelicopter && !withinBoundary && state.helicopterWasOnGround) {
+      if (isHelicopter && state.helicopterClimbs >= 2) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
-          console.log('HELICOPTER TAKEOFF for', flight.flight);
           state.lastTakeoff = now;
           state.landingLogged = false;
-          state.helicopterWasOnGround = false;
-          state.helicopterOutsideBoundary = true;
+          state.helicopterClimbs = 0;
           takeoffLoggedThisIteration = true;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
-      }
-
-      // --- HELICOPTER LANDING: was outside boundary, now inside boundary and on ground ---
-      if (isHelicopter && withinBoundary && state.helicopterOutsideBoundary &&
-          isOnGround(currentAlt) && !state.landingLogged) {
-        if ((now - state.lastLanding) > COOLDOWN_MS) {
-          console.log('HELICOPTER LANDING for', flight.flight);
-          state.landingLogged = true;
-          state.lastLanding = now;
-          state.helicopterOutsideBoundary = false;
-          state.helicopterWasOnGround = true;
-          logFlight(flight.flight, flight.category, "Landing");
-        }
-      }
-
-      // --- reset helicopterOutsideBoundary tracking if still within boundary and not on ground ---
-      if (isHelicopter && withinBoundary && !isOnGround(currentAlt)) {
-        state.helicopterOutsideBoundary = false;
       }
 
       aircraftState[flight.hex] = state;
