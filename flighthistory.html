@@ -10,6 +10,102 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+    <style>
+        .history-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 1.5rem;
+            align-items: flex-end;
+        }
+        .history-controls label {
+            display: flex;
+            flex-direction: column;
+            font-size: 13px;
+            gap: 4px;
+        }
+        .history-controls input,
+        .history-controls select {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            padding: 7px 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            color: #111;
+        }
+        .history-controls button {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            padding: 8px 18px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .history-controls button:hover { background: #f0f0f0; }
+        
+        .history-table-wrap {
+            overflow-x: auto;
+        }
+        #flight-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        #flight-table th {
+            text-align: left;
+            padding: 10px 14px;
+            border-bottom: 2px solid #ddd;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        #flight-table td {
+            padding: 9px 14px;
+            border-bottom: 1px solid #eee;
+            white-space: nowrap;
+        }
+        #flight-table tr:last-child td { border-bottom: none; }
+        #flight-table tr:hover td { background: #f9f9f9; }
+        
+        .badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 2px 9px;
+            border-radius: 99px;
+        }
+        .badge-takeoff  { background: #dbeafe; color: #1e40af; }
+        .badge-landing  { background: #dcfce7; color: #166534; }
+        .badge-tng      { background: #fef9c3; color: #854d0e; }
+        
+        .history-meta {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 0.75rem;
+        }
+        .pagination {
+            display: flex;
+            gap: 8px;
+            margin-top: 1.25rem;
+            align-items: center;
+            font-size: 14px;
+        }
+        .pagination button {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            padding: 6px 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .pagination button:disabled { opacity: 0.4; cursor: default; }
+        .pagination button:not(:disabled):hover { background: #f0f0f0; }
+        #page-info { color: #666; }
+    </style>
 </head>
 
 <body>
@@ -33,6 +129,66 @@
 
         <h1>Flight History</h1><!-- Maybe change to whatever the database is -->
 
+        <section>
+            <div class="history-controls">
+                <label>From
+                <input type="date" id="filter-from">
+                </label>
+                <label>To
+                <input type="date" id="filter-to">
+                </label>
+                <label>Event type
+                <select id="filter-event">
+                    <option value="">All events</option>
+                    <option value="Takeoff">Takeoff</option>
+                    <option value="Landing">Landing</option>
+                    <option value="Touch and Go">Touch and Go</option>
+                </select>
+                </label>
+                <label>Aircraft category
+                <select id="filter-category">
+                    <option value="">All categories</option>
+                    <option value="A1: Light">A1: Light</option>
+                    <option value="A2: Small">A2: Small</option>
+                    <option value="A3: Large">A3: Large</option>
+                    <option value="A4: High Vortex Large">A4: High Vortex Large</option>
+                    <option value="A5: Heavy">A5: Heavy</option>
+                    <option value="A7: Rotorcraft">A7: Rotorcraft</option>
+                </select>
+                </label>
+                <label>Callsign
+                <input type="text" id="filter-callsign" placeholder="e.g. N172SP" style="width:120px;">
+                </label>
+                <button id="btn-apply">Apply</button>
+                <button id="btn-reset">Reset</button>
+            </div>
+            
+            <p class="history-meta" id="history-meta">Loading...</p>
+            
+            <div class="history-table-wrap">
+                <table id="flight-table">
+                <thead>
+                    <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Callsign</th>
+                    <th>Event</th>
+                    <th>Aircraft type</th>
+                    </tr>
+                </thead>
+                <tbody id="flight-tbody">
+                    <tr><td colspan="5" style="color:#999;padding:2rem 14px;">Loading data...</td></tr>
+                </tbody>
+                </table>
+            </div>
+            
+            <div class="pagination">
+                <button id="btn-prev" disabled>&#8592; Prev</button>
+                <span id="page-info"></span>
+                <button id="btn-next" disabled>Next &#8594;</button>
+            </div>
+        </section>
+
        
     </main>
 
@@ -40,7 +196,136 @@
         <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
     </footer>
 
-<script type="module" src="flights.js"></script>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+    import { getFirestore, collection, query, orderBy, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    
+    const firebaseConfig = {
+        apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+        authDomain: "owd-data.firebaseapp.com",
+        projectId: "owd-data",
+        storageBucket: "owd-data.firebasestorage.app",
+        messagingSenderId: "912110224300",
+        appId: "1:912110224300:web:ba2b8073871ec023817009",
+        measurementId: "G-PHD4THC11M"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    
+    const PAGE_SIZE = 50;
+    let allRows = [];
+    let filteredRows = [];
+    let currentPage = 1;
+    
+    const tbody = document.getElementById('flight-tbody');
+    const meta = document.getElementById('history-meta');
+    const pageInfo = document.getElementById('page-info');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    
+    function badgeClass(event) {
+        if (event === 'Takeoff') return 'badge-takeoff';
+        if (event === 'Landing') return 'badge-landing';
+        return 'badge-tng';
+    }
+    
+    function renderPage() {
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const pageRows = filteredRows.slice(start, start + PAGE_SIZE);
+        const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+    
+        tbody.innerHTML = pageRows.length === 0
+        ? '<tr><td colspan="5" style="color:#999;padding:2rem 14px;">No results found.</td></tr>'
+        : pageRows.map(r => `
+            <tr>
+                <td>${r.date}</td>
+                <td>${r.time}</td>
+                <td>${r.callsign}</td>
+                <td><span class="badge ${badgeClass(r.event)}">${r.event}</span></td>
+                <td>${r.aircraftType}</td>
+            </tr>`).join('');
+    
+        pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+        btnPrev.disabled = currentPage <= 1;
+        btnNext.disabled = currentPage >= totalPages;
+        meta.textContent = `Showing ${filteredRows.length} result${filteredRows.length !== 1 ? 's' : ''}`;
+    }
+    
+    function applyFilters() {
+        const from     = document.getElementById('filter-from').value;
+        const to       = document.getElementById('filter-to').value;
+        const event    = document.getElementById('filter-event').value;
+        const category = document.getElementById('filter-category').value;
+        const callsign = document.getElementById('filter-callsign').value.trim().toUpperCase();
+    
+        filteredRows = allRows.filter(r => {
+        if (event    && r.event !== event) return false;
+        if (category && r.aircraftType !== category) return false;
+        if (callsign && !r.callsign.toUpperCase().includes(callsign)) return false;
+        if (from || to) {
+            // compare using timestamp for accuracy
+            const ts = new Date(r.timestamp);
+            if (from && ts < new Date(from)) return false;
+            if (to   && ts > new Date(to + 'T23:59:59')) return false;
+        }
+        return true;
+        });
+    
+        currentPage = 1;
+        renderPage();
+    }
+    
+    async function loadAll(fromISO, toISO) {
+        try {
+        meta.textContent = 'Loading...';
+        const constraints = [orderBy('timestamp', 'desc')];
+        if (fromISO) constraints.push(where('timestamp', '>=', fromISO));
+        if (toISO)   constraints.push(where('timestamp', '<=', toISO));
+        const q = query(collection(db, 'flights'), ...constraints);
+        const snapshot = await getDocs(q);
+        allRows = snapshot.docs.map(d => d.data());
+        filteredRows = [...allRows];
+        renderPage();
+        } catch (err) {
+        console.error(err);
+        meta.textContent = 'Error loading data.';
+        }
+    }
+    
+    function todayRange() {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        return { from: start.toISOString(), to: end.toISOString() };
+    }
+    
+    document.getElementById('btn-apply').addEventListener('click', () => {
+        const from = document.getElementById('filter-from').value;
+        const to   = document.getElementById('filter-to').value;
+        const fromISO = from ? new Date(from).toISOString() : null;
+        const toISO   = to   ? new Date(to + 'T23:59:59').toISOString() : null;
+        loadAll(fromISO, toISO).then(() => applyFilters());
+    });
+    
+    document.getElementById('btn-reset').addEventListener('click', () => {
+        document.getElementById('filter-from').value = '';
+        document.getElementById('filter-to').value = '';
+        document.getElementById('filter-event').value = '';
+        document.getElementById('filter-category').value = '';
+        document.getElementById('filter-callsign').value = '';
+        const { from, to } = todayRange();
+        loadAll(from, to);
+    });
+    
+    btnPrev.addEventListener('click', () => { currentPage--; renderPage(); });
+    btnNext.addEventListener('click', () => { currentPage++; renderPage(); });
+    
+    const { from, to } = todayRange();
+    loadAll(from, to);
+</script>
 
 </body>
 
