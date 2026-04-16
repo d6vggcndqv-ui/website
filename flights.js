@@ -243,6 +243,7 @@ async function fetchAndDetect() {
           state.landingLogged = false;
           state.minAltOnRunway = null;
           state.consecutiveClimbs = 0;
+          state.wasDescendingOnRunway = false;
           takeoffLoggedThisIteration = true;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
