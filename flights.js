@@ -186,7 +186,7 @@ async function fetchAndDetect() {
       if (!isHelicopter && isOnRunway(flight.lat, flight.lon) &&
           !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
-          currentAlt < prevAlt && currentGs > 30) {
+          currentAlt < prevAlt - 50 && currentGs > 30) {
         state.wasDescendingOnRunway = true;
       }
 
