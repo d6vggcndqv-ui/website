@@ -127,7 +127,8 @@ async function fetchAndDetect() {
         minAltOnRunway: null,
         consecutiveClimbs: 0,
         helicopterClimbs: 0,
-        wasDescendingOnRunway: false
+        wasDescendingOnRunway: false,
+        helicopterWasOutside: false
       };
 
       const currentAlt = flight.alt_baro;
@@ -139,21 +140,28 @@ async function fetchAndDetect() {
       let takeoffLoggedThisIteration = false;
       let touchAndGoLoggedThisIteration = false;
 
-      // --- LANDING option 1: transitions to "ground" ---
+      // --- track helicopter outside boundary ---
+      if (isHelicopter && distance > HELICOPTER_DISTANCE_KM) {
+        state.helicopterWasOutside = true;
+      }
+
+      // --- LANDING option 1: fixed wing transitions to "ground" OR helicopter was outside boundary and now on ground ---
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
-          typeof prevAlt === "number" && !state.landingLogged) {
+          typeof prevAlt === "number" && !state.landingLogged &&
+          (!isHelicopter || state.helicopterWasOutside)) {
         console.log('LANDING CONDITION MET for', flight.flight);
         state.landingLogged = true;
         state.lastLanding = now;
         state.minAltOnRunway = null;
         state.consecutiveClimbs = 0;
         state.helicopterClimbs = 0;
+        state.helicopterWasOutside = false;
         state.wasDescendingOnRunway = false;
         logFlight(flight.flight, flight.category, "Landing");
       }
 
       // --- LANDING option 2: within airport area, was descending on runway, now very slow (under 5kts) ---
-      if (!state.landingLogged && !isOnGround(currentAlt) &&
+      if (!isHelicopter && !state.landingLogged && !isOnGround(currentAlt) &&
           distance <= MAX_DISTANCE_KM &&
           state.wasDescendingOnRunway &&
           currentGs < 5 && currentGs !== 0 &&
@@ -167,9 +175,9 @@ async function fetchAndDetect() {
         logFlight(flight.flight, flight.category, "Landing");
       }
 
-      // --- TAKEOFF option 1: was on ground, now showing a number (all aircraft) ---
+      // --- TAKEOFF option 1: fixed wing was on ground now airborne OR helicopter was on ground and is now outside boundary ---
       if (prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
-          typeof currentAlt === "number") {
+          typeof currentAlt === "number" && !isHelicopter) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
@@ -177,6 +185,19 @@ async function fetchAndDetect() {
           state.consecutiveClimbs = 0;
           state.helicopterClimbs = 0;
           state.wasDescendingOnRunway = false;
+          takeoffLoggedThisIteration = true;
+          logFlight(flight.flight, flight.category, "Takeoff");
+        }
+      }
+
+      // --- TAKEOFF option 1 helicopter: was on ground, now outside boundary ---
+      if (isHelicopter && distance > HELICOPTER_DISTANCE_KM && prevAlt !== null &&
+          isOnGround(prevAlt) && !isOnGround(currentAlt)) {
+        if ((now - state.lastTakeoff) > COOLDOWN_MS && (now - state.lastLanding) > COOLDOWN_MS) {
+          state.lastTakeoff = now;
+          state.landingLogged = false;
+          state.helicopterClimbs = 0;
+          state.helicopterWasOutside = false;
           takeoffLoggedThisIteration = true;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
