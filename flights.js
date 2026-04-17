@@ -184,6 +184,7 @@ async function fetchAndDetect() {
 
       // --- track descending on runway ---
       if (!isHelicopter && isOnRunway(flight.lat, flight.lon) &&
+          !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
           currentAlt < prevAlt && currentGs > 30) {
         state.wasDescendingOnRunway = true;
