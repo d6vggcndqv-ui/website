@@ -19,7 +19,7 @@ const db = getFirestore(app);
 const OWD_LAT = 42.1905;
 const OWD_LNG = -71.1728;
 const MAX_DISTANCE_KM = 3;
-const HELICOPTER_DISTANCE_KM = 0.5;
+const HELICOPTER_DISTANCE_KM = 1.5;
 const COOLDOWN_MS = 60000;
 
 const RUNWAYS = [
