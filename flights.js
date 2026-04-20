@@ -240,13 +240,15 @@ async function fetchAndDetect() {
           currentAlt > prevAlt && currentAlt < 500 &&
           !state.wasDescendingOnRunway && !touchAndGoLoggedThisIteration) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
+          const isLikelyAirborne = !state.landingLogged && state.lastTakeoff > 0;
+          const eventType = isLikelyAirborne ? "Touch and Go" : "Takeoff";
           state.lastTakeoff = now;
           state.landingLogged = false;
           state.minAltOnRunway = null;
           state.consecutiveClimbs = 0;
           state.wasDescendingOnRunway = false;
           takeoffLoggedThisIteration = true;
-          logFlight(flight.flight, flight.category, "Takeoff");
+          logFlight(flight.flight, flight.category, eventType);
         }
       }
 
