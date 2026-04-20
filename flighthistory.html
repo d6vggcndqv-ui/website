@@ -129,68 +129,7 @@
 
         <h1>Flight History</h1><!-- Maybe change to whatever the database is -->
 
-        <section>
-            <div class="history-controls">
-                <label>From
-                <input type="date" id="filter-from">
-                </label>
-                <label>To
-                <input type="date" id="filter-to">
-                </label>
-                <label>Event type
-                <select id="filter-event">
-                    <option value="">All events</option>
-                    <option value="Takeoff">Takeoff</option>
-                    <option value="Landing">Landing</option>
-                    <option value="Touch and Go">Touch and Go</option>
-                </select>
-                </label>
-                <label>Aircraft category
-                <select id="filter-category">
-                    <option value="">All categories</option>
-                    <option value="A1: Light">A1: Light</option>
-                    <option value="A2: Small">A2: Small</option>
-                    <option value="A3: Large">A3: Large</option>
-                    <option value="A4: High Vortex Large">A4: High Vortex Large</option>
-                    <option value="A5: Heavy">A5: Heavy</option>
-                    <option value="A7: Rotorcraft">A7: Rotorcraft</option>
-                </select>
-                </label>
-                <label>Callsign
-                <input type="text" id="filter-callsign" placeholder="e.g. N172SP" style="width:120px;">
-                </label>
-                <button id="btn-apply">Apply</button>
-                <button id="btn-reset">Reset</button>
-            </div>
-            
-            <p class="history-meta" id="history-meta">Loading...</p>
-            
-            <div class="history-table-wrap">
-                <table id="flight-table">
-                <thead>
-                    <tr>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Callsign</th>
-                    <th>Event</th>
-                    <th>Aircraft type</th>
-                    </tr>
-                </thead>
-                <tbody id="flight-tbody">
-                    <tr><td colspan="5" style="color:#999;padding:2rem 14px;">Loading data...</td></tr>
-                </tbody>
-                </table>
-            </div>
-            
-            <div class="pagination">
-                <button id="btn-prev" disabled>&#8592; Prev</button>
-                <span id="page-info"></span>
-                <button id="btn-next" disabled>Next &#8594;</button>
-            </div>
-        </section>
-
-       
-    </main>
+        
 
     <footer class="footer"> <!-- Include in all HTML files -->
         <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
