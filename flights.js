@@ -128,7 +128,8 @@ async function fetchAndDetect() {
         consecutiveClimbs: 0,
         helicopterClimbs: 0,
         wasDescendingOnRunway: false,
-        helicopterWasOutside: false
+        helicopterWasOutside: false,
+        cumulativeDescent: 0
       };
 
       const currentAlt = flight.alt_baro;
@@ -203,17 +204,25 @@ async function fetchAndDetect() {
         }
       }
 
-      // --- track descending on runway ---
+      // --- track descending on runway (cumulative descent) ---
       if (!isHelicopter && isOnRunway(flight.lat, flight.lon) &&
           !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
-          currentAlt < prevAlt - 100 && currentGs > 30) {
-        state.wasDescendingOnRunway = true;
+          currentGs > 30) {
+        if (currentAlt < prevAlt) {
+          state.cumulativeDescent = (state.cumulativeDescent || 0) + (prevAlt - currentAlt);
+        } else {
+          state.cumulativeDescent = 0;
+        }
+        if (state.cumulativeDescent >= 100) {
+          state.wasDescendingOnRunway = true;
+        }
       }
 
-      // --- reset wasDescendingOnRunway if aircraft leaves runway corridor ---
+      // --- reset wasDescendingOnRunway and cumulativeDescent if aircraft leaves runway corridor ---
       if (!isOnRunway(flight.lat, flight.lon)) {
         state.wasDescendingOnRunway = false;
+        state.cumulativeDescent = 0;
       }
 
       // --- TOUCH AND GO detection (runs before takeoff option 2) ---
