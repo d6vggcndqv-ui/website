@@ -19,7 +19,7 @@ const db = getFirestore(app);
 const OWD_LAT = 42.1905;
 const OWD_LNG = -71.1728;
 const MAX_DISTANCE_KM = 3;
-const HELICOPTER_DISTANCE_KM = 1.5;
+const HELICOPTER_DISTANCE_KM = 0.5;
 const COOLDOWN_MS = 60000;
 
 const RUNWAYS = [
@@ -127,9 +127,7 @@ async function fetchAndDetect() {
         minAltOnRunway: null,
         consecutiveClimbs: 0,
         helicopterClimbs: 0,
-        wasDescendingOnRunway: false,
-        helicopterWasOutside: false,
-        cumulativeDescent: 0
+        wasDescendingOnRunway: false
       };
 
       const currentAlt = flight.alt_baro;
@@ -141,28 +139,21 @@ async function fetchAndDetect() {
       let takeoffLoggedThisIteration = false;
       let touchAndGoLoggedThisIteration = false;
 
-      // --- track helicopter outside boundary ---
-      if (isHelicopter && distance > HELICOPTER_DISTANCE_KM) {
-        state.helicopterWasOutside = true;
-      }
-
-      // --- LANDING option 1: fixed wing transitions to "ground" OR helicopter was outside boundary and now on ground ---
+      // --- LANDING option 1: transitions to "ground" ---
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
-          typeof prevAlt === "number" && !state.landingLogged &&
-          (!isHelicopter || state.helicopterWasOutside)) {
+          typeof prevAlt === "number" && !state.landingLogged) {
         console.log('LANDING CONDITION MET for', flight.flight);
         state.landingLogged = true;
         state.lastLanding = now;
         state.minAltOnRunway = null;
         state.consecutiveClimbs = 0;
         state.helicopterClimbs = 0;
-        state.helicopterWasOutside = false;
         state.wasDescendingOnRunway = false;
         logFlight(flight.flight, flight.category, "Landing");
       }
 
       // --- LANDING option 2: within airport area, was descending on runway, now very slow (under 5kts) ---
-      if (!isHelicopter && !state.landingLogged && !isOnGround(currentAlt) &&
+      if (!state.landingLogged && !isOnGround(currentAlt) &&
           distance <= MAX_DISTANCE_KM &&
           state.wasDescendingOnRunway &&
           currentGs < 5 && currentGs !== 0 &&
@@ -176,9 +167,9 @@ async function fetchAndDetect() {
         logFlight(flight.flight, flight.category, "Landing");
       }
 
-      // --- TAKEOFF option 1: fixed wing was on ground now airborne OR helicopter was on ground and is now outside boundary ---
+      // --- TAKEOFF option 1: was on ground, now showing a number (all aircraft) ---
       if (prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
-          typeof currentAlt === "number" && !isHelicopter) {
+          typeof currentAlt === "number") {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
@@ -191,38 +182,17 @@ async function fetchAndDetect() {
         }
       }
 
-      // --- TAKEOFF option 1 helicopter: was on ground, now outside boundary ---
-      if (isHelicopter && distance > HELICOPTER_DISTANCE_KM && prevAlt !== null &&
-          isOnGround(prevAlt) && !isOnGround(currentAlt)) {
-        if ((now - state.lastTakeoff) > COOLDOWN_MS && (now - state.lastLanding) > COOLDOWN_MS) {
-          state.lastTakeoff = now;
-          state.landingLogged = false;
-          state.helicopterClimbs = 0;
-          state.helicopterWasOutside = false;
-          takeoffLoggedThisIteration = true;
-          logFlight(flight.flight, flight.category, "Takeoff");
-        }
-      }
-
-      // --- track descending on runway (cumulative descent) ---
+      // --- track descending on runway ---
       if (!isHelicopter && isOnRunway(flight.lat, flight.lon) &&
           !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
-          currentGs > 30) {
-        if (currentAlt < prevAlt) {
-          state.cumulativeDescent = (state.cumulativeDescent || 0) + (prevAlt - currentAlt);
-        } else {
-          state.cumulativeDescent = 0;
-        }
-        if (state.cumulativeDescent >= 100) {
-          state.wasDescendingOnRunway = true;
-        }
+          currentAlt < prevAlt && currentGs > 30) {
+        state.wasDescendingOnRunway = true;
       }
 
-      // --- reset wasDescendingOnRunway and cumulativeDescent if aircraft leaves runway corridor ---
+      // --- reset wasDescendingOnRunway if aircraft leaves runway corridor ---
       if (!isOnRunway(flight.lat, flight.lon)) {
         state.wasDescendingOnRunway = false;
-        state.cumulativeDescent = 0;
       }
 
       // --- TOUCH AND GO detection (runs before takeoff option 2) ---
