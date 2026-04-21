@@ -263,11 +263,14 @@ async function fetchAndDetect() {
 
       if (isHelicopter && state.helicopterClimbs >= 2) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
-          state.lastTakeoff = now;
-          state.landingLogged = false;
-          state.helicopterClimbs = 0;
-          takeoffLoggedThisIteration = true;
-          logFlight(flight.flight, flight.category, "Takeoff");
+          const helicopterAirborne = !state.landingLogged && state.lastTakeoff > 0;
+          if (!helicopterAirborne) {
+            state.lastTakeoff = now;
+            state.landingLogged = false;
+            state.helicopterClimbs = 0;
+            takeoffLoggedThisIteration = true;
+            logFlight(flight.flight, flight.category, "Takeoff");
+          }
         }
       }
 
