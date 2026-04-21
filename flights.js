@@ -127,7 +127,8 @@ async function fetchAndDetect() {
         minAltOnRunway: null,
         consecutiveClimbs: 0,
         helicopterClimbs: 0,
-        wasDescendingOnRunway: false
+        wasDescendingOnRunway: false,
+        maxDistanceWhileAirborne: 0
       };
 
       const currentAlt = flight.alt_baro;
@@ -139,17 +140,26 @@ async function fetchAndDetect() {
       let takeoffLoggedThisIteration = false;
       let touchAndGoLoggedThisIteration = false;
 
+      // --- track max distance while airborne for helicopters ---
+      if (isHelicopter && !isOnGround(currentAlt)) {
+        state.maxDistanceWhileAirborne = Math.max(state.maxDistanceWhileAirborne, distance);
+      }
+
       // --- LANDING option 1: transitions to "ground" ---
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
           typeof prevAlt === "number" && !state.landingLogged) {
-        console.log('LANDING CONDITION MET for', flight.flight);
-        state.landingLogged = true;
-        state.lastLanding = now;
-        state.minAltOnRunway = null;
-        state.consecutiveClimbs = 0;
-        state.helicopterClimbs = 0;
-        state.wasDescendingOnRunway = false;
-        logFlight(flight.flight, flight.category, "Landing");
+        const helicopterLandingValid = !isHelicopter || state.maxDistanceWhileAirborne >= 2;
+        if (helicopterLandingValid) {
+          console.log('LANDING CONDITION MET for', flight.flight);
+          state.landingLogged = true;
+          state.lastLanding = now;
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
+          state.helicopterClimbs = 0;
+          state.wasDescendingOnRunway = false;
+          state.maxDistanceWhileAirborne = 0;
+          logFlight(flight.flight, flight.category, "Landing");
+        }
       }
 
       // --- LANDING option 2: within airport area, was descending on runway, now very slow (under 5kts) ---
@@ -177,6 +187,7 @@ async function fetchAndDetect() {
           state.consecutiveClimbs = 0;
           state.helicopterClimbs = 0;
           state.wasDescendingOnRunway = false;
+          state.maxDistanceWhileAirborne = 0;
           takeoffLoggedThisIteration = true;
           logFlight(flight.flight, flight.category, "Takeoff");
         }
