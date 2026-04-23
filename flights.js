@@ -145,21 +145,18 @@ async function fetchAndDetect() {
         state.maxDistanceWhileAirborne = Math.max(state.maxDistanceWhileAirborne, distance);
       }
 
-      // --- LANDING option 1: transitions to "ground" ---
-      if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
+      // --- LANDING option 1: transitions to "ground" (fixed wing only) ---
+      if (!isHelicopter && isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
           typeof prevAlt === "number" && !state.landingLogged) {
-        const helicopterLandingValid = !isHelicopter || state.maxDistanceWhileAirborne >= 2;
-        if (helicopterLandingValid) {
-          console.log('LANDING CONDITION MET for', flight.flight);
-          state.landingLogged = true;
-          state.lastLanding = now;
-          state.minAltOnRunway = null;
-          state.consecutiveClimbs = 0;
-          state.helicopterClimbs = 0;
-          state.wasDescendingOnRunway = false;
-          state.maxDistanceWhileAirborne = 0;
-          logFlight(flight.flight, flight.category, "Landing");
-        }
+        console.log('LANDING CONDITION MET for', flight.flight);
+        state.landingLogged = true;
+        state.lastLanding = now;
+        state.minAltOnRunway = null;
+        state.consecutiveClimbs = 0;
+        state.helicopterClimbs = 0;
+        state.wasDescendingOnRunway = false;
+        state.maxDistanceWhileAirborne = 0;
+        logFlight(flight.flight, flight.category, "Landing");
       }
 
       // --- LANDING option 2: within airport area, was descending on runway, now very slow (under 5kts) ---
@@ -177,8 +174,8 @@ async function fetchAndDetect() {
         logFlight(flight.flight, flight.category, "Landing");
       }
 
-      // --- TAKEOFF option 1: was on ground, now showing a number (all aircraft) ---
-      if (prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
+      // --- TAKEOFF option 1: was on ground, now showing a number (fixed wing only) ---
+      if (!isHelicopter && prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
           typeof currentAlt === "number") {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
