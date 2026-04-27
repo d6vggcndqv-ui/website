@@ -143,17 +143,13 @@ async function fetchAndDetect() {
       let takeoffLoggedThisIteration = false;
       let touchAndGoLoggedThisIteration = false;
 
-      // --- compute current runway position ---
-      const currentRunway = isOnRunway(flight.lat, flight.lon);
-      if (currentRunway) state.lastRunway = currentRunway;
-
       // --- track max distance while airborne for helicopters ---
       if (isHelicopter && !isOnGround(currentAlt)) {
         state.maxDistanceWhileAirborne = Math.max(state.maxDistanceWhileAirborne, distance);
       }
 
-      // --- LANDING option 1: transitions to "ground" (fixed wing only) ---
-      if (!isHelicopter && isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
+      // --- LANDING option 1: transitions to "ground" ---
+      if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
           typeof prevAlt === "number" && !state.landingLogged) {
         console.log('LANDING CONDITION MET for', flight.flight);
         state.landingLogged = true;
@@ -181,8 +177,8 @@ async function fetchAndDetect() {
         logFlight(flight.flight, flight.category, "Landing", state.lastRunway);
       }
 
-      // --- TAKEOFF option 1: was on ground, now showing a number (fixed wing only) ---
-      if (!isHelicopter && prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
+      // --- TAKEOFF option 1: was on ground, now showing a number ---
+      if (prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
           typeof currentAlt === "number") {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
@@ -198,6 +194,9 @@ async function fetchAndDetect() {
       }
 
       // --- track descending on runway ---
+      const currentRunway = isOnRunway(flight.lat, flight.lon);
+      if (currentRunway) state.lastRunway = currentRunway;
+
       if (!isHelicopter && currentRunway &&
           !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
@@ -290,7 +289,7 @@ async function fetchAndDetect() {
           state.landingLogged = false;
           state.helicopterClimbs = 0;
           takeoffLoggedThisIteration = true;
-          logFlight(flight.flight, flight.category, "Takeoff", "n/a");
+          logFlight(flight.flight, flight.category, "Takeoff");
         }
       }
 
