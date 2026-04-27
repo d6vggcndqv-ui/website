@@ -143,6 +143,10 @@ async function fetchAndDetect() {
       let takeoffLoggedThisIteration = false;
       let touchAndGoLoggedThisIteration = false;
 
+      // --- compute current runway position ---
+      const currentRunway = isOnRunway(flight.lat, flight.lon);
+      if (currentRunway) state.lastRunway = currentRunway;
+
       // --- track max distance while airborne for helicopters ---
       if (isHelicopter && !isOnGround(currentAlt)) {
         state.maxDistanceWhileAirborne = Math.max(state.maxDistanceWhileAirborne, distance);
@@ -194,9 +198,6 @@ async function fetchAndDetect() {
       }
 
       // --- track descending on runway ---
-      const currentRunway = isOnRunway(flight.lat, flight.lon);
-      if (currentRunway) state.lastRunway = currentRunway;
-
       if (!isHelicopter && currentRunway &&
           !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
@@ -289,7 +290,7 @@ async function fetchAndDetect() {
           state.landingLogged = false;
           state.helicopterClimbs = 0;
           takeoffLoggedThisIteration = true;
-          logFlight(flight.flight, flight.category, "Takeoff");
+          logFlight(flight.flight, flight.category, "Takeoff", "n/a");
         }
       }
 
