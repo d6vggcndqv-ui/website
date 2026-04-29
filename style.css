@@ -399,5 +399,113 @@ button[type="submit"]:hover {
             height: 25%;
         }
 
-        
+        /* ── Mobile ─────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+ 
+    /* Navbar */
+    .navbar {
+        padding: 8px 16px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+ 
+    .nav-logo img {
+        height: 60px;
+        margin-left: 0;
+    }
+ 
+    .nav-links {
+        gap: 16px;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin: 0;
+    }
+ 
+    .nav-links li a {
+        font-size: 0.9rem;
+    }
+ 
+    body {
+        padding-top: 100px;
+    }
+ 
+    /* Hero */
+    .hero-section {
+        height: auto;
+        min-height: 60vh;
+        background-attachment: scroll; /* fixed doesn't work well on mobile */
+        background-position: center;
+    }
+ 
+    .hero-section-text {
+        padding: 40px 20px;
+    }
+ 
+    h1 {
+        font-size: 1.6rem;
+        margin-top: 10px;
+    }
+ 
+    #intro-text {
+        font-size: 1.1rem;
+        margin-left: 0;
+        margin-right: 0;
+        margin-top: 20px;
+    }
+ 
+    .hero-icon {
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 24px;
+    }
+ 
+    .hero-icon img {
+        width: 60%;
+        height: auto;
+    }
+ 
+    /* Feature cards */
+    .features-section {
+        gap: 40px;
+        padding: 0 16px;
+        margin: 30px auto;
+    }
+ 
+    .feature-card {
+        grid-template-columns: 1fr !important;
+        gap: 24px;
+        margin-top: 20px;
+    }
+ 
+    .feature-card:nth-child(even) .feature-graphic,
+    .feature-card:nth-child(even) .feature-text,
+    .feature-card:nth-child(2) .feature-text,
+    .feature-card:nth-child(3) .feature-text {
+        order: unset;
+        padding-left: 0;
+    }
+ 
+    .feature-card:nth-child(2) .feature-graphic-fh {
+        width: 100%;
+        overflow: hidden;
+    }
+ 
+    .feature-graphic-fh img {
+        width: 100%;
+    }
+ 
+    .features-list {
+        font-size: 1rem;
+        line-height: 180%;
+    }
+ 
+    .feature-text h2 {
+        font-size: 1.4rem;
+    }
+ 
+    /* Section divider */
+    .section-divider {
+        margin-top: 40px;
+    }
+}
         
