@@ -204,3 +204,200 @@ button[type="submit"]:hover {
   text-decoration: underline !important;
   color: #005fa3 !important;
 }
+
+      /* ── Feature Sections ───────────────────────────────────────── */
+
+        .features-section {
+            display: flex;
+            flex-direction: column;
+            gap: 80px;
+            margin: 60px auto;
+            max-width: 100%;
+            padding: 0 24px;
+        }
+
+        /* Alternating card layout */
+        .feature-card {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 48px;
+            align-items: center;
+            margin-top: 10%;
+            background-color: white;
+        }
+
+        /* Flip image/text order on even cards */
+        .feature-card:nth-child(even) .feature-graphic {
+            order: 2;
+        }
+        .feature-card:nth-child(even) .feature-text {
+            order: 1;
+        }
+
+        /* Text side */
+        .feature-text {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .feature-tag {
+            display: inline-block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #0057ff;          /* accent – swap to match your brand colour */
+            margin-bottom: 4px;
+        }
+
+        .feature-text h2 {
+            font-size: clamp(1.5rem, 2.5vw, 2rem);
+            font-weight: 700;
+            line-height: 1.2;
+            margin: 0;
+        }
+
+        .feature-text p {
+            font-size: 1rem;
+            line-height: 1.7;
+            color: #444;
+            margin: 0;
+        }
+
+        .feature-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #0057ff;
+            text-decoration: none;
+            margin-top: 4px;
+            transition: gap 0.2s ease;
+        }
+        .feature-link:hover { gap: 10px; }
+        .feature-link::after { content: "→"; }
+
+        /* When you add a real image, remove the dashed border and placeholder styles */
+        .feature-graphic img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            border-radius: 1%;
+        }
+
+        .feature-graphic-fh {
+            width: 100%;
+            height: 100%;
+            border-radius: 1%;
+            overflow: hidden; /* ensures the image respects the rounded corners */
+        }
+
+        
+
+        .feature-graphic-fh img {
+            width: 150%;
+            height: 100%;
+            display: block;
+            border-radius: 1%;
+            object-position: left;
+        }
+
+        .feature-graphic-db {
+            width: 100%;
+            height: 100%;
+            border-radius: 1%;
+            overflow: hidden; /* ensures the image respects the rounded corners */
+        }
+
+        .feature-graphic-db img {
+            width: 100%;
+            height: 100%;
+            object-fit: scale-down;
+            display: block;
+            border-radius: 1%;
+        }
+
+        /* Divider between hero text and feature sections */
+        .section-divider {
+            width: 60px;
+            height: 3px;
+            background: #0057ff;
+            margin: 48px auto 0;
+            border-radius: 2px;
+            margin-bottom: 0;
+            margin-top: 10%;
+        }
+
+        /* ── Responsive ─────────────────────────────────────────────── */
+        @media (max-width: 720px) {
+            .feature-card {
+                grid-template-columns: 1fr;
+            }
+            .feature-card:nth-child(even) .feature-graphic,
+            .feature-card:nth-child(even) .feature-text {
+                order: unset;
+            }
+        }
+        .features-list {
+            list-style: none;
+            padding-left: 0;
+            line-height: 200%;
+            font-size: 1.2rem;
+        }
+
+        .features-list li::before {
+            content: "✈";
+            margin-right: 10px;
+            color: #0057ff;
+        }
+
+        .feature-card:nth-child(2) .feature-text {
+            padding-left: 56%;
+        }
+
+        .feature-card:nth-child(2) .feature-graphic-fh {
+            overflow: visible;
+            width: 109%;
+            padding-left: 0;
+        }
+
+        .feature-card:nth-child(2) {
+            grid-template-columns: 0.9fr 1.1fr;
+        }
+
+        .feature-card:nth-child(3) {
+            grid-template-columns: 0.9fr 1.1fr;
+        }
+
+        .hero-section{
+            background-image: url(background3.jpg);
+            background-size: cover;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            height: 90vh;
+        }
+
+        .hero-section-text{
+            display: flex;
+            flex-direction: column; 
+            color: white; 
+        }
+
+        .hero-icon{
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            margin: 0 auto;
+        }
+        
+        .hero-icon img{
+            width: 25%;
+            height: 25%;
+        }
+
+        
+        

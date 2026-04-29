@@ -9,20 +9,20 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <script src="main.js"></script>
-    <link rel="icon" href="/favicon1.ico" type="image/x-icon"> <!-- Add favicon -->
+    <link rel="icon" href="/favicon1.ico" type="image/x-icon">
 </head>
 
 <body>
-  
+
     <nav class="navbar">
         <div class="nav-logo">
-            <a href="https://www.fl-technologies.com" target="_blank"> 
+            <a href="https://www.fl-technologies.com" target="_blank">
                 <img src="logo.png" alt="Logo">
             </a>
         </div>
-        
+
         <!-- Make sure this is the same list in every HTML file -->
-        <ul class="nav-links"> <!-- Add links to different pages on the site to this list-->
+        <ul class="nav-links">
             <li><a href="index.html">Home</a></li>
             <li><a href="livemap.html">Live Map</a></li>
             <li><a href="flighthistory.html">Flight History</a></li>
@@ -30,25 +30,95 @@
         </ul>
     </nav>
 
-    <main> <!-- Main content of page excluding navbar and footer-->
-        <h1>Complete Visibility into Your Airport Operations</h1>
+    <main>
         
-        <p id="intro-text">Live ADS-B powered tracking and advanced analytics built to give you better understanding of your airport.</p>
+        <div class="hero-section">
+            <div class="hero-section-text">
+                <h1>Complete Visibility into Your Airport Operations</h1>
+                <p id="intro-text">24/7 ADS-B powered tracking and advanced analytics built to enhance understanding of your airport.</p>
 
-        <div class="list-wrapper">
-            <ul id="features-list">
-                <li><a href="livemap.html">Live Map</a>: See real-time flight data and aircraft positions on an interactive map.</li>
-                <li><a href="flighthistory.html">Flight History</a>: Access historical flight data to analyze trends and patterns.</li>
-                <li><a href="dashboard.html">Analytics Dashboard</a>: Gain insights into airport operations with our comprehensive analytics tools.</li>
-            </ul>
+                <div class="hero-icon">
+                    <img src="plane-icon.png" alt="Plane Icon">
+                    <img src="antenna-icon.png" alt="Antenna Icon">
+                    <img src="computer-icon.png" alt="Computer Icon">
+                </div>
+
+            </div>
+
         </div>
+
+        <div class="section-divider"></div>
+
+        <!-- ── Feature Sections ───────────────────────────────────── -->
+        <div class="features-section">
+
+            <!-- 1 · Live Map -->
+                <div class="feature-card">
+                    <div class="feature-text">
+                        <span class="feature-tag">Real-Time Airspace</span>
+                        <h2>Live Map</h2>
+                        <ul class="features-list">
+                            <li>Live aircraft positions and flight paths</li>
+                            <li>Customizable map backgrounds including VFR, IFR, satellite, and more</li>
+                            <li>Map layers such as weather radar, cloud patterns, special use airspace</li>
+                            <li>Filter by over 20 different data points</li>
+                        </ul>
+                        <a class="feature-link" href="livemap.html">Open Live Map</a>
+                    </div>
+                    <div class="feature-graphic">
+                        <img src="map_screenshot.png" alt="Live Map">
+                        <!-- <img src="map-data.png" alt="Live Map data points"> -->
+                    </div>
+                </div>
+
+            <!-- 2 · Flight History -->
+            <div class="feature-card">
+                <div class="feature-text">
+                    <span class="feature-tag">Historical Data</span>
+                    <h2>Flight History</h2>
+                    <ul class="features-list">
+                        <li>Historical event records updated in real-time</li>
+                        <li>See date, time, callsign, event, runway and aircraft type</li>
+                        <li>Take control of your data by exporting it as a CSV file</li>
+                    </ul>
+                    <a class="feature-link" href="flighthistory.html">Browse Flight History</a>
+                </div>
+
+                <div class="feature-graphic-fh">
+                   <img src="fh-screenshot2.png" alt="Flight History Example">
+                </div>
+            </div>
+
+            <!-- 3 · Analytics Dashboard -->
+            <div class="feature-card">
+                <div class="feature-text">
+                    <span class="feature-tag">Analytics</span>
+                    <h2>Analytics Dashboard</h2>
+                    <ul class="features-list">
+                        <li>Your airport data visualized in real-time</li>
+                        <li>Examine trends over time</li>
+                        <li>Breakdowns by day, week, month and quarter</li>
+                        <li>Downloadable in PDF format</li>
+                    </ul>
+                    <a class="feature-link" href="dashboard.html">View Dashboard</a>
+                </div>
+
+                <div class="feature-graphic-db">
+                    <img src="dashboard-screenshot.png" alt="Analytics Dashboard Example">
+                </div>
+            </div>
+
+        </div>
+        <div class="section-divider"></div>
+        <!-- ── /Feature Sections ──────────────────────────────────── -->
+        
 
 
         <section class="feedback-section">
             <h2>We Value Your Feedback</h2>
             <p>Please let us know any ways this website could be of more use to you. All comments and suggestions are greatly appreciated!</p>
 
-            <form class="feedback-form" action="https://api.web3forms.com/submit" method="POST"> 
+            <form class="feedback-form" action="https://api.web3forms.com/submit" method="POST">
                 <input type="hidden" name="access_key" value="44fd3732-39ce-45f0-b09c-9e1ae5ab4dae">
                 <div class="form-group">
                     <label for="name">Name</label>
@@ -66,16 +136,14 @@
                 </div>
 
                 <button type="submit">Send Feedback</button>
-                <input type="hidden" name="redirect" value="https://fl-technologies-data.com/thankyou"> <!-- Redirects to thank you page after form submission -->
+                <input type="hidden" name="redirect" value="https://fl-technologies-data.com/thankyou">
             </form>
-
         </section>
     </main>
 
-    <footer class="footer"> <!-- Include in all HTML files -->
+    <footer class="footer">
         <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
     </footer>
 
 </body>
-
 </html>
