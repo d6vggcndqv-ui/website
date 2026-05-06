@@ -229,7 +229,7 @@ async function fetchAndDetect() {
         if (state.minAltOnRunway !== null && currentAlt > state.minAltOnRunway &&
             prevAlt !== null && typeof prevAlt === "number" && currentAlt > prevAlt) {
           state.consecutiveClimbs++;
-        } else if (prevAlt !== null && typeof prevAlt === "number" && currentAlt <= prevAlt) {
+        } else if (prevAlt !== null && typeof prevAlt === "number" && currentAlt < prevAlt) {
           state.consecutiveClimbs = 0;
         }
 
