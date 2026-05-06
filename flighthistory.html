@@ -275,23 +275,33 @@
     }
 
     async function initUser(user) {
-        const snap = await getDoc(doc(db, 'users', user.uid));
-        if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
-        const profile = snap.data();
-        if (profile.role === 'admin') {
-            const selector = document.getElementById('airport-selector');
-            selector.style.display = 'flex';
-            const select = document.getElementById('airport-select');
-            select.innerHTML = Object.entries(AIRPORT_LABELS).map(([k,v]) => `<option value="${k}">${v}</option>`).join('');
-            currentCollection = getCollectionName(select.value);
-            select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); const { from, to } = todayRange(); loadAll(from, to); });
-        } else {
-            currentCollection = getCollectionName(profile.airport);
+        console.log('[initUser] called with uid:', user.uid);
+        try {
+            const snap = await getDoc(doc(db, 'users', user.uid));
+            console.log('[initUser] snap.exists:', snap.exists());
+            if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
+            const profile = snap.data();
+            console.log('[initUser] profile:', JSON.stringify(profile));
+            if (profile.role === 'admin') {
+                console.log('[initUser] admin user detected');
+                const selector = document.getElementById('airport-selector');
+                selector.style.display = 'flex';
+                const select = document.getElementById('airport-select');
+                select.innerHTML = Object.entries(AIRPORT_LABELS).map(([k,v]) => `<option value="${k}">${v}</option>`).join('');
+                currentCollection = getCollectionName(select.value);
+                select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); const { from, to } = todayRange(); loadAll(from, to); });
+            } else {
+                currentCollection = getCollectionName(profile.airport);
+            }
+            console.log('[initUser] currentCollection:', currentCollection);
+            document.getElementById('btn-logout').style.display = 'inline-block';
+            hideAuth();
+            console.log('[initUser] hideAuth called');
+            const { from, to } = todayRange();
+            loadAll(from, to);
+        } catch(e) {
+            console.error('[initUser] error:', e);
         }
-        document.getElementById('btn-logout').style.display = 'inline-block';
-        hideAuth();
-        const { from, to } = todayRange();
-        loadAll(from, to);
     }
 
     // Expose auth functions globally so non-module handlers can reach them
