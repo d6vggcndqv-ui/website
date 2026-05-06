@@ -277,7 +277,7 @@
     async function initUser(user) {
         console.log('[initUser] called with uid:', user.uid);
         try {
-            const snap = await getDoc(doc(db, 'users', user.uid));
+            const snap = await getDoc(doc(db, 'Users', user.uid));
             console.log('[initUser] snap.exists:', snap.exists());
             if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
             const profile = snap.data();
