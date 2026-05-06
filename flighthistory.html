@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
-    <style>
+   <style>
         .history-controls {
             display: flex;
             flex-wrap: wrap;
@@ -105,6 +105,26 @@
         .pagination button:disabled { opacity: 0.4; cursor: default; }
         .pagination button:not(:disabled):hover { background: #f0f0f0; }
         #page-info { color: #666; }
+
+        /* ── Auth ─────────────────────────────────────────────────── */
+        #auth-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+        }
+        #auth-screen h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+        #auth-form { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
+        #auth-form input { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; outline: none; }
+        #auth-form input:focus { border-color: #0057ff; }
+        #auth-form button { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px; background: #0057ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+        #auth-form button:hover { background: #0040cc; }
+        #auth-error { font-size: 13px; color: #dc2626; text-align: center; min-height: 18px; }
+        #airport-selector { display: none; align-items: center; gap: 10px; margin-bottom: 1rem; font-size: 14px; }
+        #airport-selector select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+        #btn-logout { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; margin-left: auto; display: none; }
+        #btn-logout:hover { background: #f0f0f0; }
     </style>
 </head>
 
@@ -125,11 +145,93 @@
         </ul>
     </nav>
 
-    <main> <!-- Main content of page excluding navbar and footer-->
+    <main>
 
-        <h1>Flight History</h1><!-- Maybe change to whatever the database is -->
+        <!-- Auth screen -->
+        <div id="auth-screen" style="display:none;">
+            <h2>Sign in to continue</h2>
+            <form id="auth-form" onsubmit="return false;">
+                <input type="email" id="auth-email" placeholder="Email" required autocomplete="email">
+                <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
+                <button type="button" id="auth-submit" onclick="window._authSignIn()">Sign in</button>
+                <div id="auth-error"></div>
+            </form>
+        </div>
 
-        
+        <!-- Main content (hidden until authenticated) -->
+        <div id="main-content" style="display:none;">
+        <h1>Flight History</h1>
+
+        <div id="airport-selector">
+            <span>Airport:</span>
+            <select id="airport-select"></select>
+            <button id="btn-logout" onclick="window._authSignOut()">Sign out</button>
+        </div>
+
+        <section>
+            <div class="history-controls">
+                <label>From
+                <input type="date" id="filter-from">
+                </label>
+                <label>To
+                <input type="date" id="filter-to">
+                </label>
+                <label>Event type
+                <select id="filter-event">
+                    <option value="">All events</option>
+                    <option value="Takeoff">Takeoff</option>
+                    <option value="Landing">Landing</option>
+                    <option value="Touch and Go">Touch and Go</option>
+                </select>
+                </label>
+                <label>Aircraft category
+                <select id="filter-category">
+                    <option value="">All categories</option>
+                    <option value="A1: Light">A1: Light</option>
+                    <option value="A2: Small">A2: Small</option>
+                    <option value="A3: Large">A3: Large</option>
+                    <option value="A4: High Vortex Large">A4: High Vortex Large</option>
+                    <option value="A5: Heavy">A5: Heavy</option>
+                    <option value="A7: Rotorcraft">A7: Rotorcraft</option>
+                </select>
+                </label>
+                <label>Callsign
+                <input type="text" id="filter-callsign" placeholder="e.g. N172SP" style="width:120px;">
+                </label>
+                <button id="btn-apply">Apply</button>
+                <button id="btn-reset">Reset</button>
+                <button id="btn-export">Export CSV</button>
+            </div>
+            
+            <p class="history-meta" id="history-meta">Loading...</p>
+            
+            <div class="history-table-wrap">
+                <table id="flight-table">
+                <thead>
+                    <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Callsign</th>
+                    <th>Event</th>
+                    <th>Runway</th>
+                    <th>Aircraft type</th>
+                    </tr>
+                </thead>
+                <tbody id="flight-tbody">
+                    <tr><td colspan="6" style="color:#999;padding:2rem 14px;">Loading data...</td></tr>
+                </tbody>
+                </table>
+            </div>
+            
+            <div class="pagination">
+                <button id="btn-prev" disabled>&#8592; Prev</button>
+                <span id="page-info"></span>
+                <button id="btn-next" disabled>Next &#8594;</button>
+            </div>
+        </section>
+
+        </div> <!-- /main-content -->
+    </main>
 
     <footer class="footer"> <!-- Include in all HTML files -->
         <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
@@ -138,7 +240,8 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-    import { getFirestore, collection, query, orderBy, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { getFirestore, collection, doc, getDoc, query, orderBy, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     
     const firebaseConfig = {
         apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
@@ -151,7 +254,57 @@
     };
     
     const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
     const db = getFirestore(app);
+
+    const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou' };
+    const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Dutchess County' };
+    let currentCollection = 'flights';
+
+    function getCollectionName(airport) {
+        return AIRPORT_COLLECTIONS[airport] || 'flights_' + airport;
+    }
+
+    function showAuth() {
+        document.getElementById('auth-screen').style.display = 'flex';
+        document.getElementById('main-content').style.display = 'none';
+    }
+    function hideAuth() {
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+    }
+
+    async function initUser(user) {
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
+        const profile = snap.data();
+        if (profile.role === 'admin') {
+            const selector = document.getElementById('airport-selector');
+            selector.style.display = 'flex';
+            const select = document.getElementById('airport-select');
+            select.innerHTML = Object.entries(AIRPORT_LABELS).map(([k,v]) => `<option value="${k}">${v}</option>`).join('');
+            currentCollection = getCollectionName(select.value);
+            select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); const { from, to } = todayRange(); loadAll(from, to); });
+        } else {
+            currentCollection = getCollectionName(profile.airport);
+        }
+        document.getElementById('btn-logout').style.display = 'inline-block';
+        hideAuth();
+        const { from, to } = todayRange();
+        loadAll(from, to);
+    }
+
+    // Expose auth functions globally so non-module handlers can reach them
+    window._authSignIn = async () => {
+        const email = document.getElementById('auth-email').value.trim();
+        const password = document.getElementById('auth-password').value;
+        document.getElementById('auth-error').textContent = '';
+        try { await signInWithEmailAndPassword(auth, email, password); }
+        catch(e) { document.getElementById('auth-error').textContent = 'Invalid email or password.'; }
+    };
+    window._authSignOut = () => auth.signOut();
+
+    onAuthStateChanged(auth, user => { if (user) { initUser(user); } else { showAuth(); } });
     
     const PAGE_SIZE = 50;
     let allRows = [];
@@ -176,13 +329,14 @@
         const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
     
         tbody.innerHTML = pageRows.length === 0
-        ? '<tr><td colspan="5" style="color:#999;padding:2rem 14px;">No results found.</td></tr>'
+        ? '<tr><td colspan="6" style="color:#999;padding:2rem 14px;">No results found.</td></tr>'
         : pageRows.map(r => `
             <tr>
                 <td>${r.date}</td>
                 <td>${r.time}</td>
                 <td>${r.callsign}</td>
                 <td><span class="badge ${badgeClass(r.event)}">${r.event}</span></td>
+                <td>${r.runway || 'n/a'}</td>
                 <td>${r.aircraftType}</td>
             </tr>`).join('');
     
@@ -222,7 +376,7 @@
         const constraints = [orderBy('timestamp', 'desc')];
         if (fromISO) constraints.push(where('timestamp', '>=', fromISO));
         if (toISO)   constraints.push(where('timestamp', '<=', toISO));
-        const q = query(collection(db, 'flights'), ...constraints);
+        const q = query(collection(db, currentCollection), ...constraints);
         const snapshot = await getDocs(q);
         allRows = snapshot.docs.map(d => d.data());
         filteredRows = [...allRows];
@@ -262,8 +416,27 @@
     btnPrev.addEventListener('click', () => { currentPage--; renderPage(); });
     btnNext.addEventListener('click', () => { currentPage++; renderPage(); });
     
-    const { from, to } = todayRange();
-    loadAll(from, to);
+    document.getElementById('btn-export').addEventListener('click', () => {
+        if (filteredRows.length === 0) return;
+        const headers = ['Date', 'Time', 'Callsign', 'Event', 'Runway', 'Aircraft Type'];
+        const rows = filteredRows.map(r => [
+        r.date,
+        r.time,
+        r.callsign,
+        r.event,
+        r.runway || 'n/a',
+        r.aircraftType
+        ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
+        const csv = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `owd-flights-${new Date().toLocaleDateString('en-US').replace(/\//g, '-')}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+    
 </script>
 
 </body>
