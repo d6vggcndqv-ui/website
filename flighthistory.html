@@ -309,12 +309,22 @@
         const email = document.getElementById('auth-email').value.trim();
         const password = document.getElementById('auth-password').value;
         document.getElementById('auth-error').textContent = '';
-        try { await signInWithEmailAndPassword(auth, email, password); }
-        catch(e) { document.getElementById('auth-error').textContent = 'Invalid email or password.'; }
+        try {
+            const cred = await signInWithEmailAndPassword(auth, email, password);
+            console.log('[signIn] success, calling initUser');
+            await initUser(cred.user);
+        }
+        catch(e) {
+            console.error('[signIn] error:', e);
+            document.getElementById('auth-error').textContent = 'Invalid email or password.';
+        }
     };
-    window._authSignOut = () => auth.signOut();
+    window._authSignOut = () => { auth.signOut(); showAuth(); };
 
-    onAuthStateChanged(auth, user => { if (user) { initUser(user); } else { showAuth(); } });
+    onAuthStateChanged(auth, user => {
+        console.log('[onAuthStateChanged]', user ? user.uid : 'signed out');
+        if (user) { initUser(user); } else { showAuth(); }
+    });
     
     const PAGE_SIZE = 50;
     let allRows = [];
