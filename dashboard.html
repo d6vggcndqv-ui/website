@@ -10,6 +10,123 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+    <style>
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 2rem;
+        }
+        .metric-card {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 16px 18px;
+        }
+        .metric-card .m-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .metric-card .m-value {
+            font-size: 26px;
+            font-weight: 600;
+        }
+        .metric-card .m-sub {
+            font-size: 12px;
+            color: #888;
+            margin-top: 2px;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .chart-card {
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 10px;
+            padding: 18px 20px;
+        }
+        .chart-card h2 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #444;
+            margin: 0 0 14px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .chart-card.full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .dash-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: #555;
+        }
+        .dash-legend span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .dash-legend .swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+        
+        .range-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+            font-size: 14px;
+        }
+        .range-controls button {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            padding: 6px 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .range-controls button.active,
+        .range-controls button:hover { background: #e8e8e8; }
+        #btn-export-pdf {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            padding: 6px 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #btn-export-pdf:hover { background: #e8e8e8; }
+
+        /* ── Auth ─────────────────────────────────────────────────── */
+        #auth-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
+        #auth-screen h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+        #auth-form { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
+        #auth-form input { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; outline: none; }
+        #auth-form input:focus { border-color: #0057ff; }
+        #auth-form button { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px; background: #0057ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+        #auth-form button:hover { background: #0040cc; }
+        #auth-error { font-size: 13px; color: #dc2626; text-align: center; min-height: 18px; }
+        #airport-selector { display: none; align-items: center; gap: 10px; margin-bottom: 1rem; font-size: 14px; }
+        #airport-selector select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+        #btn-logout { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; margin-left: auto; display: none; }
+        #btn-logout:hover { background: #f0f0f0; }
+     </style>
 </head>
 
 <body>
@@ -29,16 +146,561 @@
         </ul>
     </nav>
 
-    <main> <!-- Main content of page excluding navbar and footer-->
-   
-         <h1>Analytics Dashboard</h1>
-         
+    <main>
+
+        <!-- Auth screen -->
+        <div id="auth-screen">
+            <h2>Sign in to continue</h2>
+            <form id="auth-form" onsubmit="return false;">
+                <input type="email" id="auth-email" placeholder="Email" required autocomplete="email">
+                <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
+                <button type="button" id="auth-submit" onclick="window._authSignIn()">Sign in</button>
+                <div id="auth-error"></div>
+            </form>
+        </div>
+
+        <!-- Main content (hidden until authenticated) -->
+        <div id="main-content" style="display:none;">
+        <h1>Analytics Dashboard</h1>
+
+        <div id="airport-selector">
+            <span>Airport:</span>
+            <select id="airport-select"></select>
+            <button id="btn-logout" onclick="window._authSignOut()">Sign out</button>
+        </div>
+
+         <section>
+            <div id="print-title" style="display:none;font-size:18px;font-weight:600;margin-bottom:1rem;"></div>
+
+            <div class="range-controls">
+                <span>Show:</span>
+                <button class="range-btn active" data-days="1">Today</button>
+                <button class="range-btn" data-days="7">Last 7 days</button>
+                <button class="range-btn" data-days="30">Last 30 days</button>
+                <button class="range-btn" data-days="90">Last 90 days</button>
+                <button class="range-btn" data-days="0">All time</button>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+                <input type="date" id="dash-date-picker" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#111;">
+                <button id="dash-date-btn" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Go</button>
+                </label>
+                <button id="btn-export-pdf">Export PDF</button>
+            </div>
+            
+            <div class="metrics">
+                <div class="metric-card"><div class="m-label">Total operations</div><div class="m-value" id="m-total">—</div></div>
+                <div class="metric-card"><div class="m-label">Takeoffs</div><div class="m-value" id="m-takeoffs">—</div></div>
+                <div class="metric-card"><div class="m-label">Landings</div><div class="m-value" id="m-landings">—</div></div>
+                <div class="metric-card"><div class="m-label">Touch &amp; Gos</div><div class="m-value" id="m-tng">—</div></div>
+                <div class="metric-card"><div class="m-label">Unique callsigns</div><div class="m-value" id="m-callsigns">—</div></div>
+            </div>
+            
+            <div class="charts-grid">
+            
+                <div class="chart-card">
+                <h2>Operations by day</h2>
+                <div class="dash-legend">
+                    <span><span class="swatch" style="background:#3b82f6"></span>Takeoff</span>
+                    <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
+                    <span><span class="swatch" style="background:#f59e0b"></span>Touch &amp; Go</span>
+                </div>
+                <div style="position:relative;width:100%;height:220px;">
+                    <canvas id="chart-by-day" role="img" aria-label="Stacked bar chart of operations by day">Operations by day.</canvas>
+                </div>
+                </div>
+            
+                <div class="chart-card">
+                <h2>Event type breakdown</h2>
+                <div class="dash-legend">
+                    <span><span class="swatch" style="background:#3b82f6"></span>Takeoff</span>
+                    <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
+                    <span><span class="swatch" style="background:#f59e0b"></span>Touch &amp; Go</span>
+                </div>
+                <div style="position:relative;width:100%;height:220px;">
+                    <canvas id="chart-events" role="img" aria-label="Donut chart of event type breakdown">Event type breakdown.</canvas>
+                </div>
+                </div>
+            
+                <div class="chart-card">
+                <h2>Aircraft category</h2>
+                <div class="dash-legend" id="cat-legend"></div>
+                <div style="position:relative;width:100%;height:220px;">
+                    <canvas id="chart-categories" role="img" aria-label="Donut chart of aircraft categories">Aircraft category breakdown.</canvas>
+                </div>
+                </div>
+            
+                <div class="chart-card">
+                <h2>Busiest hours</h2>
+                <div style="position:relative;width:100%;height:220px;">
+                    <canvas id="chart-hours" role="img" aria-label="Bar chart of operations by hour of day">Operations by hour of day.</canvas>
+                </div>
+                </div>
+
+                <div class="chart-card">
+                <h2>Operations by runway</h2>
+                <div class="dash-legend">
+                    <span><span class="swatch" style="background:#3b82f6"></span>Takeoff</span>
+                    <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
+                    <span><span class="swatch" style="background:#f59e0b"></span>Touch &amp; Go</span>
+                </div>
+                <div style="position:relative;width:100%;height:220px;">
+                    <canvas id="chart-runway" role="img" aria-label="Bar chart of operations by runway">Operations by runway.</canvas>
+                </div>
+                </div>
+            
+            </div>
+            
+                <div class="chart-card" style="margin-top:24px;">
+                <h2>Operations by callsign</h2>
+                <div style="position:relative;width:100%;height:260px;">
+                    <canvas id="chart-callsign" role="img" aria-label="Bar chart of operations by callsign">Operations by callsign.</canvas>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:13px;color:#666;">
+                    <button id="callsign-prev" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:5px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;" disabled>&#8592; Prev</button>
+                    <span id="callsign-page-info"></span>
+                    <button id="callsign-next" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:5px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Next &#8594;</button>
+                </div>
+                </div>
+            </div>
+        </section>
+        </div> <!-- /main-content -->
     </main>
 
 
     <footer class="footer"> <!-- Include in all HTML files -->
         <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
     </footer>
+
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+   <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+        import { getFirestore, collection, doc, getDoc, query, orderBy, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    
+        const firebaseConfig = {
+            apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+            authDomain: "owd-data.firebaseapp.com",
+            projectId: "owd-data",
+            storageBucket: "owd-data.firebasestorage.app",
+            messagingSenderId: "912110224300",
+            appId: "1:912110224300:web:ba2b8073871ec023817009",
+            measurementId: "G-PHD4THC11M"
+        };
+    
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou' };
+        const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
+        let currentCollection = 'flights';
+
+        function getCollectionName(airport) {
+            return AIRPORT_COLLECTIONS[airport] || 'flights_' + airport;
+        }
+
+        function showAuth() {
+            document.getElementById('auth-screen').style.display = 'flex';
+            document.getElementById('main-content').style.display = 'none';
+        }
+        function hideAuth() {
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+        }
+
+        async function initUser(user) {
+            const snap = await getDoc(doc(db, 'Users', user.uid));
+            if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
+            const profile = snap.data();
+            if (profile.role === 'admin') {
+                const selector = document.getElementById('airport-selector');
+                selector.style.display = 'flex';
+                const select = document.getElementById('airport-select');
+                select.innerHTML = Object.entries(AIRPORT_LABELS).map(([k,v]) => `<option value="${k}">${v}</option>`).join('');
+                currentCollection = getCollectionName(select.value);
+                select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); refresh(activeDays); });
+            } else {
+                currentCollection = getCollectionName(profile.airport);
+            }
+            document.getElementById('btn-logout').style.display = 'inline-block';
+            hideAuth();
+            refresh(activeDays);
+        }
+
+        document.getElementById('auth-submit').addEventListener('click', async () => {
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            document.getElementById('auth-error').textContent = '';
+            try { await signInWithEmailAndPassword(auth, email, password); }
+            catch(e) { document.getElementById('auth-error').textContent = 'Invalid email or password.'; }
+        });
+
+        document.getElementById('btn-logout').addEventListener('click', () => auth.signOut());
+
+        onAuthStateChanged(auth, user => { if (user) { initUser(user); } else { showAuth(); } });
+    
+        const COLORS = {
+            takeoff: '#3b82f6',
+            landing: '#22c55e',
+            tng:     '#f59e0b'
+        };
+        const CAT_COLORS = {
+            'A1: Light':             '#ef4444',
+            'A2: Small':             '#60a5fa',
+            'A3: Large':             '#095e2b',
+            'A4: High Vortex Large': '#8b5cf6',
+            'A5: Heavy':             '#000000',
+            'A7: Rotorcraft':        '#f2ea38',
+            'Unknown':               '#888888'
+        };
+    
+        let charts = {};
+        let activeDays = 1;
+        let callsignData = { labels: [], data: [] };
+        let callsignPage = 0;
+        const CALLSIGN_PAGE_SIZE = 15;
+    
+        function destroyChart(id) {
+            if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+        }
+    
+        async function loadData(days) {
+            const constraints = [orderBy('timestamp', 'desc')];
+            if (days === 1) {
+                const startOfToday = new Date();
+                startOfToday.setHours(0, 0, 0, 0);
+                constraints.push(where('timestamp', '>=', startOfToday.toISOString()));
+            } else if (days > 1) {
+                const cutoff = new Date();
+                cutoff.setDate(cutoff.getDate() - days);
+                constraints.push(where('timestamp', '>=', cutoff.toISOString()));
+            }
+            const q = query(collection(db, currentCollection), ...constraints);
+            const snap = await getDocs(q);
+            return snap.docs.map(d => d.data());
+        }
+    
+        function updateMetrics(rows) {
+            const takeoffs  = rows.filter(r => r.event === 'Takeoff').length;
+            const landings  = rows.filter(r => r.event === 'Landing').length;
+            const tng       = rows.filter(r => r.event === 'Touch and Go').length;
+            const callsigns = new Set(rows.map(r => r.callsign)).size;
+            document.getElementById('m-total').textContent     = rows.length;
+            document.getElementById('m-takeoffs').textContent  = takeoffs;
+            document.getElementById('m-landings').textContent  = landings;
+            document.getElementById('m-tng').textContent       = tng;
+            document.getElementById('m-callsigns').textContent = callsigns;
+        }
+    
+        function buildDayChart(rows, days, specificDate) {
+            destroyChart('day');
+            const numDays = specificDate ? 1 : (days > 0 ? days : 30);
+            const labels = [];
+            const byDay = {};
+            for (let i = numDays - 1; i >= 0; i--) {
+                const d = specificDate ? new Date(specificDate + 'T12:00:00') : new Date();
+                if (!specificDate) d.setDate(d.getDate() - i);
+                const key = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+                labels.push(key);
+                byDay[key] = { Takeoff: 0, Landing: 0, 'Touch and Go': 0 };
+            }
+            rows.forEach(r => {
+                const ts = new Date(r.timestamp);
+                const key = ts.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+                if (byDay[key]) byDay[key][r.event] = (byDay[key][r.event] || 0) + 1;
+            });
+            charts['day'] = new Chart(document.getElementById('chart-by-day'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Takeoff',      data: labels.map(l => byDay[l]?.Takeoff || 0),          backgroundColor: COLORS.takeoff, stack: 'a' },
+                        { label: 'Landing',      data: labels.map(l => byDay[l]?.Landing || 0),          backgroundColor: COLORS.landing, stack: 'a' },
+                        { label: 'Touch and Go', data: labels.map(l => byDay[l]?.['Touch and Go'] || 0), backgroundColor: COLORS.tng,     stack: 'a' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+                        y: { stacked: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } }
+                    }
+                }
+            });
+        }
+    
+        function buildEventChart(rows) {
+            destroyChart('event');
+            const takeoffs = rows.filter(r => r.event === 'Takeoff').length;
+            const landings = rows.filter(r => r.event === 'Landing').length;
+            const tng      = rows.filter(r => r.event === 'Touch and Go').length;
+            charts['event'] = new Chart(document.getElementById('chart-events'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Takeoff', 'Landing', 'Touch and Go'],
+                    datasets: [{ data: [takeoffs, landings, tng], backgroundColor: [COLORS.takeoff, COLORS.landing, COLORS.tng], borderWidth: 0 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } }
+            });
+        }
+    
+        function buildCategoryChart(rows) {
+            destroyChart('cat');
+            const counts = {};
+            rows.forEach(r => { counts[r.aircraftType] = (counts[r.aircraftType] || 0) + 1; });
+            const labels = Object.keys(counts);
+            const data   = labels.map(l => counts[l]);
+            const colors = labels.map(l => CAT_COLORS[l] || '#888888');
+            const legend = document.getElementById('cat-legend');
+            legend.innerHTML = labels.map((l, i) =>
+                `<span><span class="swatch" style="background:${colors[i]}"></span>${l} ${Math.round(counts[l]/rows.length*100)}%</span>`
+            ).join('');
+            charts['cat'] = new Chart(document.getElementById('chart-categories'), {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } }
+            });
+        }
+    
+        function buildHoursChart(rows) {
+            destroyChart('hours');
+            const counts = Array(24).fill(0);
+            rows.forEach(r => {
+                const h = new Date(r.timestamp).getHours();
+                counts[h]++;
+            });
+            const labels = counts.map((_, i) => {
+                const ampm = i >= 12 ? 'PM' : 'AM';
+                const h = i % 12 || 12;
+                return `${h}${ampm}`;
+            });
+            charts['hours'] = new Chart(document.getElementById('chart-hours'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{ label: 'Operations', data: counts, backgroundColor: '#6366f1' }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 12 } },
+                        y: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } }
+                    }
+                }
+            });
+        }
+    
+        function renderCallsignPage() {
+            destroyChart('callsign');
+            const start = callsignPage * CALLSIGN_PAGE_SIZE;
+            const pageLabels  = callsignData.labels.slice(start, start + CALLSIGN_PAGE_SIZE);
+            const pageTakeoffs = callsignData.takeoffs.slice(start, start + CALLSIGN_PAGE_SIZE);
+            const pageLandings = callsignData.landings.slice(start, start + CALLSIGN_PAGE_SIZE);
+            const pageTngs     = callsignData.tngs.slice(start, start + CALLSIGN_PAGE_SIZE);
+            const totalPages = Math.max(1, Math.ceil(callsignData.labels.length / CALLSIGN_PAGE_SIZE));
+            document.getElementById('callsign-page-info').textContent = `Page ${callsignPage + 1} of ${totalPages}`;
+            document.getElementById('callsign-prev').disabled = callsignPage === 0;
+            document.getElementById('callsign-next').disabled = callsignPage >= totalPages - 1;
+            charts['callsign'] = new Chart(document.getElementById('chart-callsign'), {
+                plugins: [ChartDataLabels],
+                type: 'bar',
+                data: {
+                    labels: pageLabels,
+                    datasets: [
+                        { label: 'Takeoff',      data: pageTakeoffs, backgroundColor: COLORS.takeoff, stack: 'a' },
+                        { label: 'Landing',      data: pageLandings, backgroundColor: COLORS.landing, stack: 'a' },
+                        { label: 'Touch and Go', data: pageTngs,     backgroundColor: COLORS.tng,     stack: 'a' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            display: (ctx) => ctx.datasetIndex === 2,
+                            anchor: 'end',
+                            align: 'end',
+                            formatter: (value, ctx) => {
+                            return ctx.chart.data.datasets.reduce((sum, ds) => sum + (ds.data[ctx.dataIndex] || 0), 0);
+                            },
+                            font: { size: 11 },
+                            color: '#444'
+                        }
+                        },
+                        layout: { padding: { top: 24 } },
+                    scales: {
+                        x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 45, autoSkip: false } },
+                        y: { stacked: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } }
+                    }
+                }
+            });
+        }
+    
+        function buildCallsignChart(rows) {
+            const counts = {};
+            rows.forEach(r => {
+                if (!counts[r.callsign]) counts[r.callsign] = { Takeoff: 0, Landing: 0, 'Touch and Go': 0 };
+                counts[r.callsign][r.event] = (counts[r.callsign][r.event] || 0) + 1;
+            });
+            const sorted = Object.entries(counts).sort((a, b) => {
+                const totalA = a[1].Takeoff + a[1].Landing + a[1]['Touch and Go'];
+                const totalB = b[1].Takeoff + b[1].Landing + b[1]['Touch and Go'];
+                return totalB - totalA;
+            });
+            callsignData = {
+                labels:   sorted.map(e => e[0]),
+                takeoffs: sorted.map(e => e[1].Takeoff),
+                landings: sorted.map(e => e[1].Landing),
+                tngs:     sorted.map(e => e[1]['Touch and Go'])
+            };
+            callsignPage = 0;
+            renderCallsignPage();
+        }
+    
+        function buildRunwayChart(rows) {
+            destroyChart('runway');
+            const counts = {};
+            rows.forEach(r => {
+                if (!r.runway || r.runway === 'n/a') return;
+                if (!counts[r.runway]) counts[r.runway] = { Takeoff: 0, Landing: 0, 'Touch and Go': 0 };
+                counts[r.runway][r.event] = (counts[r.runway][r.event] || 0) + 1;
+            });
+            const labels = Object.keys(counts).sort();
+            charts['runway'] = new Chart(document.getElementById('chart-runway'), {
+                plugins: [ChartDataLabels],
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Takeoff',      data: labels.map(l => counts[l].Takeoff),         backgroundColor: COLORS.takeoff, stack: 'a' },
+                        { label: 'Landing',      data: labels.map(l => counts[l].Landing),         backgroundColor: COLORS.landing, stack: 'a' },
+                        { label: 'Touch and Go', data: labels.map(l => counts[l]['Touch and Go']), backgroundColor: COLORS.tng,     stack: 'a' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            display: (ctx) => ctx.datasetIndex === 2,
+                            anchor: 'end',
+                            align: 'end',
+                            formatter: (value, ctx) => {
+                                return ctx.chart.data.datasets.reduce((sum, ds) => sum + (ds.data[ctx.dataIndex] || 0), 0);
+                            },
+                            font: { size: 11 },
+                            color: '#444'
+                        }
+                    },
+                    layout: { padding: { top: 24 } },
+                    scales: {
+                        x: { stacked: true, grid: { display: false } },
+                        y: { stacked: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } }
+                    }
+                }
+            });
+        }
+
+        async function refresh(days) {
+            const rows = await loadData(days);
+            updateMetrics(rows);
+            buildDayChart(rows, days);
+            buildEventChart(rows);
+            buildCategoryChart(rows);
+            buildHoursChart(rows);
+            buildCallsignChart(rows);
+            buildRunwayChart(rows);
+        }
+    
+        async function refreshForDate(dateStr) {
+            const start = new Date(dateStr + 'T00:00:00');
+            const end   = new Date(dateStr + 'T23:59:59');
+            const constraints = [
+                orderBy('timestamp', 'desc'),
+                where('timestamp', '>=', start.toISOString()),
+                where('timestamp', '<=', end.toISOString())
+            ];
+            const q = query(collection(db, currentCollection), ...constraints);
+            const snap = await getDocs(q);
+            const rows = snap.docs.map(d => d.data());
+            updateMetrics(rows);
+            buildDayChart(rows, 1, dateStr);
+            buildEventChart(rows);
+            buildCategoryChart(rows);
+            buildHoursChart(rows);
+            buildCallsignChart(rows);
+            buildRunwayChart(rows);
+        }
+    
+        document.getElementById('callsign-prev').addEventListener('click', () => { callsignPage--; renderCallsignPage(); });
+        document.getElementById('callsign-next').addEventListener('click', () => { callsignPage++; renderCallsignPage(); });
+    
+        document.querySelectorAll('.range-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('dash-date-picker').value = '';
+                activeDays = parseInt(btn.dataset.days);
+                refresh(activeDays);
+            });
+        });
+    
+        document.getElementById('dash-date-btn').addEventListener('click', () => {
+            const val = document.getElementById('dash-date-picker').value;
+            if (!val) return;
+            document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+            refreshForDate(val);
+        });
+    
+        function getPrintTitle() {
+            const picker = document.getElementById('dash-date-picker').value;
+            if (picker) {
+                const d = new Date(picker + 'T12:00:00');
+                return 'OWD Flight Operations — ' + d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            }
+            const activeBtn = document.querySelector('.range-btn.active');
+            const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
+            if (days === 1) return 'OWD Flight Operations — Today, ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            if (days === 0) return 'OWD Flight Operations — All Time';
+            const end = new Date();
+            const start = new Date();
+            start.setDate(start.getDate() - days);
+            const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            return `OWD Flight Operations — ${fmt(start)} to ${fmt(end)}`;
+        }
+
+        document.getElementById('btn-export-pdf').addEventListener('click', () => {
+            const title = getPrintTitle();
+            const printTitle = document.getElementById('print-title');
+            printTitle.textContent = title;
+            printTitle.style.display = 'block';
+
+            const btn = document.getElementById('btn-export-pdf');
+            btn.textContent = 'Generating...';
+            btn.disabled = true;
+
+            const element = document.querySelector('section');
+            const safeFilename = title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').toLowerCase() + '.pdf';
+            const opt = {
+                margin:      [10, 10, 10, 10],
+                filename:    safeFilename,
+                image:       { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, logging: false },
+                jsPDF:       { unit: 'mm', format: 'a4', orientation: 'landscape' },
+                pagebreak:   { mode: 'avoid-all' }
+            };
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                printTitle.style.display = 'none';
+                btn.textContent = 'Export PDF';
+                btn.disabled = false;
+            });
+        });
+    </script>
 
 </body>
 
