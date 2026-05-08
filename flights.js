@@ -27,6 +27,7 @@ const RUNWAYS = [
   { name: "10/28", lat1: 42.1921429, lon1: -71.1784215, lat2: 42.1923323, lon2: -71.1638716 }
 ];
 const RUNWAY_CORRIDOR_KM = 0.15;
+const APPROACH_CORRIDOR_KM = 0.4;
 
 const categoryMap = {
   "A1": "A1: Light",
@@ -56,6 +57,19 @@ function isOnRunway(lat, lon) {
     const closestLon = rwy.lon1 + t * dy;
     const dist = getDistance(lat, lon, closestLat, closestLon);
     if (dist <= RUNWAY_CORRIDOR_KM) return rwy.name;
+  }
+  return null;
+}
+
+function isOnApproach(lat, lon) {
+  for (const rwy of RUNWAYS) {
+    const dx = rwy.lat2 - rwy.lat1;
+    const dy = rwy.lon2 - rwy.lon1;
+    const t = ((lat - rwy.lat1) * dx + (lon - rwy.lon1) * dy) / (dx * dx + dy * dy);
+    const closestLat = rwy.lat1 + Math.max(-2, Math.min(2, t)) * dx;
+    const closestLon = rwy.lon1 + Math.max(-2, Math.min(2, t)) * dy;
+    const dist = getDistance(lat, lon, closestLat, closestLon);
+    if (dist <= APPROACH_CORRIDOR_KM) return rwy.name;
   }
   return null;
 }
@@ -193,11 +207,12 @@ async function fetchAndDetect() {
         }
       }
 
-      // --- track descending on runway ---
+      // --- track descending on runway or on approach ---
       const currentRunway = isOnRunway(flight.lat, flight.lon);
       if (currentRunway) state.lastRunway = currentRunway;
+      const onApproachOrRunway = currentRunway || isOnApproach(flight.lat, flight.lon);
 
-      if (!isHelicopter && currentRunway &&
+      if (!isHelicopter && onApproachOrRunway &&
           !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
           currentAlt < prevAlt && currentGs > 30) {
@@ -205,12 +220,12 @@ async function fetchAndDetect() {
         if (state.consecutiveDescents >= 2) {
           state.wasDescendingOnRunway = true;
         }
-      } else if (!isHelicopter && currentRunway) {
+      } else if (!isHelicopter && onApproachOrRunway) {
         state.consecutiveDescents = 0;
       }
 
-      // --- reset wasDescendingOnRunway and consecutiveDescents if aircraft leaves runway corridor ---
-      if (!currentRunway) {
+      // --- reset wasDescendingOnRunway and consecutiveDescents if aircraft leaves runway corridor and approach zone ---
+      if (!onApproachOrRunway) {
         state.wasDescendingOnRunway = false;
         state.consecutiveDescents = 0;
       }
