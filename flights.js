@@ -133,7 +133,8 @@ async function fetchAndDetect() {
         consecutiveDescents: 0,
         lastRunway: "n/a",
         minGsOnRunway: null,
-        gsAccelCount: 0
+        gsAccelCount: 0,
+        didDecelerateOnRunway: false
       };
 
       const currentAlt = flight.alt_baro;
@@ -255,6 +256,7 @@ async function fetchAndDetect() {
         state.consecutiveClimbs = 0;
         state.minGsOnRunway = null;
         state.gsAccelCount = 0;
+        state.didDecelerateOnRunway = false;
       }
 
       // --- TOUCH AND GO option 2: deceleration then acceleration on runway, never below 35kts ---
@@ -263,6 +265,9 @@ async function fetchAndDetect() {
           (now - state.lastTakeoff) > COOLDOWN_MS && !takeoffLoggedThisIteration && !touchAndGoLoggedThisIteration) {
 
         if (state.minGsOnRunway === null || currentGs < state.minGsOnRunway) {
+          if (state.minGsOnRunway !== null && currentGs < state.minGsOnRunway) {
+            state.didDecelerateOnRunway = true;
+          }
           state.minGsOnRunway = currentGs;
           state.gsAccelCount = 0;
         }
@@ -271,13 +276,14 @@ async function fetchAndDetect() {
           state.gsAccelCount++;
         }
 
-        if (state.gsAccelCount >= 2 && state.minGsOnRunway >= 35) {
+        if (state.gsAccelCount >= 2 && state.minGsOnRunway >= 35 && state.didDecelerateOnRunway) {
           if ((now - state.lastTouchAndGo) > COOLDOWN_MS) {
             state.lastTouchAndGo = now;
             state.lastTakeoff = now;
             state.landingLogged = false;
             state.minGsOnRunway = null;
             state.gsAccelCount = 0;
+            state.didDecelerateOnRunway = false;
             state.minAltOnRunway = null;
             state.consecutiveClimbs = 0;
             state.wasDescendingOnRunway = false;
@@ -292,8 +298,7 @@ async function fetchAndDetect() {
           currentGs > 40 && currentGs > prevGs &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
           currentAlt > prevAlt && currentAlt < 500 &&
-          !state.wasDescendingOnRunway && !touchAndGoLoggedThisIteration &&
-          state.minGsOnRunway === null) {
+          !state.wasDescendingOnRunway && !touchAndGoLoggedThisIteration) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
