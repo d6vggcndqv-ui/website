@@ -27,7 +27,6 @@ const RUNWAYS = [
   { name: "10/28", lat1: 42.1921429, lon1: -71.1784215, lat2: 42.1923323, lon2: -71.1638716 }
 ];
 const RUNWAY_CORRIDOR_KM = 0.15;
-const APPROACH_CORRIDOR_KM = 0.4;
 
 const categoryMap = {
   "A1": "A1: Light",
@@ -57,19 +56,6 @@ function isOnRunway(lat, lon) {
     const closestLon = rwy.lon1 + t * dy;
     const dist = getDistance(lat, lon, closestLat, closestLon);
     if (dist <= RUNWAY_CORRIDOR_KM) return rwy.name;
-  }
-  return null;
-}
-
-function isOnApproach(lat, lon) {
-  for (const rwy of RUNWAYS) {
-    const dx = rwy.lat2 - rwy.lat1;
-    const dy = rwy.lon2 - rwy.lon1;
-    const t = ((lat - rwy.lat1) * dx + (lon - rwy.lon1) * dy) / (dx * dx + dy * dy);
-    const closestLat = rwy.lat1 + Math.max(-2, Math.min(2, t)) * dx;
-    const closestLon = rwy.lon1 + Math.max(-2, Math.min(2, t)) * dy;
-    const dist = getDistance(lat, lon, closestLat, closestLon);
-    if (dist <= APPROACH_CORRIDOR_KM) return rwy.name;
   }
   return null;
 }
@@ -145,7 +131,9 @@ async function fetchAndDetect() {
         wasDescendingOnRunway: false,
         maxDistanceWhileAirborne: 0,
         consecutiveDescents: 0,
-        lastRunway: "n/a"
+        lastRunway: "n/a",
+        minGsOnRunway: null,
+        gsAccelCount: 0
       };
 
       const currentAlt = flight.alt_baro;
@@ -207,12 +195,11 @@ async function fetchAndDetect() {
         }
       }
 
-      // --- track descending on runway or on approach ---
+      // --- track descending on runway ---
       const currentRunway = isOnRunway(flight.lat, flight.lon);
       if (currentRunway) state.lastRunway = currentRunway;
-      const onApproachOrRunway = currentRunway || isOnApproach(flight.lat, flight.lon);
 
-      if (!isHelicopter && onApproachOrRunway &&
+      if (!isHelicopter && currentRunway &&
           !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
           currentAlt < prevAlt && currentGs > 30) {
@@ -220,12 +207,12 @@ async function fetchAndDetect() {
         if (state.consecutiveDescents >= 2) {
           state.wasDescendingOnRunway = true;
         }
-      } else if (!isHelicopter && onApproachOrRunway) {
+      } else if (!isHelicopter && currentRunway) {
         state.consecutiveDescents = 0;
       }
 
-      // --- reset wasDescendingOnRunway and consecutiveDescents if aircraft leaves runway corridor and approach zone ---
-      if (!onApproachOrRunway) {
+      // --- reset wasDescendingOnRunway and consecutiveDescents if aircraft leaves runway corridor ---
+      if (!currentRunway) {
         state.wasDescendingOnRunway = false;
         state.consecutiveDescents = 0;
       }
@@ -244,7 +231,7 @@ async function fetchAndDetect() {
         if (state.minAltOnRunway !== null && currentAlt > state.minAltOnRunway &&
             prevAlt !== null && typeof prevAlt === "number" && currentAlt > prevAlt) {
           state.consecutiveClimbs++;
-        } else if (prevAlt !== null && typeof prevAlt === "number" && currentAlt <= prevAlt) {
+        } else if (prevAlt !== null && typeof prevAlt === "number" && currentAlt < prevAlt) {
           state.consecutiveClimbs = 0;
         }
 
@@ -266,6 +253,38 @@ async function fetchAndDetect() {
       if (!currentRunway) {
         state.minAltOnRunway = null;
         state.consecutiveClimbs = 0;
+        state.minGsOnRunway = null;
+        state.gsAccelCount = 0;
+      }
+
+      // --- TOUCH AND GO option 2: deceleration then acceleration on runway, never below 35kts ---
+      if (!isHelicopter && !isOnGround(currentAlt) && currentRunway &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" &&
+          (now - state.lastTakeoff) > COOLDOWN_MS && !takeoffLoggedThisIteration && !touchAndGoLoggedThisIteration) {
+
+        if (state.minGsOnRunway === null || currentGs < state.minGsOnRunway) {
+          state.minGsOnRunway = currentGs;
+          state.gsAccelCount = 0;
+        }
+
+        if (state.minGsOnRunway !== null && currentGs > state.minGsOnRunway && currentGs > prevGs) {
+          state.gsAccelCount++;
+        }
+
+        if (state.gsAccelCount >= 2 && state.minGsOnRunway >= 35) {
+          if ((now - state.lastTouchAndGo) > COOLDOWN_MS) {
+            state.lastTouchAndGo = now;
+            state.lastTakeoff = now;
+            state.landingLogged = false;
+            state.minGsOnRunway = null;
+            state.gsAccelCount = 0;
+            state.minAltOnRunway = null;
+            state.consecutiveClimbs = 0;
+            state.wasDescendingOnRunway = false;
+            touchAndGoLoggedThisIteration = true;
+            logFlight(flight.flight, flight.category, "Touch and Go", state.lastRunway);
+          }
+        }
       }
 
       // --- TAKEOFF option 2: fixed wing on runway, accelerating above 40kts, climbing, below 500ft, not previously descending, no touch and go this iteration ---
