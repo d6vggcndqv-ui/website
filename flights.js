@@ -308,8 +308,7 @@ async function fetchAndDetect() {
           currentGs > 40 && currentGs > prevGs &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
           currentAlt > prevAlt && currentAlt < 500 &&
-          !state.wasDescendingOnRunway && !touchAndGoLoggedThisIteration &&
-          !state.didDecelerateOnRunway) {
+          !state.wasDescendingOnRunway && !touchAndGoLoggedThisIteration) {
         if ((now - state.lastTakeoff) > COOLDOWN_MS) {
           state.lastTakeoff = now;
           state.landingLogged = false;
