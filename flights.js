@@ -264,7 +264,6 @@ async function fetchAndDetect() {
       // --- TOUCH AND GO option 2: deceleration then acceleration on runway, never below 35kts ---
       if (!isHelicopter && !isOnGround(currentAlt) && currentRunway &&
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
-          currentAlt < 500 &&
           (now - state.lastTakeoff) > COOLDOWN_MS && !takeoffLoggedThisIteration && !touchAndGoLoggedThisIteration) {
 
         if (state.minGsOnRunway === null || currentGs < state.minGsOnRunway) {
