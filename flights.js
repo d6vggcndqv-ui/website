@@ -266,7 +266,7 @@ async function fetchAndDetect() {
           typeof currentAlt === "number" && typeof prevAlt === "number" &&
           (now - state.lastTakeoff) > COOLDOWN_MS && !takeoffLoggedThisIteration && !touchAndGoLoggedThisIteration) {
 
-        if (state.minGsOnRunway === null || currentGs < state.minGsOnRunway) {
+        if ((state.minGsOnRunway === null && prevAlt !== null) || currentGs < state.minGsOnRunway) {
           if (state.minGsOnRunway !== null && currentGs < state.minGsOnRunway) {
             state.consecutiveDecelsOnRunway++;
             if (state.consecutiveDecelsOnRunway >= 2) {
