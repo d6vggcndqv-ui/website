@@ -19,7 +19,7 @@ const db = getFirestore(app);
 const OWD_LAT = 42.1905;
 const OWD_LNG = -71.1728;
 const MAX_DISTANCE_KM = 3;
-const HELICOPTER_DISTANCE_KM = 0.5;
+const HELICOPTER_DISTANCE_KM = 1;
 const COOLDOWN_MS = 60000;
 
 const RUNWAYS = [
@@ -320,7 +320,7 @@ async function fetchAndDetect() {
         }
       }
 
-      // --- TAKEOFF option 3: helicopter within 500m, not on ground, climbing for 2 consecutive fetches ---
+      // --- TAKEOFF option 3: helicopter within 1km, not on ground, climbing for 2 consecutive fetches ---
       if (isHelicopter && !isOnGround(currentAlt) && distance <= HELICOPTER_DISTANCE_KM &&
           typeof currentAlt === "number" && typeof prevAlt === "number" && currentAlt > prevAlt) {
         state.helicopterClimbs++;
