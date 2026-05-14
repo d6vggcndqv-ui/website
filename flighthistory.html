@@ -156,6 +156,9 @@
                 <button type="button" id="auth-submit" onclick="window._authSignIn()">Sign in</button>
                 <div id="auth-error"></div>
             </form>
+            <p style="text-align:center;font-size:13px;color:#666;margin-top:16px;">
+                Don't have an account? <a href="register.html?from=flighthistory.html" style="color:#0057ff;text-decoration:none;font-weight:500;">Create one</a>
+            </p>
         </div>
 
         <!-- Main content (hidden until authenticated) -->
@@ -258,7 +261,7 @@
     const db = getFirestore(app);
 
     const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou' };
-    const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
+    const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Dutchess County' };
     let currentCollection = 'flights';
 
     function getCollectionName(airport) {

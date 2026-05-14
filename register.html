@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+    <style>
+        .register-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70vh;
+        }
+        .register-card {
+            width: 100%;
+            max-width: 400px;
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+        }
+        .register-card h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            margin-top: 0;
+        }
+        .register-card p {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 28px;
+            margin-top: 0;
+        }
+        .register-form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .register-form label {
+            display: flex;
+            flex-direction: column;
+            font-size: 13px;
+            font-weight: 500;
+            gap: 5px;
+            color: #333;
+        }
+        .register-form input {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .register-form input:focus { border-color: #0057ff; }
+        .register-form button {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 11px;
+            background: #0057ff;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s;
+            margin-top: 4px;
+        }
+        .register-form button:hover { background: #0040cc; }
+        .register-form button:disabled { background: #93b4ff; cursor: default; }
+        #register-error {
+            font-size: 13px;
+            color: #dc2626;
+            text-align: center;
+            min-height: 18px;
+        }
+        #register-success {
+            font-size: 13px;
+            color: #166534;
+            text-align: center;
+            min-height: 18px;
+        }
+        .signin-link {
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+            margin-top: 20px;
+        }
+        .signin-link a {
+            color: #0057ff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .signin-link a:hover { text-decoration: underline; }
+        .invite-hint {
+            font-size: 12px;
+            color: #888;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-logo">
+            <a href="https://www.fl-technologies.com" target="_blank">
+                <img src="logo.png" alt="Logo">
+            </a>
+        </div>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="livemap.html">Live Map</a></li>
+            <li><a href="flighthistory.html">Flight History</a></li>
+            <li><a href="dashboard.html">Analytics Dashboard</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <div class="register-wrap">
+            <div class="register-card">
+                <h2>Create your account</h2>
+                <p>Enter your details and the invite code provided by your airport administrator.</p>
+                <div class="register-form">
+                    <label>Email
+                        <input type="email" id="reg-email" placeholder="you@example.com" autocomplete="email">
+                    </label>
+                    <label>Password
+                        <input type="password" id="reg-password" placeholder="At least 6 characters" autocomplete="new-password">
+                    </label>
+                    <label>Confirm password
+                        <input type="password" id="reg-password2" placeholder="Repeat your password" autocomplete="new-password">
+                    </label>
+                    <label>Invite code
+                        <input type="text" id="reg-code" placeholder="e.g. POU-2026-XK9" autocomplete="off">
+                        <span class="invite-hint">Provided by your airport administrator</span>
+                    </label>
+                    <div id="register-error"></div>
+                    <div id="register-success"></div>
+                    <button type="button" id="reg-submit">Create account</button>
+                </div>
+                <div class="signin-link">Already have an account? <a href="flighthistory.html">Sign in</a></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
+    </footer>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { getFirestore, collection, doc, getDoc, setDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+        authDomain: "owd-data.firebaseapp.com",
+        projectId: "owd-data",
+        storageBucket: "owd-data.firebasestorage.app",
+        messagingSenderId: "912110224300",
+        appId: "1:912110224300:web:ba2b8073871ec023817009",
+        measurementId: "G-PHD4THC11M"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    window._register = async () => {
+        const email     = document.getElementById('reg-email').value.trim();
+        const password  = document.getElementById('reg-password').value;
+        const password2 = document.getElementById('reg-password2').value;
+        const code      = document.getElementById('reg-code').value.trim();
+        const errEl     = document.getElementById('register-error');
+        const successEl = document.getElementById('register-success');
+        const btn       = document.getElementById('reg-submit');
+
+        errEl.textContent = '';
+        successEl.textContent = '';
+
+        // Validate inputs
+        if (!email || !password || !password2 || !code) {
+            errEl.textContent = 'Please fill in all fields.'; return;
+        }
+        if (password.length < 6) {
+            errEl.textContent = 'Password must be at least 6 characters.'; return;
+        }
+        if (password !== password2) {
+            errEl.textContent = 'Passwords do not match.'; return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Creating account...';
+
+        try {
+            // Look up invite code in Firestore
+            const codeSnap = await getDoc(doc(db, 'invite_codes', code));
+            if (!codeSnap.exists()) {
+                errEl.textContent = 'Invalid invite code. Please check with your administrator.';
+                btn.disabled = false; btn.textContent = 'Create account'; return;
+            }
+            const airport = codeSnap.data().airport;
+
+            // Create Firebase Auth account
+            const cred = await createUserWithEmailAndPassword(auth, email, password);
+
+            // Write user profile to Firestore
+            await setDoc(doc(db, 'Users', cred.user.uid), { airport: airport });
+
+            successEl.textContent = 'Account created! Redirecting...';
+            const params = new URLSearchParams(window.location.search);
+            const from = params.get('from') || 'flighthistory.html';
+            setTimeout(() => { window.location.href = from; }, 1500);
+
+        } catch(e) {
+            btn.disabled = false; btn.textContent = 'Create account';
+            if (e.code === 'auth/email-already-in-use') {
+                errEl.textContent = 'An account with this email already exists.';
+            } else if (e.code === 'auth/invalid-email') {
+                errEl.textContent = 'Please enter a valid email address.';
+            } else {
+                errEl.textContent = 'Something went wrong. Please try again.';
+                console.error(e);
+            }
+        }
+    };
+
+    document.getElementById('reg-submit').addEventListener('click', window._register);
+</script>
+</body>
+</html>
