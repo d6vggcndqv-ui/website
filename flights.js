@@ -154,7 +154,7 @@ async function fetchAndDetect() {
 
       // --- LANDING option 1: transitions to "ground" ---
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
-          typeof prevAlt === "number" && !state.landingLogged) {
+          typeof prevAlt === "number" && !state.landingLogged && currentGs < 30) {
         console.log('LANDING CONDITION MET for', flight.flight);
         state.landingLogged = true;
         state.lastLanding = now;
