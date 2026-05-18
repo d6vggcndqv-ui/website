@@ -663,17 +663,17 @@
             const picker = document.getElementById('dash-date-picker').value;
             if (picker) {
                 const d = new Date(picker + 'T12:00:00');
-                return 'OWD Flight Operations — ' + d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                return 'Flight Operations — ' + d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
             }
             const activeBtn = document.querySelector('.range-btn.active');
             const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
-            if (days === 1) return 'OWD Flight Operations — Today, ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-            if (days === 0) return 'OWD Flight Operations — All Time';
+            if (days === 1) return 'Flight Operations — Today, ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            if (days === 0) return 'Flight Operations — All Time';
             const end = new Date();
             const start = new Date();
             start.setDate(start.getDate() - days);
             const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            return `OWD Flight Operations — ${fmt(start)} to ${fmt(end)}`;
+            return `Flight Operations — ${fmt(start)} to ${fmt(end)}`;
         }
 
         document.getElementById('btn-export-pdf').addEventListener('click', () => {

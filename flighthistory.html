@@ -455,7 +455,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `owd-flights-${new Date().toLocaleDateString('en-US').replace(/\//g, '-')}.csv`;
+        a.download = `flight-history-${new Date().toLocaleDateString('en-US').replace(/\//g, '-')}.csv`;
         a.click();
         URL.revokeObjectURL(url);
     });
