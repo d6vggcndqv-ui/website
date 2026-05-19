@@ -113,7 +113,11 @@ async function fetchAndDetect() {
 
       // Resolve AAC-ADG from registry, cache per hex so it only runs once per aircraft
       if (!aircraftTypeCache[flight.hex]) {
-        aircraftTypeCache[flight.hex] = aircraftRegistry[flight.hex.toLowerCase()] || "Unknown";
+        if (flight.category === "A7") {
+          aircraftTypeCache[flight.hex] = "Rotorcraft";
+        } else {
+          aircraftTypeCache[flight.hex] = aircraftRegistry[flight.hex.toLowerCase()] || "Unknown";
+        }
       }
       const aacAdg = aircraftTypeCache[flight.hex];
 
