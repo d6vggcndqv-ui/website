@@ -168,7 +168,10 @@
         <div id="airport-selector">
             <span>Airport:</span>
             <select id="airport-select"></select>
-            <button id="btn-logout" onclick="window._authSignOut()">Sign out</button>
+            <button id="btn-logout" onclick="window._authSignOut()">Sign Out</button>
+        </div>
+        <div id="user-signout" style="display:none; margin-bottom:1rem;">
+            <button onclick="window._authSignOut()" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Sign Out</button>
         </div>
 
         <section>
@@ -307,9 +310,9 @@
                 select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); const { from, to } = todayRange(); loadAll(from, to); });
             } else {
                 currentCollection = getCollectionName(profile.airport);
+                document.getElementById('user-signout').style.display = 'block';
             }
             console.log('[initUser] currentCollection:', currentCollection);
-            document.getElementById('btn-logout').style.display = 'inline-block';
             hideAuth();
             console.log('[initUser] hideAuth called');
             const { from, to } = todayRange();

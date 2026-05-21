@@ -169,8 +169,12 @@
         <div id="airport-selector">
             <span>Airport:</span>
             <select id="airport-select"></select>
-            <button id="btn-logout" onclick="window._authSignOut()">Sign out</button>
+            <button id="btn-logout" onclick="window._authSignOut()">Sign Out</button>
         </div>
+        <div id="user-signout" style="display:none; margin-bottom:1rem;">
+            <button onclick="window._authSignOut()" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Sign Out</button>
+        </div>
+        
 
          <section>
             <div id="print-title" style="display:none;font-size:18px;font-weight:600;margin-bottom:1rem;"></div>
@@ -332,7 +336,7 @@
                 select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); refresh(activeDays); });
             } else {
                 currentCollection = getCollectionName(profile.airport);
-                document.getElementById('btn-logout').style.display = 'inline-block';
+                document.getElementById('user-signout').style.display = 'block';
             }
             document.getElementById('btn-logout').style.display = 'inline-block';
             hideAuth();
@@ -348,6 +352,7 @@
         });
 
         document.getElementById('btn-logout').addEventListener('click', () => auth.signOut());
+        window._authSignOut = () => { auth.signOut(); showAuth(); };
 
         onAuthStateChanged(auth, user => { if (user) { initUser(user); } else { showAuth(); } });
     
