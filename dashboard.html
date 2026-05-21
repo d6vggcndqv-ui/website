@@ -230,6 +230,13 @@
                     <canvas id="chart-categories" role="img" aria-label="Donut chart of aircraft categories">Aircraft category breakdown.</canvas>
                 </div>
                 </div>
+
+                <div class="chart-card">
+                <h2>Aircraft category count</h2>
+                <div style="position:relative;width:100%;height:220px;">
+                    <canvas id="chart-cat-bar" role="img" aria-label="Horizontal bar chart of operation counts by aircraft category">Aircraft category counts.</canvas>
+                </div>
+                </div>
             
                 <div class="chart-card">
                 <h2>Busiest hours</h2>
@@ -477,7 +484,45 @@
                 options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } }
             });
         }
-    
+
+        function buildCatBarChart(rows) {
+            destroyChart('catbar');
+            const counts = {};
+            rows.forEach(r => { counts[r.aircraftType] = (counts[r.aircraftType] || 0) + 1; });
+            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+            const labels = sorted.map(e => e[0]);
+            const data   = sorted.map(e => e[1]);
+            const colors = labels.map(l => CAT_COLORS[l] || '#888888');
+            charts['catbar'] = new Chart(document.getElementById('chart-cat-bar'), {
+                plugins: [ChartDataLabels],
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{ data, backgroundColor: colors, borderRadius: 4 }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'end',
+                            font: { size: 11 },
+                            color: '#444',
+                            formatter: (value) => value
+                        }
+                    },
+                    layout: { padding: { right: 30 } },
+                    scales: {
+                        x: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } },
+                        y: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+            
         function buildHoursChart(rows) {
             destroyChart('hours');
             const counts = Array(24).fill(0);
@@ -628,6 +673,7 @@
             buildHoursChart(rows);
             buildCallsignChart(rows);
             buildRunwayChart(rows);
+            buildCatBarChart(rows);
         }
     
         async function refreshForDate(dateStr) {
@@ -648,6 +694,7 @@
             buildHoursChart(rows);
             buildCallsignChart(rows);
             buildRunwayChart(rows);
+            buildCatBarChart(rows);
         }
     
         document.getElementById('callsign-prev').addEventListener('click', () => { callsignPage--; renderCallsignPage(); });
