@@ -332,6 +332,7 @@
                 select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); refresh(activeDays); });
             } else {
                 currentCollection = getCollectionName(profile.airport);
+                document.getElementById('btn-logout').style.display = 'inline-block';
             }
             document.getElementById('btn-logout').style.display = 'inline-block';
             hideAuth();
