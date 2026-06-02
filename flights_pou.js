@@ -23,7 +23,7 @@ const HELICOPTER_DISTANCE_KM = 1;
 const COOLDOWN_MS = 60000;
 
 const RUNWAYS = [
-  { name: "06/24", lat1: 41.621906, lon1: -73.891963, lat2: 41.630346, lon2: -73.878236 },
+  { name: "6/24", lat1: 41.621906, lon1: -73.891963, lat2: 41.630346, lon2: -73.878236 },
   { name: "15/33", lat1: 41.630282, lon1: -73.885205, lat2: 41.624559, lon2: -73.878530 }
 ];
 const RUNWAY_CORRIDOR_KM = 0.15;
