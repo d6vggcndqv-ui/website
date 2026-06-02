@@ -55,19 +55,19 @@ function isOnGround(alt) {
   return alt === "ground";
 }
 
-async function logFlight(callsign, aacAdg, event, runway = "n/a") {
+async function logFlight(registration, aacAdg, event, runway = "n/a") {
   try {
     const now = new Date();
     const cutoff = new Date(now.getTime() - COOLDOWN_MS).toISOString();
     const dedupCheck = query(
       collection(db, "flights_pou"),
-      where("callsign", "==", callsign ? callsign.trim() : "Unknown"),
+      where("registration", "==", registration ? registration.trim() : "Unknown"),
       where("event", "==", event),
       where("timestamp", ">=", cutoff)
     );
     const existing = await getDocs(dedupCheck);
     if (!existing.empty) {
-      console.log(`Skipping duplicate ${event} for ${callsign}`);
+      console.log(`Skipping duplicate ${event} for ${registration}`);
       return;
     }
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -79,7 +79,7 @@ async function logFlight(callsign, aacAdg, event, runway = "n/a") {
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12 || 12;
     await addDoc(collection(db, "flights_pou"), {
-      callsign: callsign ? callsign.trim() : "Unknown",
+      registration: registration ? registration.trim() : "Unknown",
       aircraftType: aacAdg || "Unknown",
       event: event,
       runway: runway,
@@ -87,7 +87,7 @@ async function logFlight(callsign, aacAdg, event, runway = "n/a") {
       date: `${month}/${day}/${year}`,
       time: `${hours}:${minutes}:${seconds} ${ampm}`
     });
-    console.log(`Logged ${event} for ${callsign}`);
+    console.log(`Logged ${event} for ${registration}`);
   } catch (error) {
     console.error("Error logging flight:", error);
   }
@@ -157,7 +157,7 @@ async function fetchAndDetect() {
       // --- LANDING option 1: transitions to "ground" ---
       if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
           typeof prevAlt === "number" && !state.landingLogged) {
-        console.log('LANDING CONDITION MET for', flight.flight);
+        console.log('LANDING CONDITION MET for', flight.r || flight.flight);
         state.landingLogged = true;
         state.lastLanding = now;
         state.minAltOnRunway = null;
@@ -165,7 +165,7 @@ async function fetchAndDetect() {
         state.helicopterClimbs = 0;
         state.wasDescendingOnRunway = false;
         state.maxDistanceWhileAirborne = 0;
-        logFlight(flight.flight, aacAdg, "Landing", state.lastRunway);
+        logFlight(flight.r || flight.flight, aacAdg, "Landing", state.lastRunway);
       }
 
       // --- LANDING option 2: within airport area, was descending on runway, now very slow (under 5kts) ---
@@ -174,13 +174,13 @@ async function fetchAndDetect() {
           state.wasDescendingOnRunway &&
           currentGs < 5 && currentGs !== 0 &&
           (now - state.lastLanding) > COOLDOWN_MS) {
-        console.log('LANDING CONDITION 2 MET for', flight.flight);
+        console.log('LANDING CONDITION 2 MET for', flight.r || flight.flight);
         state.landingLogged = true;
         state.lastLanding = now;
         state.minAltOnRunway = null;
         state.consecutiveClimbs = 0;
         state.wasDescendingOnRunway = false;
-        logFlight(flight.flight, aacAdg, "Landing", state.lastRunway);
+        logFlight(flight.r || flight.flight, aacAdg, "Landing", state.lastRunway);
       }
 
       // --- TAKEOFF option 1: was on ground, now showing a number ---
@@ -195,7 +195,7 @@ async function fetchAndDetect() {
           state.wasDescendingOnRunway = false;
           state.maxDistanceWhileAirborne = 0;
           takeoffLoggedThisIteration = true;
-          logFlight(flight.flight, aacAdg, "Takeoff", state.lastRunway);
+          logFlight(flight.r || flight.flight, aacAdg, "Takeoff", state.lastRunway);
         }
       }
 
@@ -248,7 +248,7 @@ async function fetchAndDetect() {
             state.consecutiveClimbs = 0;
             state.wasDescendingOnRunway = false;
             touchAndGoLoggedThisIteration = true;
-            logFlight(flight.flight, aacAdg, "Touch and Go", state.lastRunway);
+            logFlight(flight.r || flight.flight, aacAdg, "Touch and Go", state.lastRunway);
           }
         }
       }
@@ -300,7 +300,7 @@ async function fetchAndDetect() {
             state.consecutiveClimbs = 0;
             state.wasDescendingOnRunway = false;
             touchAndGoLoggedThisIteration = true;
-            logFlight(flight.flight, aacAdg, "Touch and Go", state.lastRunway);
+            logFlight(flight.r || flight.flight, aacAdg, "Touch and Go", state.lastRunway);
           }
         }
       }
@@ -318,7 +318,7 @@ async function fetchAndDetect() {
           state.consecutiveClimbs = 0;
           state.wasDescendingOnRunway = false;
           takeoffLoggedThisIteration = true;
-          logFlight(flight.flight, aacAdg, "Takeoff", currentRunway || state.lastRunway);
+          logFlight(flight.r || flight.flight, aacAdg, "Takeoff", currentRunway || state.lastRunway);
         }
       }
 
@@ -341,7 +341,7 @@ async function fetchAndDetect() {
           state.landingLogged = false;
           state.helicopterClimbs = 0;
           takeoffLoggedThisIteration = true;
-          logFlight(flight.flight, aacAdg, "Takeoff");
+          logFlight(flight.r || flight.flight, aacAdg, "Takeoff");
         }
       }
 
