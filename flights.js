@@ -55,7 +55,7 @@ function isOnGround(alt) {
   return alt === "ground";
 }
 
-async function logFlight(registration, aacAdg, event, runway = "n/a") {
+async function logFlight(registration, aacAdg, category, event, runway = "n/a") {
   try {
     const now = new Date();
     const cutoff = new Date(now.getTime() - COOLDOWN_MS).toISOString();
@@ -81,6 +81,7 @@ async function logFlight(registration, aacAdg, event, runway = "n/a") {
     await addDoc(collection(db, "flights"), {
       registration: registration ? registration.trim() : "Unknown",
       aircraftType: aacAdg || "Unknown",
+      category: category,
       event: event,
       runway: runway,
       timestamp: now.toISOString(),
@@ -114,12 +115,13 @@ async function fetchAndDetect() {
       // Resolve AAC-ADG from registry, cache per hex so it only runs once per aircraft
       if (!aircraftTypeCache[flight.hex]) {
         if (flight.category === "A7") {
-          aircraftTypeCache[flight.hex] = "Rotorcraft";
+          aircraftTypeCache[flight.hex] = "n/a";
         } else {
           aircraftTypeCache[flight.hex] = aircraftRegistry[flight.hex.toLowerCase()] || "Unknown";
         }
       }
       const aacAdg = aircraftTypeCache[flight.hex];
+      const category = flight.category === "A7" ? "Rotorcraft" : "Airplane";
 
       const prev = previousAircraft[flight.hex];
       const state = aircraftState[flight.hex] || {
@@ -165,7 +167,7 @@ async function fetchAndDetect() {
         state.helicopterClimbs = 0;
         state.wasDescendingOnRunway = false;
         state.maxDistanceWhileAirborne = 0;
-        logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, "Landing", state.lastRunway);
+        logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, "Landing", state.lastRunway);
       }
 
       // --- LANDING option 2: within airport area, was descending on runway, now very slow (under 5kts) ---
@@ -180,7 +182,7 @@ async function fetchAndDetect() {
         state.minAltOnRunway = null;
         state.consecutiveClimbs = 0;
         state.wasDescendingOnRunway = false;
-        logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, "Landing", state.lastRunway);
+        logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, "Landing", state.lastRunway);
       }
 
       // --- TAKEOFF option 1: was on ground, now showing a number ---
@@ -195,7 +197,7 @@ async function fetchAndDetect() {
           state.wasDescendingOnRunway = false;
           state.maxDistanceWhileAirborne = 0;
           takeoffLoggedThisIteration = true;
-          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, "Takeoff", state.lastRunway);
+          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, "Takeoff", state.lastRunway);
         }
       }
 
@@ -248,7 +250,7 @@ async function fetchAndDetect() {
             state.consecutiveClimbs = 0;
             state.wasDescendingOnRunway = false;
             touchAndGoLoggedThisIteration = true;
-            logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, "Touch and Go", state.lastRunway);
+            logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, "Touch and Go", state.lastRunway);
           }
         }
       }
@@ -300,7 +302,7 @@ async function fetchAndDetect() {
             state.consecutiveClimbs = 0;
             state.wasDescendingOnRunway = false;
             touchAndGoLoggedThisIteration = true;
-            logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, "Touch and Go", state.lastRunway);
+            logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, "Touch and Go", state.lastRunway);
           }
         }
       }
@@ -318,7 +320,7 @@ async function fetchAndDetect() {
           state.consecutiveClimbs = 0;
           state.wasDescendingOnRunway = false;
           takeoffLoggedThisIteration = true;
-          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, "Takeoff", currentRunway || state.lastRunway);
+          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, "Takeoff", currentRunway || state.lastRunway);
         }
       }
 
@@ -341,7 +343,7 @@ async function fetchAndDetect() {
           state.landingLogged = false;
           state.helicopterClimbs = 0;
           takeoffLoggedThisIteration = true;
-          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, "Takeoff");
+          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, "Takeoff");
         }
       }
 
