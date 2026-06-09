@@ -149,11 +149,11 @@
 
         <!-- Auth screen -->
         <div id="auth-screen" style="display:none;">
-            <h2>Sign in to continue</h2>
+            <h2>Sign-In</h2>
             <form id="auth-form" onsubmit="return false;">
                 <input type="email" id="auth-email" placeholder="Email" required autocomplete="email">
                 <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
-                <button type="button" id="auth-submit" onclick="window._authSignIn()">Sign in</button>
+                <button type="button" id="auth-submit" onclick="window._authSignIn()">Sign-In</button>
                 <div id="auth-error"></div>
             </form>
             <p style="text-align:center;font-size:13px;color:#666;margin-top:16px;">
@@ -182,17 +182,20 @@
                 <label>To
                 <input type="date" id="filter-to">
                 </label>
-                <label>Event Type
+                <label>Registration
+                <input type="text" id="filter-callsign" placeholder="e.g. N172SP" style="width:120px;">
+                </label>
+                <label>Operation Activity
                 <select id="filter-event">
-                    <option value="">All Events</option>
+                    <option value="">All</option>
                     <option value="Takeoff">Takeoff</option>
                     <option value="Landing">Landing</option>
                     <option value="Touch and Go">Touch and Go</option>
                 </select>
                 </label>
-                <label>Aircraft Category
+                <label>AAC/ADG
                 <select id="filter-category">
-                   <option value="">All Categories</option>
+                   <option value="">All </option>
                     <option value="A-I">A-I</option>
                     <option value="A-II">A-II</option>
                     <option value="B-I">B-I</option>
@@ -209,12 +212,24 @@
                     <option value="D-IV">D-IV</option>
                     <option value="D-V">D-V</option>
                     <option value="D-VI">D-VI</option>
-                    <option value="Rotorcraft">Rotorcraft</option>
                     <option value="Unknown">Unknown</option>
                 </select>
                 </label>
-                <label>Callsign
-                <input type="text" id="filter-callsign" placeholder="e.g. N172SP" style="width:120px;">
+                <label>Category
+                <select id="filter-aircraft-category">
+                    <option value="">All</option>
+                    <option value="Airplane">Airplane</option>
+                    <option value="Rotorcraft">Rotorcraft</option>
+                </select>
+                </label>
+                <label>Class
+                <select id="filter-class">
+                    <option value="">All</option>
+                    <option value="Single-Engine">Single-Engine</option>
+                    <option value="Multi-Engine">Multi-Engine</option>
+                    <option value="Turbine">Turbine</option>
+                    <option value="Rotorcraft">Rotorcraft</option>
+                </select>
                 </label>
                 <button id="btn-apply">Apply</button>
                 <button id="btn-reset">Reset</button>
@@ -229,14 +244,16 @@
                     <tr>
                     <th>Date</th>
                     <th>Time</th>
-                    <th>Callsign</th>
-                    <th>Event</th>
+                    <th>Registration</th>
+                    <th>Operation Activity</th>
                     <th>Runway</th>
-                    <th>Aircraft Type</th>
+                    <th>AAC/ADG</th>
+                    <th>Category</th>
+                    <th>Class</th>
                     </tr>
                 </thead>
                 <tbody id="flight-tbody">
-                    <tr><td colspan="6" style="color:#999;padding:2rem 14px;">Loading data...</td></tr>
+                    <tr><td colspan="8" style="color:#999;padding:2rem 14px;">Loading data...</td></tr>
                 </tbody>
                 </table>
             </div>
@@ -367,15 +384,17 @@
         const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
     
         tbody.innerHTML = pageRows.length === 0
-        ? '<tr><td colspan="6" style="color:#999;padding:2rem 14px;">No results found.</td></tr>'
+        ? '<tr><td colspan="8" style="color:#999;padding:2rem 14px;">No results found.</td></tr>'
         : pageRows.map(r => `
             <tr>
                 <td>${r.date}</td>
                 <td>${r.time}</td>
-                <td>${r.callsign}</td>
+                <td>${r.registration}</td>
                 <td><span class="badge ${badgeClass(r.event)}">${r.event}</span></td>
                 <td>${r.runway || 'n/a'}</td>
                 <td>${r.aircraftType}</td>
+                <td>${r.category || 'n/a'}</td>
+                <td>${r.class || 'n/a'}</td>
             </tr>`).join('');
     
         pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
@@ -389,12 +408,16 @@
         const to       = document.getElementById('filter-to').value;
         const event    = document.getElementById('filter-event').value;
         const category = document.getElementById('filter-category').value;
-        const callsign = document.getElementById('filter-callsign').value.trim().toUpperCase();
+        const aircraftCategory = document.getElementById('filter-aircraft-category').value;
+        const aircraftClass = document.getElementById('filter-class').value;
+        const registration = document.getElementById('filter-callsign').value.trim().toUpperCase();
     
         filteredRows = allRows.filter(r => {
         if (event    && r.event !== event) return false;
         if (category && r.aircraftType !== category) return false;
-        if (callsign && !r.callsign.toUpperCase().includes(callsign)) return false;
+        if (aircraftCategory && r.category !== aircraftCategory) return false;
+        if (aircraftClass && r.class !== aircraftClass) return false;
+        if (registration && !r.registration.toUpperCase().includes(registration)) return false;
         if (from || to) {
             // compare using timestamp for accuracy
             const ts = new Date(r.timestamp);
@@ -446,6 +469,8 @@
         document.getElementById('filter-to').value = '';
         document.getElementById('filter-event').value = '';
         document.getElementById('filter-category').value = '';
+        document.getElementById('filter-aircraft-category').value = '';
+        document.getElementById('filter-class').value = '';
         document.getElementById('filter-callsign').value = '';
         const { from, to } = todayRange();
         loadAll(from, to);
@@ -456,14 +481,16 @@
     
     document.getElementById('btn-export').addEventListener('click', () => {
         if (filteredRows.length === 0) return;
-        const headers = ['Date', 'Time', 'Callsign', 'Event', 'Runway', 'Aircraft Type'];
+        const headers = ['Date', 'Time', 'Registration', 'Event', 'Runway', 'Aircraft Type', 'Category', 'Class'];
         const rows = filteredRows.map(r => [
         r.date,
         r.time,
-        r.callsign,
+        r.registration,
         r.event,
         r.runway || 'n/a',
-        r.aircraftType
+        r.aircraftType,
+        r.category || 'n/a',
+        r.class || 'n/a'
         ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
         const csv = [headers.join(','), ...rows].join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
