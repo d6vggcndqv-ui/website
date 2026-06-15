@@ -399,7 +399,7 @@ import { deleteDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-f
  
 // ---- Config ----
 const TRACK_COLLECTION     = "tracks_owd";
-const TRACK_RADIUS_KM      = 12;     // wider than the 3 km detection radius; noise corridors run well past it
+const TRACK_RADIUS_KM      = 8.05;     // wider than the 3 km detection radius; noise corridors run well past it, ~5 miles
 const FIELD_ELEVATION_FT   = 49;     // OWD field elevation (MSL) — confirm against the charted figure
 const TRACK_CEILING_AGL_FT = 4500;   // only keep paths that came at/below this height above the field
 const TRACK_CEILING_MSL_FT = FIELD_ELEVATION_FT + TRACK_CEILING_AGL_FT; // feed reports MSL, so compare against this
@@ -410,7 +410,7 @@ const TRACK_RETENTION_DAYS = 30;     // prune anything older than this
 const TRACK_PRUNE_EVERY_MS = 24 * 60 * 60 * 1000; // run the prune at most once a day (also runs once on startup)
  
 // ---- State (separate from the detector's aircraftState) ----
-let trackBuffers = {};      // hex -> { hex, callsign, type, startMs, lastSeenMs, points[], bbox }
+let trackBuffers = {};      // hex -> { hex, registration, type, startMs, lastSeenMs, points[], bbox }
 let lastTrackPruneMs = 0;
  
 // ---- Resolve AAC-ADG the same way the detector does (read-only reuse of aircraftRegistry) ----
@@ -451,7 +451,7 @@ async function flushTrack(hex) {
  
   try {
     await addDoc(collection(db, TRACK_COLLECTION), {
-      callsign: buf.callsign || "Unknown",
+      registration: buf.registration || "Unknown",
       hex: buf.hex,
       aircraftType: buf.type || "Unknown",
       timestamp: start.toISOString(),   // used for ordering and for the retention prune
@@ -464,7 +464,7 @@ async function flushTrack(hex) {
       bbox: buf.bbox,                   // {minLat,maxLat,minLon,maxLon} for cheap "passed near here" pre-filtering
       track: trackPoints                // [{lat,lon,alt,gs,trk,t}, ...]  alt = ft MSL, t = sec since start
     });
-    console.log(`Stored track for ${buf.callsign} — ${trackPoints.length} pts`);
+    console.log(`Stored track for ${buf.registration} — ${trackPoints.length} pts`);
   } catch (error) {
     console.error("Error storing track:", error);
   }
@@ -515,7 +515,7 @@ async function captureTracks() {
         if (!buf) {
           buf = trackBuffers[flight.hex] = {
             hex: flight.hex,
-            callsign: flight.flight ? flight.flight.trim() : "Unknown",
+            registration: (registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight || "Unknown").trim(),
             type: resolveTrackType(flight),
             startMs: nowMs,
             lastSeenMs: nowMs,
@@ -523,9 +523,10 @@ async function captureTracks() {
             bbox: { minLat: flight.lat, maxLat: flight.lat, minLon: flight.lon, maxLon: flight.lon }
           };
         }
-        // upgrade the callsign if it was blank at first and is now present
-        if ((buf.callsign === "Unknown" || !buf.callsign) && flight.flight && flight.flight.trim()) {
-          buf.callsign = flight.flight.trim();
+        // upgrade the registration if it was unknown at first and is now resolvable
+        if (buf.registration === "Unknown") {
+          const resolved = (registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight || "").trim();
+          if (resolved) buf.registration = resolved;
         }
         buf.lastSeenMs = nowMs;
  
