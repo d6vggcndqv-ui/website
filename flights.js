@@ -575,3 +575,6 @@ async function captureTracks() {
  
 captureTracks();
 setInterval(captureTracks, TRACK_POLL_MS);
+
+// Hard refresh the page every 3 hours
+setTimeout(() => location.reload(true), 3 * 60 * 60 * 1000);

@@ -361,3 +361,6 @@ async function fetchAndDetect() {
 
 fetchAndDetect();
 setInterval(fetchAndDetect, 2000);
+
+// Hard refresh the page every 3 hours
+setTimeout(() => location.reload(true), 3 * 60 * 60 * 1000);
