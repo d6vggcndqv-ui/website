@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noise Inquiry</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <script src="main.js"></script>
+    <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+
+    <style>
+        /* ── Page layout ─────────────────────────────────────────────── */
+        .ni-wrapper {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 2.5rem 1.5rem 4rem;
+        }
+
+        .ni-header {
+            margin-bottom: 2rem;
+        }
+
+        .ni-header .feature-tag {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: #0057ff;
+            background: #eef2ff;
+            padding: 4px 10px;
+            border-radius: 20px;
+            margin-bottom: 0.75rem;
+        }
+
+        .ni-header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0 0 0.5rem;
+            color: #111;
+        }
+
+        .ni-header p {
+            color: #555;
+            font-size: 15px;
+            line-height: 1.6;
+            margin: 0;
+            max-width: 580px;
+        }
+
+        /* ── Card ────────────────────────────────────────────────────── */
+        .ni-card {
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .ni-section {
+            padding: 1.5rem 1.75rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .ni-section:last-child {
+            border-bottom: none;
+        }
+
+        .ni-section-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #999;
+            margin-bottom: 1.1rem;
+        }
+
+        /* ── Form fields ─────────────────────────────────────────────── */
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .field-row.full {
+            grid-template-columns: 1fr;
+        }
+
+        @media (max-width: 560px) {
+            .field-row { grid-template-columns: 1fr; }
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .field-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .field-group label .req {
+            color: #0057ff;
+            margin-left: 2px;
+        }
+
+        .field-group input,
+        .field-group select,
+        .field-group textarea {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            padding: 9px 12px;
+            border: 1px solid #d0d5dd;
+            border-radius: 8px;
+            background: #fff;
+            color: #111;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .field-group select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+        }
+
+        .field-group input:focus,
+        .field-group select:focus,
+        .field-group textarea:focus {
+            outline: none;
+            border-color: #0057ff;
+            box-shadow: 0 0 0 3px rgba(0, 87, 255, 0.1);
+        }
+
+        .field-group input::placeholder,
+        .field-group textarea::placeholder {
+            color: #bbb;
+        }
+
+        .field-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        /* ── Complaint type chips ─────────────────────────────────────── */
+        .chip-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        @media (max-width: 560px) {
+            .chip-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .chip-label {
+            cursor: pointer;
+        }
+
+        .chip-label input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .chip-label span {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 10px 14px;
+            border: 1.5px solid #d0d5dd;
+            border-radius: 8px;
+            color: #444;
+            background: #fff;
+            transition: all 0.12s;
+            user-select: none;
+            height: 100%;
+            box-sizing: border-box;
+        }
+
+        .chip-label input[type="checkbox"]:checked + span {
+            background: #0057ff;
+            border-color: #0057ff;
+            color: #fff;
+        }
+
+        .chip-label:hover span {
+            border-color: #0057ff;
+            color: #0057ff;
+        }
+
+        .chip-label input[type="checkbox"]:checked + span:hover {
+            color: #fff;
+        }
+
+        /* ── Date/time row ───────────────────────────────────────────── */
+        .datetime-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 560px) {
+            .datetime-row { grid-template-columns: 1fr; }
+        }
+
+        /* ── Submit ──────────────────────────────────────────────────── */
+        .ni-footer {
+            padding: 1.25rem 1.75rem;
+            background: #f9f9fb;
+            border-top: 1px solid #e5e5e5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .ni-footer p {
+            font-size: 13px;
+            color: #888;
+            margin: 0;
+        }
+
+        .ni-submit {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 10px 28px;
+            background: #0057ff;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.15s;
+            white-space: nowrap;
+        }
+
+        .ni-submit:hover { background: #0040cc; }
+        .ni-submit:active { background: #0030aa; }
+
+        /* ── Success banner (hidden by default) ──────────────────────── */
+        .ni-success {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            margin-top: 1.5rem;
+            font-size: 14px;
+            color: #166534;
+        }
+
+        .ni-success svg { flex-shrink: 0; }
+
+        /* ── Required note ───────────────────────────────────────────── */
+        .req-note {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 1.5rem;
+        }
+
+        .req-note span { color: #0057ff; }
+
+        /* ── Airport selector ────────────────────────────────────────── */
+        .airport-bar {
+            background: #fff;
+            padding: 1.5rem 1.75rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .airport-bar label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            white-space: nowrap;
+        }
+
+        .airport-bar label .req {
+            color: #0057ff;
+            margin-left: 2px;
+        }
+
+        .airport-select {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 9px 36px 9px 12px;
+            background: #fff;
+            color: #111;
+            border: 1px solid #d0d5dd;
+            border-radius: 8px;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            cursor: pointer;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            min-width: 220px;
+        }
+
+        .airport-select:focus {
+            outline: none;
+            border-color: #0057ff;
+            box-shadow: 0 0 0 3px rgba(0, 87, 255, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-logo">
+            <a href="https://www.fl-technologies.com" target="_blank">
+                <img src="logo.png" alt="Logo">
+            </a>
+        </div>
+
+        <!-- Make sure this is the same list in every HTML file -->
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="livemap.html">Live Map</a></li>
+            <li><a href="flighthistory.html">Flight History</a></li>
+            <li><a href="dashboard.html">Analytics Dashboard</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <div class="ni-wrapper">
+
+            <div class="ni-header">
+                
+                <h1>Noise Inquiry Form</h1>
+                <p>Report an aircraft noise event for your airport's records. We review all submissions and use them to support noise abatement planning and FAA reporting.</p>
+            </div>
+
+            <p class="req-note">Fields marked <span>*</span> are required.</p>
+
+            <form class="ni-card" action="https://api.web3forms.com/submit" method="POST" id="noise-form">
+                <input type="hidden" name="access_key" value="44fd3732-39ce-45f0-b09c-9e1ae5ab4dae">
+                <input type="hidden" name="subject" value="New Noise Inquiry Submission">
+                <input type="hidden" name="redirect" value="https://fl-technologies-data.com/thankyou">
+
+                <!-- ── Airport Selector ──────────────────────────────── -->
+                <div class="airport-bar">
+                    <label for="airport">Airport <span class="req">*</span></label>
+                    <select id="airport" name="airport" class="airport-select" required>
+                        <option value="" disabled selected>Select airport</option>
+                        <option value="OWD — Norwood Memorial">OWD — Norwood Memorial</option>
+                        <option value="POU — Dutchess County">POU — Dutchess County</option>
+                    </select>
+                </div>
+
+                <!-- ── Your Information ───────────────────────────────── -->
+                <div class="ni-section">
+                    <div class="ni-section-label">Your Information</div>
+
+                    <div class="field-row">
+                        <div class="field-group">
+                            <label for="first-name">First Name <span class="req">*</span></label>
+                            <input type="text" id="first-name" name="first_name"  required>
+                        </div>
+                        <div class="field-group">
+                            <label for="last-name">Last Name <span class="req">*</span></label>
+                            <input type="text" id="last-name" name="last_name" required>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <div class="field-group">
+                            <label for="email">Email <span class="req">*</span></label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+                        <div class="field-group">
+                            <label for="phone">Phone</label>
+                            <input type="tel" id="phone" name="phone" >
+                        </div>
+                    </div>
+
+                    <div class="field-row full">
+                        <div class="field-group">
+                            <label for="address">Street Address <span class="req">*</span></label>
+                            <input type="text" id="address" name="address" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Event Details ──────────────────────────────────── -->
+                <div class="ni-section">
+                    <div class="ni-section-label">Event Details</div>
+
+                    <div class="datetime-row">
+                        <div class="field-group">
+                            <label for="event-date">Date of Event <span class="req">*</span></label>
+                            <input type="date" id="event-date" name="event_date" required>
+                        </div>
+                        <div class="field-group">
+                            <label for="event-time">Time of Event <span class="req">*</span></label>
+                            <input type="time" id="event-time" name="event_time" required>
+                        </div>
+                    </div>
+
+                    
+                </div>
+
+                <!-- ── Type of Complaint ──────────────────────────────── -->
+                <div class="ni-section">
+                    <div class="ni-section-label">Primary Concern <span style="color:#aaa;font-weight:400;text-transform:none;letter-spacing:0;">— select all that apply</span></div>
+
+                    <div class="chip-grid">
+                        <label class="chip-label">
+                            <input type="checkbox" name="complaint_type[]" value="Too Loud & Low">
+                            <span>Too Loud &amp; Low</span>
+                        </label>
+                        <label class="chip-label">
+                            <input type="checkbox" name="complaint_type[]" value="Too Loud">
+                            <span>Too Loud</span>
+                        </label>
+                        <label class="chip-label">
+                            <input type="checkbox" name="complaint_type[]" value="Too Low">
+                            <span>Too Low</span>
+                        </label>
+                        <label class="chip-label">
+                            <input type="checkbox" name="complaint_type[]" value="Too Frequent">
+                            <span>Too Frequent</span>
+                        </label>
+                        <label class="chip-label">
+                            <input type="checkbox" name="complaint_type[]" value="Hovering">
+                            <span>Hovering</span>
+                        </label>
+                        <label class="chip-label">
+                            <input type="checkbox" name="complaint_type[]" value="Excessive Vibration">
+                            <span>Excessive Vibration</span>
+                        </label>
+                        <label class="chip-label">
+                            <input type="checkbox" name="complaint_type[]" value="Too Early or Late">
+                            <span>Too Early or Late</span>
+                        </label>
+                        <label class="chip-label">
+                            <input type="checkbox" name="complaint_type[]" value="Change in Flight Pattern">
+                            <span>Change in Flight Pattern</span>
+                        </label>
+                        <label class="chip-label">
+                            <input type="checkbox" name="complaint_type[]" value="General / Other">
+                            <span>General / Other</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- ── Comments ───────────────────────────────────────── -->
+                <div class="ni-section">
+                    <div class="ni-section-label">Additional Comments</div>
+                    <div class="field-group">
+                        <textarea id="comments" name="comments" rows="5" ></textarea>
+                    </div>
+                </div>
+
+                <!-- ── Footer / Submit ────────────────────────────────── -->
+                <div class="ni-footer">
+                    <p>Your information is used only for noise abatement review purposes.</p>
+                    <button type="submit" class="ni-submit">Submit Inquiry</button>
+                </div>
+
+            </form>
+
+            <!-- Success message shown after redirect (or JS toggle) -->
+            <div class="ni-success" id="ni-success">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="10" cy="10" r="10" fill="#22c55e"/>
+                    <path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Your inquiry was submitted successfully. We'll follow up if we need more information.</span>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
+    </footer>
+
+    <script>
+        document.getElementById('noise-form').addEventListener('submit', function (e) {
+            const date = document.getElementById('event-date').value;
+            const time = document.getElementById('event-time').value;
+
+            if (date && time) {
+                const pad = n => String(n).padStart(2, '0');
+
+                // Parse the event time into total minutes
+                const [h, m] = time.split(':').map(Number);
+                const totalMins = h * 60 + m;
+
+                // Subtract 30 minutes, clamping to 00:00
+                const fromMins = Math.max(0, totalMins - 30);
+                const fromH = Math.floor(fromMins / 60);
+                const fromM = fromMins % 60;
+
+                // Add 30 minutes, clamping to 23:59
+                const toMins = Math.min(23 * 60 + 59, totalMins + 30);
+                const toH = Math.floor(toMins / 60);
+                const toM = toMins % 60;
+
+                const timeFrom = `${pad(fromH)}:${pad(fromM)}`;
+                const timeTo   = `${pad(toH)}:${pad(toM)}`;
+
+                const base = window.location.href.replace('noiseinquiry.html', 'noiseabatement.html');
+                const link = `${base}?date=${date}&time-from=${timeFrom}&time-to=${timeTo}`;
+
+                // Inject or update the hidden field
+                let field = document.getElementById('na-link-field');
+                if (!field) {
+                    field = document.createElement('input');
+                    field.type = 'hidden';
+                    field.id = 'na-link-field';
+                    field.name = 'noise_abatement_link';
+                    this.appendChild(field);
+                }
+                field.value = link;
+            }
+        });
+    </script>
+
+</body>
+</html>

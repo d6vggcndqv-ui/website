@@ -134,6 +134,16 @@
             flex-wrap: wrap;
         }
         .track-item .ti-row2 span { white-space: nowrap; }
+        .low-alt-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #dc2626;
+            margin-left: 6px;
+            vertical-align: middle;
+            flex-shrink: 0;
+            title: "Flew below 1,000 ft AGL";
+        }
         .empty-state {
             padding: 36px 16px;
             text-align: center;
@@ -339,7 +349,7 @@
                 <label>To Time
                     <input type="time" id="time-to">
                 </label>
-                <label>Callsign (optional)
+                <label>Registration (optional)
                     <input type="text" id="filter-cs" placeholder="e.g. N16002" style="width:130px;">
                 </label>
                 <button class="primary" id="btn-load" onclick="loadTracks()">Load Tracks</button>
@@ -473,6 +483,29 @@
         document.getElementById('time-from').value = '00:00';
         document.getElementById('time-to').value   = '23:59';
 
+        // ── Pre-fill from noise inquiry deep link ───────────────────────────
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+            const date      = params.get('date');
+            const timeFrom  = params.get('time-from');
+            const timeTo    = params.get('time-to');
+
+            if (date) {
+                document.getElementById('date-from').value = date;
+                document.getElementById('date-to').value   = date;
+            }
+            if (timeFrom) document.getElementById('time-from').value = timeFrom;
+            if (timeTo)   document.getElementById('time-to').value   = timeTo;
+
+            // Auto-load if all three params are present
+            if (date && timeFrom && timeTo) {
+                // Wait for Firestore to initialise via main.js before loading
+                window.addEventListener('load', () => {
+                    setTimeout(() => window.loadTracks && window.loadTracks(), 500);
+                });
+            }
+        })();
+
         // ── Leaflet map ─────────────────────────────────────────────────────
         const OWD = [42.1905, -71.1728];
         let map, trackLayer;
@@ -525,7 +558,7 @@
                 );
                 const p = pts[i];
                 seg.bindPopup(
-                    `<b>${doc.callsign}</b><br>` +
+                    `<b>${doc.registration}</b><br>` +
                     `Alt: <b>${p.alt.toLocaleString()} ft MSL</b><br>` +
                     `GS: ${p.gs} kt &nbsp;|&nbsp; Hdg: ${p.trk}°<br>` +
                     `T+${fmtDur(p.t)}`,
@@ -594,7 +627,8 @@
 
                 el.innerHTML = `
                     <div class="ti-row1">
-                        <span class="ti-cs">${doc.callsign || 'Unknown'}</span>
+                        <span class="ti-cs">${doc.registration || 'Unknown'}</span>
+                        ${doc.minAltMSL != null && doc.minAltMSL < 1049 ? '<span class="low-alt-dot" title="Flew below 1,000 ft AGL"></span>' : ''}
                         <span class="ti-pts">${pts.toLocaleString()} pts</span>
                     </div>
                     <div class="ti-row2">
@@ -607,7 +641,7 @@
                 el.addEventListener('click', () => {
                     document.querySelectorAll('.track-item').forEach(e => e.classList.remove('selected'));
                     el.classList.add('selected');
-                    document.getElementById('map-title').textContent = doc.callsign || 'Unknown';
+                    document.getElementById('map-title').textContent = doc.registration || 'Unknown';
                     document.getElementById('map-meta').textContent  =
                         (doc.aircraftType && doc.aircraftType !== 'Unknown' ? doc.aircraftType + ' · ' : '') +
                         doc.date + ' ' + doc.time;
@@ -644,7 +678,7 @@
                     orderBy('timestamp', 'desc'),
                     limit(200)
                 ];
-                if (csVal) constraints.unshift(where('callsign', '==', csVal));
+                if (csVal) constraints.unshift(where('registration', '==', csVal));
 
                 const snap = await getDocs(query(collection(db, 'tracks_owd'), ...constraints));
                 tracks = snap.docs.map(d => d.data());
