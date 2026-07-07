@@ -364,3 +364,123 @@ setInterval(fetchAndDetect, 2000);
 
 // Hard refresh the page every 3 hours
 setTimeout(() => location.reload(true), 3 * 60 * 60 * 1000);
+
+// ════════════════════════════════════════════════════════════════════
+// END OF DAY NOISE INQUIRY SUMMARY
+// Runs at 11:59 PM each night. If more than one noise inquiry was
+// submitted today for POU, sends a digest email via Web3Forms.
+// ════════════════════════════════════════════════════════════════════
+ 
+async function sendNoiseSummary() {
+  try {
+    // ── Get today's date string matching the format stored in Firestore ("MM/DD/YYYY") ──
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day   = String(now.getDate()).padStart(2, '0');
+    const year  = now.getFullYear();
+    const todayStr = `${month}/${day}/${year}`;
+ 
+    // ── Query noise_inquiries for today's POU submissions ────────────
+    const q = query(
+      collection(db, "noise_inquiries"),
+      where("date", "==", todayStr),
+      where("airport", "==", "POU — Dutchess County")
+    );
+    const snapshot = await getDocs(q);
+ 
+    if (snapshot.size <= 1) {
+      console.log(`[NoiseSummary] Only ${snapshot.size} submission(s) today — no summary needed.`);
+      return;
+    }
+ 
+    const submissions = snapshot.docs.map(d => d.data());
+ 
+    // ── Tally complaint types ─────────────────────────────────────────
+    const typeCounts = {};
+    submissions.forEach(s => {
+      (s.complaint_types || []).forEach(t => {
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+      });
+    });
+    const typeLines = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => `  • ${type} — ${count} report${count > 1 ? 's' : ''}`)
+      .join('\n');
+ 
+    // ── Time range of events ──────────────────────────────────────────
+    const eventTimes = submissions
+      .map(s => s.event_time)
+      .filter(Boolean)
+      .sort();
+    const timeRange = eventTimes.length > 0
+      ? `${eventTimes[0]} – ${eventTimes[eventTimes.length - 1]}`
+      : 'Not specified';
+ 
+    // ── Unique addresses ──────────────────────────────────────────────
+    const addresses = [...new Set(submissions.map(s => s.address).filter(Boolean))];
+    const addressLines = addresses.map(a => `  • ${a}`).join('\n');
+ 
+    // ── Comments (non-empty only) ─────────────────────────────────────
+    const comments = submissions.map(s => s.comments).filter(Boolean);
+    const commentLines = comments.length > 0
+      ? comments.map(c => `  • "${c}"`).join('\n')
+      : '  None';
+ 
+    // ── Noise abatement links ─────────────────────────────────────────
+    const links = submissions
+      .map(s => s.noise_abatement_link)
+      .filter(Boolean);
+    const linkLines = links.length > 0
+      ? links.map((l, i) => `  • Event ${i + 1}: ${l}`).join('\n')
+      : '  None';
+ 
+    // ── Build email body ──────────────────────────────────────────────
+    const body = `Noise Inquiry Summary — ${todayStr}
+Airport: POU — Dutchess County
+Total Submissions: ${submissions.length}
+ 
+COMPLAINT TYPES:
+${typeLines}
+ 
+TIME RANGE OF EVENTS: ${timeRange}
+ 
+LOCATIONS REPORTED FROM:
+${addressLines}
+ 
+COMMENTS:
+${commentLines}
+ 
+NOISE ABATEMENT LINKS:
+${linkLines}`;
+ 
+    // ── Send via Web3Forms ────────────────────────────────────────────
+    const formData = new FormData();
+    formData.append('access_key', '44fd3732-39ce-45f0-b09c-9e1ae5ab4dae');
+    formData.append('subject', `Noise Inquiry Daily Summary — POU — ${todayStr}`);
+    formData.append('message', body);
+ 
+    const response = await fetch('https://api.web3forms.com/submit', {
+      method: 'POST',
+      body: formData
+    });
+ 
+    if (response.ok) {
+      console.log('[NoiseSummary] Summary email sent successfully.');
+    } else {
+      console.error('[NoiseSummary] Web3Forms submission failed:', response.status);
+    }
+ 
+  } catch (err) {
+    console.error('[NoiseSummary] Error sending summary:', err);
+  }
+}
+ 
+// ── Schedule summary at 11:59 PM ─────────────────────────────────────
+(function scheduleNoiseSummary() {
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 13, 35, 0, 0);
+  let msUntilTarget = target - now;
+  if (msUntilTarget < 0) msUntilTarget += 24 * 60 * 60 * 1000; // already past 11:59, schedule for tomorrow
+  console.log(`[NoiseSummary] Summary scheduled in ${Math.round(msUntilTarget / 60000)} minutes.`);
+  setTimeout(sendNoiseSummary, msUntilTarget);
+})();
