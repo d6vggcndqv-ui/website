@@ -478,7 +478,7 @@ ${linkLines}`;
 // ── Schedule summary at 11:59 PM ─────────────────────────────────────
 (function scheduleNoiseSummary() {
   const now = new Date();
-  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 13, 43, 0, 0);
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 13, 53, 0, 0);
   let msUntilTarget = target - now;
   if (msUntilTarget < 0) msUntilTarget += 24 * 60 * 60 * 1000; // already past 11:59, schedule for tomorrow
   console.log(`[NoiseSummary] Summary scheduled in ${Math.round(msUntilTarget / 60000)} minutes.`);
