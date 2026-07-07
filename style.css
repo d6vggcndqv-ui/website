@@ -20,7 +20,7 @@ html{
 .nav-logo img { /* styles for the logo image */
     height: 100px; /* sets a consistent height for the logo */
     width: auto; /* maintains aspect ratio */
-    margin-left: 40px;
+    margin-left: 0px;
     display: block;
 }
 
@@ -41,8 +41,8 @@ main{
 
 .nav-links{ /* styles for the navigation links container */
     display: flex; /* arranges links in a row */
-    gap: 130px; /* adds space between links */
-    margin-left: auto; /* pushes links to the right */
+    gap: clamp(16px, 2.5vw, 60px); /* adds space between links */
+    margin-left: -25px; /* pushes links to the right */
     margin-right: auto; /* centers the links horizontally */
     list-style: none; /* removes default list styling */
 }
@@ -53,6 +53,7 @@ main{
     font-size: 1.25rem; /* sets font size for links */
     font-weight: 500; /* makes links slightly bolder */
     transition: color 0.3s ease; /* smooth transition for hover effect */
+    white-space: nowrap; /* prevents links from wrapping to the next line */
 }
 
 .nav-links a:hover{

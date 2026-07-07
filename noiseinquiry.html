@@ -338,7 +338,10 @@
             <li><a href="index.html">Home</a></li>
             <li><a href="livemap.html">Live Map</a></li>
             <li><a href="flighthistory.html">Flight History</a></li>
-            <li><a href="dashboard.html">Analytics Dashboard</a></li>
+            <li><a href="dashboard.html"> Dashboard</a></li>
+            <li><a href="landingfees.html">Landing Fees</a></li>
+            <li><a href="noiseinquiry.html">Noise Inquiry</a></li>
+            <li><a href="noiseabatement.html">Noise Abatement</a></li>
         </ul>
     </nav>
 
@@ -496,35 +499,88 @@
         <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
     </footer>
 
-    <script>
-        document.getElementById('noise-form').addEventListener('submit', function (e) {
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+            authDomain: "owd-data.firebaseapp.com",
+            projectId: "owd-data",
+            storageBucket: "owd-data.firebasestorage.app",
+            messagingSenderId: "912110224300",
+            appId: "1:912110224300:web:ba2b8073871ec023817009",
+            measurementId: "G-PHD4THC11M"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        document.getElementById('noise-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
             const date = document.getElementById('event-date').value;
             const time = document.getElementById('event-time').value;
 
+            // ── Build noise abatement deep link ──────────────────────────
+            let naLink = '';
             if (date && time) {
                 const pad = n => String(n).padStart(2, '0');
-
-                // Parse the event time into total minutes
                 const [h, m] = time.split(':').map(Number);
                 const totalMins = h * 60 + m;
-
-                // Subtract 30 minutes, clamping to 00:00
                 const fromMins = Math.max(0, totalMins - 30);
-                const fromH = Math.floor(fromMins / 60);
-                const fromM = fromMins % 60;
-
-                // Add 30 minutes, clamping to 23:59
                 const toMins = Math.min(23 * 60 + 59, totalMins + 30);
-                const toH = Math.floor(toMins / 60);
-                const toM = toMins % 60;
-
-                const timeFrom = `${pad(fromH)}:${pad(fromM)}`;
-                const timeTo   = `${pad(toH)}:${pad(toM)}`;
-
+                const timeFrom = `${pad(Math.floor(fromMins / 60))}:${pad(fromMins % 60)}`;
+                const timeTo   = `${pad(Math.floor(toMins / 60))}:${pad(toMins % 60)}`;
                 const base = window.location.href.replace('noiseinquiry.html', 'noiseabatement.html');
-                const link = `${base}?date=${date}&time-from=${timeFrom}&time-to=${timeTo}`;
+                naLink = `${base}?date=${date}&time-from=${timeFrom}&time-to=${timeTo}`;
+            }
 
-                // Inject or update the hidden field
+            // ── Collect complaint types ───────────────────────────────────
+            const complaintTypes = Array.from(
+                document.querySelectorAll('input[name="complaint_type[]"]:checked')
+            ).map(cb => cb.value);
+
+            // ── Build Firestore document ──────────────────────────────────
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const month = pad(now.getMonth() + 1);
+            const day   = pad(now.getDate());
+            const year  = now.getFullYear();
+            let hours   = now.getHours();
+            const mins  = pad(now.getMinutes());
+            const secs  = pad(now.getSeconds());
+            const ampm  = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12 || 12;
+
+            const doc = {
+                airport:         document.getElementById('airport').value,
+                first_name:      document.getElementById('first-name').value.trim(),
+                last_name:       document.getElementById('last-name').value.trim(),
+                email:           document.getElementById('email').value.trim(),
+                phone:           document.getElementById('phone').value.trim(),
+                address:         document.getElementById('address').value.trim(),
+                event_date:      date,
+                event_time:      time,
+                complaint_types: complaintTypes,
+                comments:        document.getElementById('comments').value.trim(),
+                noise_abatement_link: naLink,
+                submitted_at:    now.toISOString(),
+                date:            `${month}/${day}/${year}`,
+                time:            `${hours}:${mins}:${secs} ${ampm}`
+            };
+
+            // ── Write to Firestore ────────────────────────────────────────
+            try {
+                await addDoc(collection(db, 'noise_inquiries'), doc);
+                console.log('Saved to Firestore');
+            } catch (err) {
+                console.error('Firestore write failed:', err);
+                // Don't block the Web3Forms submission if Firestore fails
+            }
+
+            // ── Inject deep link hidden field for Web3Forms ───────────────
+            if (naLink) {
                 let field = document.getElementById('na-link-field');
                 if (!field) {
                     field = document.createElement('input');
@@ -533,8 +589,11 @@
                     field.name = 'noise_abatement_link';
                     this.appendChild(field);
                 }
-                field.value = link;
+                field.value = naLink;
             }
+
+            // ── Submit to Web3Forms ───────────────────────────────────────
+            this.submit();
         });
     </script>
 

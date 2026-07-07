@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Landing Fees</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <script src="main.js"></script>
+    <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+
+    <!-- Static fee data — no Firestore writes, client-side only -->
+    <script src="basedAircraft_pou.js"></script>
+    <script src="icaocodeRegistry.js"></script>
+    <script src="feeSchedule_pou.js"></script>
+    <script>
+        // ICAO type codes that should never generate a fee regardless of class field.
+        // Used to filter out piston aircraft incorrectly classified as Turbine
+        // due to FAA data labeling turbocharged pistons as "Turbo-prop".
+        const EXCLUDED_TYPES_POU = new Set([
+            'C182',   // Cessna 182 Skylane (piston)
+            'C18T',   // Cessna T182 Turbo Skylane (turbocharged piston)
+            'P28A',   // Piper Cherokee/Archer (piston)
+            'P28B',   // Piper Warrior (piston)
+            'P28R',   // Piper Arrow (piston — some turbocharged)
+            'P28T',   // Piper Turbo Arrow (turbocharged piston)
+            'P32R',   // Piper Saratoga SP (turbocharged piston)
+            'P32T',   // Piper Turbo Saratoga (turbocharged piston)
+            'C210',   // Cessna 210 Centurion (some turbocharged)
+            'T210',   // Cessna T210 Turbo Centurion (turbocharged piston)
+            'C337',   // Cessna 337 Skymaster (piston twin)
+            'P337',   // Cessna T337 Turbo Skymaster (turbocharged piston)
+        ]);
+    </script>
+
+    <style>
+        /* ── Controls ─────────────────────────────────────────────── */
+        .fee-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 1.5rem;
+            align-items: flex-end;
+        }
+        .fee-controls label {
+            display: flex;
+            flex-direction: column;
+            font-size: 13px;
+            gap: 4px;
+        }
+        .fee-controls input,
+        .fee-controls select {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            padding: 7px 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            color: #111;
+        }
+        .fee-controls button {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            padding: 8px 18px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .fee-controls button:hover { background: #f0f0f0; }
+
+        .range-presets {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+        }
+        .range-presets button {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            padding: 6px 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .range-presets button.active,
+        .range-presets button:hover { background: #e8e8e8; }
+
+        /* ── Summary bar ──────────────────────────────────────────── */
+        .fee-summary {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+        .fee-summary-card {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 14px 20px;
+            min-width: 160px;
+        }
+        .fee-summary-card .s-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .fee-summary-card .s-value {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        /* ── Table ────────────────────────────────────────────────── */
+        .fee-table-wrap { overflow-x: auto; }
+        #fee-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        #fee-table th {
+            text-align: left;
+            padding: 10px 14px;
+            border-bottom: 2px solid #ddd;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        #fee-table td {
+            padding: 9px 14px;
+            border-bottom: 1px solid #eee;
+            white-space: nowrap;
+        }
+        #fee-table tr:last-child td { border-bottom: none; }
+        #fee-table tr:hover td { background: #f9f9f9; }
+
+        .badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 2px 9px;
+            border-radius: 99px;
+        }
+        .badge-review  { background: #fee2e2; color: #991b1b; }
+        .badge-fee     { background: #dcfce7; color: #166534; }
+
+        .fee-amount {
+            font-weight: 600;
+        }
+        .fee-unknown {
+            color: #dc2626;
+            font-weight: 500;
+        }
+
+        .fee-meta {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 0.75rem;
+        }
+
+        /* ── Pagination ───────────────────────────────────────────── */
+        .pagination {
+            display: flex;
+            gap: 8px;
+            margin-top: 1.25rem;
+            align-items: center;
+            font-size: 14px;
+        }
+        .pagination button {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            padding: 6px 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .pagination button:disabled { opacity: 0.4; cursor: default; }
+        .pagination button:not(:disabled):hover { background: #f0f0f0; }
+        #page-info { color: #666; }
+
+        /* ── Auth ─────────────────────────────────────────────────── */
+        #auth-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+        }
+        #auth-screen h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+        #auth-form { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
+        #auth-form input { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; outline: none; }
+        #auth-form input:focus { border-color: #0057ff; }
+        #auth-form button { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px; background: #0057ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+        #auth-form button:hover { background: #0040cc; }
+        #auth-error { font-size: 13px; color: #dc2626; text-align: center; min-height: 18px; }
+        #btn-signout { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; }
+        #btn-signout:hover { background: #f0f0f0; }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-logo">
+            <a href="https://www.fl-technologies.com" target="_blank">
+                <img src="logo.png" alt="Logo">
+            </a>
+        </div>
+        <!-- Make sure this is the same list in every HTML file -->
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="livemap.html">Live Map</a></li>
+            <li><a href="flighthistory.html">Flight History</a></li>
+            <li><a href="dashboard.html"> Dashboard</a></li>
+            <li><a href="landingfees.html">Landing Fees</a></li>
+            <li><a href="noiseinquiry.html">Noise Inquiry</a></li>
+            <li><a href="noiseabatement.html">Noise Abatement</a></li>
+        </ul>
+    </nav>
+
+    <main>
+
+        <!-- Auth screen -->
+        <div id="auth-screen" style="display:none;">
+            <h2>Sign-In</h2>
+            <form id="auth-form" onsubmit="return false;">
+                <input type="email" id="auth-email" placeholder="Email" required autocomplete="email">
+                <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
+                <button type="button" onclick="window._authSignIn()">Sign-In</button>
+                <div id="auth-error"></div>
+            </form>
+            <p style="text-align:center;font-size:13px;color:#666;margin-top:16px;">
+                Don't have an account? <a href="register.html?from=landingfees.html" style="color:#0057ff;text-decoration:none;font-weight:500;">Create one</a>
+            </p>
+        </div>
+
+        <!-- Main content (hidden until authenticated) -->
+        <div id="main-content" style="display:none;">
+
+            <div style="display:flex; align-items:baseline; gap:16px; margin-bottom:0.25rem;">
+                <h1 style="margin:0;">Landing Fees</h1>
+                <span style="font-size:13px;color:#888;">KPOU — Hudson Valley Regional Airport</span>
+            </div>
+           
+
+            <div style="display:flex; justify-content:flex-end; margin-bottom:1rem;">
+                <button id="btn-signout">Sign Out</button>
+            </div>
+
+            <section>
+
+                <!-- Date range presets -->
+                <div class="range-presets">
+                    <span style="font-size:14px;align-self:center;">Period:</span>
+                    <button class="preset-btn active" data-preset="week">This Week</button>
+                    <button class="preset-btn" data-preset="month">This Month</button>
+                    <button class="preset-btn" data-preset="custom">Custom</button>
+                </div>
+
+                <!-- Controls -->
+                <div class="fee-controls">
+                    <label id="custom-from-wrap" style="display:none;">From
+                        <input type="date" id="filter-from">
+                    </label>
+                    <label id="custom-to-wrap" style="display:none;">To
+                        <input type="date" id="filter-to">
+                    </label>
+                    <label>Registration
+                        <input type="text" id="filter-reg" placeholder="e.g. N352FX" style="width:130px;">
+                    </label>
+                    <label>Fee Tier
+                        <select id="filter-tier">
+                            <option value="">All</option>
+                            <option value="Light Turboprop">Light Turboprop</option>
+                            <option value="Medium Turboprop">Medium Turboprop</option>
+                            <option value="Heavy Turboprop">Heavy Turboprop</option>
+                            <option value="Very Light Jet">Very Light Jet</option>
+                            <option value="Light Jet">Light Jet</option>
+                            <option value="Medium Jet">Medium Jet</option>
+                            <option value="Heavy Jet">Heavy Jet</option>
+                            <option value="Super Heavy Jet">Super Heavy Jet</option>
+                            <option value="__review">Review Manually</option>
+                        </select>
+                    </label>
+                    <button id="btn-apply">Apply</button>
+                    <button id="btn-reset">Reset</button>
+                    <button id="btn-export">Export CSV</button>
+                </div>
+
+                <!-- Summary bar -->
+                <div class="fee-summary">
+                    <div class="fee-summary-card">
+                        <div class="s-label">Transient Landings</div>
+                        <div class="s-value" id="summary-landings">—</div>
+                    </div>
+                    <div class="fee-summary-card">
+                        <div class="s-label">Total Fees Owed</div>
+                        <div class="s-value" id="summary-total">—</div>
+                    </div>
+                    <div class="fee-summary-card">
+                        <div class="s-label">Needs Review</div>
+                        <div class="s-value" id="summary-review">—</div>
+                    </div>
+                </div>
+
+                <p class="fee-meta" id="fee-meta">Loading...</p>
+
+                <div class="fee-table-wrap">
+                    <table id="fee-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Time</th>
+                                <th>Registration</th>
+                                <th>ICAO Type</th>
+                                <th>Fee Tier</th>
+                                <th>Fee</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fee-tbody">
+                            <tr><td colspan="6" style="color:#999;padding:2rem 14px;">Loading data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination">
+                    <button id="btn-prev" disabled>&#8592; Prev</button>
+                    <span id="page-info"></span>
+                    <button id="btn-next" disabled>Next &#8594;</button>
+                </div>
+
+            </section>
+        </div> <!-- /main-content -->
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
+    </footer>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { getFirestore, collection, doc, getDoc, updateDoc, query, orderBy, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+    // ── Firebase config ────────────────────────────────────────────
+    const firebaseConfig = {
+        apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+        authDomain: "owd-data.firebaseapp.com",
+        projectId: "owd-data",
+        storageBucket: "owd-data.firebasestorage.app",
+        messagingSenderId: "912110224300",
+        appId: "1:912110224300:web:ba2b8073871ec023817009",
+        measurementId: "G-PHD4THC11M"
+    };
+
+    const app  = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db   = getFirestore(app);
+
+    // KPOU only — no airport selector on this page
+    const COLLECTION = 'flights_pou';
+
+    // ── Auth helpers ───────────────────────────────────────────────
+    function showAuth() {
+        document.getElementById('auth-screen').style.display = 'flex';
+        document.getElementById('main-content').style.display = 'none';
+    }
+    function hideAuth() {
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+    }
+
+    async function initUser(user) {
+        try {
+            const snap = await getDoc(doc(db, 'Users', user.uid));
+            if (!snap.exists()) {
+                showAuth();
+                document.getElementById('auth-error').textContent = 'Account not configured.';
+                return;
+            }
+            hideAuth();
+            loadData(currentRange());
+        } catch(e) {
+            console.error('[initUser] error:', e);
+        }
+    }
+
+    window._authSignIn = async () => {
+        const email    = document.getElementById('auth-email').value.trim();
+        const password = document.getElementById('auth-password').value;
+        document.getElementById('auth-error').textContent = '';
+        try {
+            const cred = await signInWithEmailAndPassword(auth, email, password);
+            await initUser(cred.user);
+        } catch(e) {
+            document.getElementById('auth-error').textContent = 'Invalid email or password.';
+        }
+    };
+    window._authSignOut = () => { auth.signOut(); showAuth(); };
+    document.getElementById('btn-signout').addEventListener('click', () => window._authSignOut());
+
+    onAuthStateChanged(auth, user => {
+        if (user) { initUser(user); } else { showAuth(); }
+    });
+
+    // ── Date range helpers ─────────────────────────────────────────
+    let activePreset = 'week';
+
+    function thisWeekRange() {
+        const now   = new Date();
+        const day   = now.getDay(); // 0=Sun
+        const start = new Date(now);
+        start.setDate(now.getDate() - day);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(now);
+        end.setHours(23, 59, 59, 999);
+        return { from: start.toISOString(), to: end.toISOString() };
+    }
+
+    function thisMonthRange() {
+        const now   = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end   = new Date(now);
+        end.setHours(23, 59, 59, 999);
+        return { from: start.toISOString(), to: end.toISOString() };
+    }
+
+    function customRange() {
+        const from = document.getElementById('filter-from').value;
+        const to   = document.getElementById('filter-to').value;
+        return {
+            from: from ? new Date(from).toISOString()               : null,
+            to:   to   ? new Date(to + 'T23:59:59').toISOString()   : null,
+        };
+    }
+
+    function currentRange() {
+        if (activePreset === 'week')   return thisWeekRange();
+        if (activePreset === 'month')  return thisMonthRange();
+        return customRange();
+    }
+
+    // ── Fee calculation ────────────────────────────────────────────
+    // processRow returns null for based/exempt aircraft and non-turbine.
+    // Returns a row object for transient turbine landings.
+    function processRow(r, docId) {
+        // Only landings generate fees
+        if (r.event !== 'Landing') return null;
+        // Based aircraft are exempt
+        if (BASED_AIRCRAFT_POU.has(r.registration)) return null;
+
+        // Look up ICAO type code from registration, then get fee from schedule
+        const icaoCode = typeCodeRegistry[r.registration] || null;
+        // Exclude piston aircraft misclassified as Turbine due to FAA data quirks
+        if (icaoCode && EXCLUDED_TYPES_POU.has(icaoCode)) return null;
+
+        // Determine if turbine: use class field if present, otherwise fall back
+        // to checking whether the ICAO type code resolves to a fee tier.
+        // This handles pre-classRegistry records where class was not yet logged.
+        const isTurbineByClass = r.class === 'Turbine';
+        const isTurbineByIcao  = icaoCode ? !!getFeeForAircraftType(icaoCode) : false;
+        if (!isTurbineByClass && !isTurbineByIcao) return null;
+        const feeInfo  = icaoCode ? getFeeForAircraftType(icaoCode) : null;
+
+        return {
+            docId:        docId,
+            date:         r.date,
+            time:         r.time,
+            registration: r.registration,
+            icaoCode:     icaoCode || 'Unknown',
+            tier:         feeInfo ? feeInfo.tier : null,
+            fee:          feeInfo ? feeInfo.fee  : null,
+            needsReview:  !feeInfo,
+            timestamp:    r.timestamp,
+        };
+    }
+
+    // ── State ──────────────────────────────────────────────────────
+    const PAGE_SIZE = 50;
+    let allRows      = [];   // all processed fee rows for the loaded period
+    let filteredRows = [];
+    let currentPage  = 1;
+
+    const tbody     = document.getElementById('fee-tbody');
+    const metaEl    = document.getElementById('fee-meta');
+    const pageInfo  = document.getElementById('page-info');
+    const btnPrev   = document.getElementById('btn-prev');
+    const btnNext   = document.getElementById('btn-next');
+
+    // ── Inline fee tier assignment (session only — no Firestore write) ──
+    const FEE_TIER_OPTIONS = [
+        'Light Turboprop',
+        'Medium Turboprop',
+        'Heavy Turboprop',
+        'Very Light Jet',
+        'Light Jet',
+        'Medium Jet',
+        'Heavy Jet',
+        'Super Heavy Jet',
+    ];
+
+    const TIER_FEES = {
+        'Light Turboprop':  35,
+        'Medium Turboprop': 35,
+        'Heavy Turboprop':  35,
+        'Very Light Jet':   35,
+        'Light Jet':        40,
+        'Medium Jet':       60,
+        'Heavy Jet':        80,
+        'Super Heavy Jet':  80,
+    };
+
+    // Called when manager clicks "Assign" on a review row
+    window._showAssign = function(docId) {
+        const btn  = document.querySelector(`[data-assign-btn="${docId}"]`);
+        const wrap = document.querySelector(`[data-assign-wrap="${docId}"]`);
+        if (!btn || !wrap) return;
+        btn.style.display  = 'none';
+        wrap.style.display = 'inline-flex';
+    };
+
+    // Called when manager clicks Save — updates table in place, no Firestore write
+    window._saveTier = function(docId) {
+        const select = document.querySelector(`[data-assign-select="${docId}"]`);
+        if (!select || !select.value) return;
+
+        const value = select.value;
+
+        if (value === '__remove') {
+            // Remove this entry from both arrays for this session
+            allRows      = allRows.filter(r => r.docId !== docId);
+            filteredRows = filteredRows.filter(r => r.docId !== docId);
+        } else {
+            const tier = value;
+            const fee  = TIER_FEES[tier];
+            [allRows, filteredRows].forEach(arr => {
+                arr.forEach(r => {
+                    if (r.docId === docId) {
+                        r.tier        = tier;
+                        r.fee         = fee;
+                        r.needsReview = false;
+                    }
+                });
+            });
+        }
+
+        renderPage();
+        updateSummary(filteredRows);
+    };
+
+        // ── Render ─────────────────────────────────────────────────────
+    function renderPage() {
+        const start      = (currentPage - 1) * PAGE_SIZE;
+        const pageRows   = filteredRows.slice(start, start + PAGE_SIZE);
+        const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+
+        tbody.innerHTML = pageRows.length === 0
+            ? '<tr><td colspan="6" style="color:#999;padding:2rem 14px;">No results found.</td></tr>'
+            : pageRows.map(r => `
+                <tr>
+                    <td>${r.date}</td>
+                    <td>${r.time}</td>
+                    <td>${r.registration}</td>
+                    <td>${r.icaoCode}</td>
+                    <td>${r.needsReview
+                        ? `<span class="badge badge-review">Review Manually</span>`
+                        : r.tier}</td>
+                    <td>${r.needsReview
+                        ? `<span class="fee-unknown">—</span>
+                           <button class="assign-btn" data-assign-btn="${r.docId}" onclick="window._showAssign('${r.docId}')" style="margin-left:8px;font-family:'DM Sans',sans-serif;font-size:12px;padding:2px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Assign</button>
+                           <span data-assign-wrap="${r.docId}" style="display:none;gap:6px;align-items:center;">
+                               <select data-assign-select="${r.docId}" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:3px 6px;border:1px solid #ccc;border-radius:6px;">
+                                   <option value="">— select tier —</option>
+                                   ${FEE_TIER_OPTIONS.map(t => `<option value="${t}">${t}</option>`).join('')}
+                                   <option value="__remove">Remove Entry</option>
+                               </select>
+                               <button onclick="window._saveTier('${r.docId}')" style="font-family:'DM Sans',sans-serif;font-size:12px;padding:3px 10px;border:none;border-radius:6px;background:#0057ff;color:#fff;cursor:pointer;">Save</button>
+                           </span>`
+                        : '<span class="fee-amount">$' + r.fee.toFixed(2) + '</span>'}</td>
+                </tr>`).join('');
+
+        pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+        btnPrev.disabled = currentPage <= 1;
+        btnNext.disabled = currentPage >= totalPages;
+        metaEl.textContent = `Showing ${filteredRows.length} result${filteredRows.length !== 1 ? 's' : ''}`;
+    }
+
+    function updateSummary(rows) {
+        const knowns      = rows.filter(r => !r.needsReview);
+        const totalFee    = knowns.reduce((sum, r) => sum + r.fee, 0);
+        const reviewCount = rows.filter(r => r.needsReview).length;
+
+        document.getElementById('summary-landings').textContent = rows.length;
+        document.getElementById('summary-total').textContent    = '$' + totalFee.toFixed(2);
+        document.getElementById('summary-review').textContent   = reviewCount;
+    }
+
+    // ── Filters ────────────────────────────────────────────────────
+    function applyFilters() {
+        const reg  = document.getElementById('filter-reg').value.trim().toUpperCase();
+        const tier = document.getElementById('filter-tier').value;
+
+        filteredRows = allRows.filter(r => {
+            if (reg  && !r.registration.toUpperCase().includes(reg)) return false;
+            if (tier === '__review' && !r.needsReview)               return false;
+            if (tier && tier !== '__review' && r.tier !== tier)      return false;
+            return true;
+        });
+
+        currentPage = 1;
+        renderPage();
+        updateSummary(filteredRows);
+    }
+
+    // ── Load from Firestore ────────────────────────────────────────
+    async function loadData({ from, to }) {
+        metaEl.textContent = 'Loading...';
+        document.getElementById('summary-landings').textContent = '—';
+        document.getElementById('summary-total').textContent    = '—';
+        document.getElementById('summary-review').textContent   = '—';
+        try {
+            const q    = query(
+                collection(db, COLLECTION),
+                where('event', '==', 'Landing'),
+                orderBy('timestamp', 'desc')
+            );
+            const snap = await getDocs(q);
+
+            allRows = [];
+            console.log(`[LandingFees] Total docs returned: ${snap.docs.length}`);
+            console.log(`[LandingFees] Date range: ${from} to ${to}`);
+            let skippedDate = 0, skippedProcess = 0;
+            snap.docs.forEach(d => {
+                const data = d.data();
+                // Filter by date range client-side
+                if (from && data.timestamp < from) { skippedDate++; return; }
+                if (to   && data.timestamp > to)   { skippedDate++; return; }
+                const row = processRow(data, d.id);
+                if (row) allRows.push(row);
+                else skippedProcess++;
+            });
+            console.log(`[LandingFees] Skipped by date: ${skippedDate}, skipped by processRow: ${skippedProcess}, kept: ${allRows.length}`);
+            if (snap.docs.length > 0) {
+                const sample = snap.docs[0].data();
+                console.log('[LandingFees] Sample doc:', JSON.stringify({
+                    event: sample.event,
+                    class: sample.class,
+                    registration: sample.registration,
+                    timestamp: sample.timestamp,
+                    aircraftType: sample.aircraftType,
+                }));
+            }
+
+            filteredRows = [...allRows];
+            currentPage  = 1;
+            renderPage();
+            updateSummary(filteredRows);
+        } catch(err) {
+            console.error(err);
+            metaEl.textContent = 'Error loading data.';
+        }
+    }
+
+    // ── Event listeners ────────────────────────────────────────────
+
+    // Preset buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activePreset = btn.dataset.preset;
+            // Show/hide custom date inputs
+            const isCustom = activePreset === 'custom';
+            document.getElementById('custom-from-wrap').style.display = isCustom ? 'flex' : 'none';
+            document.getElementById('custom-to-wrap').style.display   = isCustom ? 'flex' : 'none';
+            if (!isCustom) loadData(currentRange());
+        });
+    });
+
+    document.getElementById('btn-apply').addEventListener('click', () => {
+        loadData(currentRange()).then(() => applyFilters());
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+        document.getElementById('filter-reg').value  = '';
+        document.getElementById('filter-tier').value = '';
+        document.getElementById('filter-from').value = '';
+        document.getElementById('filter-to').value   = '';
+        activePreset = 'week';
+        document.querySelectorAll('.preset-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.preset === 'week');
+        });
+        document.getElementById('custom-from-wrap').style.display = 'none';
+        document.getElementById('custom-to-wrap').style.display   = 'none';
+        loadData(thisWeekRange());
+    });
+
+    btnPrev.addEventListener('click', () => { currentPage--; renderPage(); });
+    btnNext.addEventListener('click', () => { currentPage++; renderPage(); });
+
+    // CSV export
+    document.getElementById('btn-export').addEventListener('click', () => {
+        if (filteredRows.length === 0) return;
+        const headers = ['Date', 'Time', 'Registration', 'ICAO Type', 'Fee Tier', 'Fee'];
+        const rows = filteredRows.map(r => [
+            r.date,
+            r.time,
+            r.registration,
+            r.icaoCode,
+            r.needsReview ? 'Review Manually' : r.tier,
+            r.needsReview ? '' : r.fee.toFixed(2),
+        ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
+        const knowns   = filteredRows.filter(r => !r.needsReview);
+        const totalFee = knowns.reduce((sum, r) => sum + r.fee, 0);
+        const summaryRows = [
+            '',
+            '"Transient Landings","' + filteredRows.length + '"',
+            '"Total Fees Owed","$' + totalFee.toFixed(2) + '"',
+        ];
+        const csv  = [headers.join(','), ...rows, ...summaryRows].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `Landing Fees - ${new Date().toLocaleDateString('en-US').replace(/\//g, '-')}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+</script>
+
+</body>
+</html>

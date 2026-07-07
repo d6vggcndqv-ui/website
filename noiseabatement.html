@@ -302,7 +302,10 @@
             <li><a href="index.html">Home</a></li>
             <li><a href="livemap.html">Live Map</a></li>
             <li><a href="flighthistory.html">Flight History</a></li>
-            <li><a href="dashboard.html">Analytics Dashboard</a></li>
+            <li><a href="dashboard.html"> Dashboard</a></li>
+            <li><a href="landingfees.html">Landing Fees</a></li>
+            <li><a href="noiseinquiry.html">Noise Inquiry</a></li>
+            <li><a href="noiseabatement.html">Noise Abatement</a></li>
         </ul>
     </nav>
 
@@ -338,10 +341,10 @@
             <!-- Controls -->
             <div class="viewer-controls">
                 <label>From Date
-                    <input type="date" id="date-from">
+                    <input type="date" id="date-from" style="font-family:'DM Sans',sans-serif;font-size:14px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#111;">
                 </label>
                 <label>To Date
-                    <input type="date" id="date-to">
+                    <input type="date" id="date-to" style="font-family:'DM Sans',sans-serif;font-size:14px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#111;">
                 </label>
                 <label>From Time
                     <input type="time" id="time-from">
@@ -478,8 +481,7 @@
         const today = new Date();
         const week  = new Date(today); week.setDate(today.getDate() - 6);
         const fmt   = d => d.toISOString().slice(0, 10);
-        document.getElementById('date-from').value = fmt(week);
-        document.getElementById('date-to').value   = fmt(today);
+        // Date inputs left empty — user selects range manually
         document.getElementById('time-from').value = '00:00';
         document.getElementById('time-to').value   = '23:59';
 
