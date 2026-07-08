@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
     <style>
@@ -288,6 +290,23 @@
 
         /* ── Keep Leaflet zoom controls below the navbar when scrolling ─ */
         .leaflet-top, .leaflet-bottom { z-index: 400; }
+
+        /* ── PDF export button ──────────────────────────────────────── */
+        #btn-export-pdf {
+            display: none;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border: 1px solid #0057ff;
+            border-radius: 6px;
+            background: #fff;
+            color: #0057ff;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        #btn-export-pdf:hover  { background: #0057ff; color: #fff; }
+        #btn-export-pdf:disabled { opacity: 0.5; cursor: wait; }
     </style>
 </head>
 
@@ -380,6 +399,7 @@
                     <div class="map-panel-header">
                         <h2 id="map-title">Select a track</h2>
                         <div id="map-meta" style="font-size:13px;color:#666;"></div>
+                        <button id="btn-export-pdf" onclick="exportPDF()">⬇ Export PDF</button>
                     </div>
                     <div id="map"></div>
                     <div class="stats-row" id="stats-row" style="display:none;">
@@ -647,6 +667,8 @@
                     document.getElementById('map-meta').textContent  =
                         (doc.aircraftType && doc.aircraftType !== 'Unknown' ? doc.aircraftType + ' · ' : '') +
                         doc.date + ' ' + doc.time;
+                    selectedDoc = doc;
+                    document.getElementById('btn-export-pdf').style.display = 'inline-block';
                     drawTrack(doc);
                 });
                 listEl.appendChild(el);
@@ -703,6 +725,151 @@
                 statusEl.textContent = 'Error loading tracks — check the console.';
             } finally {
                 document.getElementById('btn-load').disabled = false;
+            }
+        };
+
+        // ── Selected track (set in click handler above) ─────────────────────
+        let selectedDoc = null;
+
+        // ── PDF export ──────────────────────────────────────────────────────
+        window.exportPDF = async function() {
+            if (!selectedDoc) return;
+            const btn = document.getElementById('btn-export-pdf');
+            btn.disabled = true;
+            btn.textContent = 'Generating…';
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                const pw  = pdf.internal.pageSize.getWidth();
+                const ph  = pdf.internal.pageSize.getHeight();
+                const mg  = 15;
+                let y     = mg;
+
+                // ── Header bar ───────────────────────────────────────────────
+                pdf.setFillColor(0, 87, 255);
+                pdf.rect(0, 0, pw, 22, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(14);
+                pdf.text('OWD — Norwood Memorial Airport', mg, 10);
+                pdf.setFontSize(9);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text('Noise Abatement · Flight Track Report', mg, 16);
+                const generated = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+                pdf.text('Generated: ' + generated, pw - mg, 16, { align: 'right' });
+                pdf.setTextColor(0, 0, 0);
+                y = 30;
+
+                // ── Flight info table ────────────────────────────────────────
+                const d    = selectedDoc;
+                const pts  = d.track || [];
+                const alts = pts.map(p => p.alt);
+                const gss  = pts.map(p => p.gs);
+                const dur  = pts.length ? fmtDur(pts[pts.length - 1].t) : '—';
+                const minAlt     = alts.length ? Math.min(...alts) : null;
+                const maxAlt     = alts.length ? Math.max(...alts) : null;
+                const maxGs      = gss.length  ? Math.max(...gss)  : null;
+                const belowPatt  = d.minAltMSL != null && d.minAltMSL < 1049;
+
+                const fields = [
+                    ['Registration',                    d.registration  || '—'],
+                    ['Aircraft Type',                   d.aircraftType  || '—'],
+                    ['Date',                            d.date          || '—'],
+                    ['Start Time',                      d.time          || '—'],
+                    ['Duration',                        dur],
+                    ['Min Altitude',                    minAlt != null ? minAlt.toLocaleString() + ' ft MSL' : '—'],
+                    ['Max Altitude',                    maxAlt != null ? maxAlt.toLocaleString() + ' ft MSL' : '—'],
+                    ['Max Groundspeed',                 maxGs  != null ? maxGs  + ' kt'                      : '—'],
+                    ['Data Points',                     pts.length.toLocaleString()],
+                    ['Below Pattern Alt (1,000 ft AGL)', belowPatt ? 'YES' : 'No'],
+                ];
+
+                pdf.setFontSize(11);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('Flight Information', mg, y); y += 6;
+                pdf.setLineWidth(0.3);
+                pdf.setDrawColor(200, 200, 200);
+                pdf.line(mg, y, pw - mg, y); y += 4;
+
+                pdf.setFontSize(9);
+                fields.forEach(([label, value], i) => {
+                    const ry = y + i * 7;
+                    if (i % 2 === 0) {
+                        pdf.setFillColor(248, 249, 250);
+                        pdf.rect(mg, ry - 3.5, pw - mg * 2, 7, 'F');
+                    }
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setTextColor(80, 80, 80);
+                    pdf.text(label, mg + 2, ry + 1);
+                    pdf.setFont('helvetica', 'normal');
+                    if (label.startsWith('Below Pattern') && belowPatt) {
+                        pdf.setTextColor(180, 30, 30);
+                    } else {
+                        pdf.setTextColor(0, 0, 0);
+                    }
+                    pdf.text(value, pw / 2, ry + 1);
+                    pdf.setTextColor(0, 0, 0);
+                });
+                y += fields.length * 7 + 8;
+
+                // ── Map screenshot ───────────────────────────────────────────
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(11);
+                pdf.text('Flight Track', mg, y); y += 5;
+                pdf.setLineWidth(0.3);
+                pdf.setDrawColor(200, 200, 200);
+                pdf.line(mg, y, pw - mg, y); y += 4;
+
+                const canvas  = await html2canvas(document.getElementById('map'), {
+                    useCORS: true, allowTaint: true, scale: 1.5, logging: false
+                });
+                const imgData = canvas.toDataURL('image/jpeg', 0.85);
+                const imgW    = pw - mg * 2;
+                const imgH    = Math.min((canvas.height / canvas.width) * imgW, ph - y - mg - 16);
+                pdf.addImage(imgData, 'JPEG', mg, y, imgW, imgH);
+                y += imgH + 6;
+
+                // ── Altitude legend ──────────────────────────────────────────
+                if (y + 14 < ph - mg) {
+                    pdf.setFontSize(8);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setTextColor(80, 80, 80);
+                    pdf.text('Altitude Key (ft MSL):', mg, y + 4);
+                    const legend = [
+                        { c:[220,38,38],  l:'< 500'        },
+                        { c:[245,158,11], l:'500 – 1,000'  },
+                        { c:[132,204,22], l:'1,000 – 2,000'},
+                        { c:[34,197,94],  l:'2,000 – 3,500'},
+                        { c:[59,130,246], l:'> 3,500'      },
+                    ];
+                    let lx = mg + 40;
+                    legend.forEach(({ c, l }) => {
+                        pdf.setFillColor(...c);
+                        pdf.rect(lx, y + 0.5, 7, 4, 'F');
+                        pdf.setFont('helvetica', 'normal');
+                        pdf.setTextColor(0, 0, 0);
+                        pdf.text(l, lx + 9, y + 4);
+                        lx += 34;
+                    });
+                }
+
+                // ── Footer ───────────────────────────────────────────────────
+                pdf.setFontSize(7);
+                pdf.setTextColor(150, 150, 150);
+                pdf.text('Source: ADS-B via on-field receiver · FlightLevel Technologies · For informational purposes only', mg, ph - 8);
+                pdf.text('Page 1 of 1', pw - mg, ph - 8, { align: 'right' });
+
+                // ── Save ─────────────────────────────────────────────────────
+                const fname = `OWD_Track_${(d.registration || 'Unknown').replace(/\s/g,'_')}_${(d.date || '').replace(/\//g,'-')}.pdf`;
+                pdf.save(fname);
+
+            } catch (err) {
+                console.error('PDF export error:', err);
+                alert('PDF generation failed — see the browser console for details.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '⬇ Export PDF';
             }
         };
     </script>
