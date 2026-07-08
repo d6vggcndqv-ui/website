@@ -395,43 +395,26 @@ async function sendNoiseSummary() {
  
     const submissions = snapshot.docs.map(d => d.data());
  
-    // ── Tally complaint types ─────────────────────────────────────────
-    const typeCounts = {};
-    submissions.forEach(s => {
-      (s.complaint_types || []).forEach(t => {
-        typeCounts[t] = (typeCounts[t] || 0) + 1;
-      });
-    });
-    const typeLines = Object.entries(typeCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([type, count]) => `  • ${type} — ${count} report${count > 1 ? 's' : ''}`)
-      .join('\n');
- 
-    // ── Time range of events ──────────────────────────────────────────
-    const eventTimes = submissions
-      .map(s => s.event_time)
-      .filter(Boolean)
-      .sort();
-    const timeRange = eventTimes.length > 0
-      ? `${eventTimes[0]} – ${eventTimes[eventTimes.length - 1]}`
-      : 'Not specified';
+    // ── Complaint types with time of each submission ──────────────────
+    const typeLines = submissions.map(s => {
+      const time = s.event_time || 'Unknown time';
+      const types = (s.complaint_types || []).join(', ') || 'Not specified';
+      return `  • ${types} — ${time}`;
+    }).join('\n');
  
     // ── Unique addresses ──────────────────────────────────────────────
     const addresses = [...new Set(submissions.map(s => s.address).filter(Boolean))];
     const addressLines = addresses.map(a => `  • ${a}`).join('\n');
  
-    // ── Comments (non-empty only) ─────────────────────────────────────
+    // ── Comments (non-empty only) ───────────────────────────────────────────
     const comments = submissions.map(s => s.comments).filter(Boolean);
     const commentLines = comments.length > 0
       ? comments.map(c => `  • "${c}"`).join('\n')
       : '  None';
  
-    // ── Noise abatement links ─────────────────────────────────────────
-    const links = submissions
-      .map(s => s.noise_abatement_link)
-      .filter(Boolean);
-    const linkLines = links.length > 0
-      ? links.map((l, i) => `  • Event ${i + 1}: ${l}`).join('\n')
+    // ── Noise abatement links ───────────────────────────────────────────────
+    const linkLines = submissions.some(s => s.noise_abatement_link)
+      ? submissions.map((s, i) => `  • Event ${i + 1} (${s.event_time || 'Unknown time'}): ${s.noise_abatement_link || 'N/A'}`).join('\n')
       : '  None';
  
     // ── Build email body ──────────────────────────────────────────────
@@ -441,8 +424,6 @@ Total Submissions: ${submissions.length}
  
 COMPLAINT TYPES:
 ${typeLines}
- 
-TIME RANGE OF EVENTS: ${timeRange}
  
 LOCATIONS REPORTED FROM:
 ${addressLines}
@@ -478,7 +459,7 @@ ${linkLines}`;
 // ── Schedule summary at 11:59 PM ─────────────────────────────────────
 (function scheduleNoiseSummary() {
   const now = new Date();
-  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 0, 0);
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 13, 25, 0, 0);
   let msUntilTarget = target - now;
   if (msUntilTarget < 0) msUntilTarget += 24 * 60 * 60 * 1000; // already past 11:59, schedule for tomorrow
   console.log(`[NoiseSummary] Summary scheduled in ${Math.round(msUntilTarget / 60000)} minutes.`);
