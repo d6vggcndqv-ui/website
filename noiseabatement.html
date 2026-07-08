@@ -10,7 +10,6 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
@@ -774,7 +773,7 @@
 
                 const fields = [
                     ['Registration',                    d.registration  || '—'],
-                    ['Aircraft Type',                   d.aircraftType  || '—'],
+                    ['AAC/ADG',                   d.aircraftType  || '—'],
                     ['Date',                            d.date          || '—'],
                     ['Start Time',                      d.time          || '—'],
                     ['Duration',                        dur],
@@ -821,12 +820,112 @@
                 pdf.setDrawColor(200, 200, 200);
                 pdf.line(mg, y, pw - mg, y); y += 4;
 
-                const canvas  = await html2canvas(document.getElementById('map'), {
-                    useCORS: true, allowTaint: true, scale: 1.5, logging: false
+                // Build the map image using an off-screen Leaflet instance with a
+                // Canvas renderer — this reads directly from Leaflet's own canvas
+                // so tiles and track are always perfectly aligned.
+                const imgData = await new Promise((resolve, reject) => {
+                    // Container: off-screen, fixed size
+                    const W = 900, H = 500;
+                    const tmp = document.createElement('div');
+                    Object.assign(tmp.style, {
+                        position: 'fixed', left: '-9999px', top: '0',
+                        width: W + 'px', height: H + 'px', zIndex: '-1'
+                    });
+                    document.body.appendChild(tmp);
+
+                    const renderer = L.canvas();
+                    const offMap = L.map(tmp, {
+                        center: map.getCenter(),
+                        zoom:   map.getZoom(),
+                        zoomControl: false,
+                        attributionControl: false,
+                        preferCanvas: true,
+                        renderer
+                    });
+
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 18, crossOrigin: true
+                    }).addTo(offMap);
+
+                    // Draw the track using Canvas polylines
+                    const pts = d.track || [];
+                    for (let i = 0; i < pts.length - 1; i++) {
+                        L.polyline(
+                            [[pts[i].lat, pts[i].lon], [pts[i+1].lat, pts[i+1].lon]],
+                            { color: altColor(pts[i].alt), weight: 3, opacity: 0.95,
+                              renderer, interactive: false }
+                        ).addTo(offMap);
+                    }
+                    // Start / end markers
+                    if (pts.length) {
+                        L.circleMarker([pts[0].lat, pts[0].lon],
+                            { radius: 6, color: '#166534', fillColor: '#22c55e',
+                              fillOpacity: 1, weight: 2, renderer, interactive: false }
+                        ).addTo(offMap);
+                        const lp = pts[pts.length - 1];
+                        L.circleMarker([lp.lat, lp.lon],
+                            { radius: 6, color: '#991b1b', fillColor: '#dc2626',
+                              fillOpacity: 1, weight: 2, renderer, interactive: false }
+                        ).addTo(offMap);
+                    }
+
+                    // Wait for tiles to load, then merge tile images + canvas overlay
+                    const TIMEOUT = 8000;
+                    const start   = Date.now();
+
+                    function tryCapture() {
+                        // Check all tile images are loaded
+                        const imgs   = tmp.querySelectorAll('img.leaflet-tile');
+                        const loaded = [...imgs].every(im => im.complete && im.naturalWidth > 0);
+
+                        if (!loaded && Date.now() - start < TIMEOUT) {
+                            setTimeout(tryCapture, 150);
+                            return;
+                        }
+
+                        try {
+                            // Composite: draw tiles then the canvas overlay onto one output canvas
+                            const out = document.createElement('canvas');
+                            out.width  = W;
+                            out.height = H;
+                            const ctx  = out.getContext('2d');
+
+                            // Fill background
+                            ctx.fillStyle = '#e8e8e8';
+                            ctx.fillRect(0, 0, W, H);
+
+                            // Draw each tile image in its correct position
+                            imgs.forEach(img => {
+                                const r = img.getBoundingClientRect();
+                                const c = tmp.getBoundingClientRect();
+                                ctx.drawImage(img, r.left - c.left, r.top - c.top,
+                                                   r.width, r.height);
+                            });
+
+                            // Draw the Leaflet canvas overlay (track lines) on top
+                            const leafCanvas = tmp.querySelector('canvas.leaflet-zoom-animated');
+                            if (leafCanvas) {
+                                const lr = leafCanvas.getBoundingClientRect();
+                                const cr = tmp.getBoundingClientRect();
+                                ctx.drawImage(leafCanvas, lr.left - cr.left, lr.top - cr.top,
+                                                          lr.width, lr.height);
+                            }
+
+                            resolve(out.toDataURL('image/jpeg', 0.88));
+                        } catch(e) {
+                            reject(e);
+                        } finally {
+                            offMap.remove();
+                            document.body.removeChild(tmp);
+                        }
+                    }
+
+                    // Give tiles a head-start before polling
+                    setTimeout(tryCapture, 500);
                 });
-                const imgData = canvas.toDataURL('image/jpeg', 0.85);
-                const imgW    = pw - mg * 2;
-                const imgH    = Math.min((canvas.height / canvas.width) * imgW, ph - y - mg - 16);
+
+                const imgW = pw - mg * 2;
+                const imgH = Math.min(imgW * (500 / 900), ph - y - mg - 16);
                 pdf.addImage(imgData, 'JPEG', mg, y, imgW, imgH);
                 y += imgH + 6;
 
