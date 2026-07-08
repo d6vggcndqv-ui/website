@@ -15,6 +15,7 @@
     <script src="basedaircraft_pou.js"></script>
     <script src="icaocodeRegistry.js"></script>
     <script src="feeschedule_pou.js"></script>
+    <script src="mtow_pou.js"></script>
     <script>
         // ICAO type codes that should never generate a fee regardless of class field.
         // Used to filter out piston aircraft incorrectly classified as Turbine
@@ -316,6 +317,7 @@
                                 <th>Time</th>
                                 <th>Registration</th>
                                 <th>ICAO Type</th>
+                                <th>Weight</th>
                                 <th>Fee Tier</th>
                                 <th>Fee</th>
                             </tr>
@@ -565,6 +567,7 @@
                     <td>${r.time}</td>
                     <td>${r.registration}</td>
                     <td>${r.icaoCode}</td>
+                    <td>${r.tier ? (MTOW_RANGES_POU[r.tier] || '—') : '—'}</td>
                     <td>${r.needsReview
                         ? `<span class="badge badge-review">Review Manually</span>`
                         : r.tier}</td>
@@ -704,12 +707,13 @@
     // CSV export
     document.getElementById('btn-export').addEventListener('click', () => {
         if (filteredRows.length === 0) return;
-        const headers = ['Date', 'Time', 'Registration', 'ICAO Type', 'Fee Tier', 'Fee'];
+        const headers = ['Date', 'Time', 'Registration', 'ICAO Type', 'Weight', 'Fee Tier', 'Fee'];
         const rows = filteredRows.map(r => [
             r.date,
             r.time,
             r.registration,
             r.icaoCode,
+            r.tier ? (MTOW_RANGES_POU[r.tier] || '') : '',
             r.needsReview ? 'Review Manually' : r.tier,
             r.needsReview ? '' : r.fee.toFixed(2),
         ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
