@@ -1787,6 +1787,7 @@ const typeCodeRegistry = {
   'N102VS': 'LJ25',
   'N102WC': 'C340',
   'N102WK': 'BE9T',
+  'FSY298': 'C56X',
   'N102WY': 'C560',
   'N102X': 'C310',
   'N10300': 'C150',
