@@ -565,7 +565,7 @@
                 <tr>
                     <td>${r.date}</td>
                     <td>${r.time}</td>
-                    <td>${r.registration}</td>
+                    <td>${r.registration} <a href="https://registry.faa.gov/aircraftinquiry/Search/NNumberResult?nNumberTxt=${r.registration.replace('N', '')}" target="_blank" title="FAA Registry" style="text-decoration:none;font-size:11px;color:#0057ff;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg></a></td>
                     <td>${r.icaoCode}</td>
                     <td>${r.tier ? (MTOW_RANGES_POU[r.tier] || '—') : '—'}</td>
                     <td>${r.needsReview
