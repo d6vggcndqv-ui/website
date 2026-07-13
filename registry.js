@@ -63846,6 +63846,7 @@ const aircraftRegistry = {
   "a4c735": "B-II",
   "a4c742": "C-III",
   "a4c74c": "A-II",
+  "a47c6c": "n/a",
   "a4c76d": "A-I",
   "a4c791": "A-I",
   "a4c79b": "D-V",
