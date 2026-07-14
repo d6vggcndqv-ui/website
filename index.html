@@ -75,7 +75,7 @@
                         <a class="feature-link" href="livemap.html">Open Live Map</a>
                     </div>
                     <div class="feature-graphic">
-                        <img src="map_screenshot.png" alt="Live Map">
+                        <img src="map_screenshot3.png" alt="Live Map">
                         <!-- <img src="map-data.png" alt="Live Map data points"> -->
                     </div>
                 </div>
@@ -87,14 +87,14 @@
                     <h2>Flight History</h2>
                     <ul class="features-list">
                         <li>Historical event records updated in real-time</li>
-                        <li>See date, time, callsign, event, runway and aircraft type</li>
                         <li>Take control of your data by exporting it as a CSV file</li>
+                        <li>Switch between different airports in your network</li>
                     </ul>
                     <a class="feature-link" href="flighthistory.html">Browse Flight History</a>
                 </div>
 
                 <div class="feature-graphic-fh">
-                   <img src="fh-screenshot2.png" alt="Flight History Example">
+                   <img src="fh-screenshot3.png" alt="Flight History Example">
                 </div>
             </div>
 
@@ -102,7 +102,7 @@
             <div class="feature-card">
                 <div class="feature-text">
                     <span class="feature-tag">Analytics</span>
-                    <h2>Analytics Dashboard</h2>
+                    <h2>Dashboard</h2>
                     <ul class="features-list">
                         <li>Your airport data visualized in real-time</li>
                         <li>Examine trends over time</li>
@@ -113,7 +113,64 @@
                 </div>
 
                 <div class="feature-graphic-db">
-                    <img src="dashboard-screenshot.png" alt="Analytics Dashboard Example">
+                    <img src="dashboard-screenshot2.png" alt="Analytics Dashboard Example">
+                </div>
+            </div>
+
+            <!-- 4 · Landing Fees -->
+            <div class="feature-card">
+                <div class="feature-text">
+                    <span class="feature-tag">Billing</span>
+                    <h2>Landing Fee Management</h2>
+                    <ul class="features-list">
+                        <li>Automatic detection of transient landings</li>
+                        <li>Aircraft classification by ICAO type code</li>
+                        <li>Adaptable to your network's fee schedule</li>
+                        <li>Link to every plane's registration for quick billing address lookup</li>
+                    </ul>
+                    <a class="feature-link" href="landingfees.html">View Landing Fees</a>
+                </div>
+
+                <div class="feature-graphic-lf">
+                    <img src="lf-screenshot.png" alt="Landing Fees Example">
+                </div>
+            </div>
+
+            <!-- 5 · Noise Inquiry -->
+            <div class="feature-card">
+                <div class="feature-text">
+                    <span class="feature-tag">Community Relations</span>
+                    <h2>Noise Inquiry</h2>
+                    <ul class="features-list">
+                        <li>Simple online form embeddable into your website</li>
+                        <li>Automated emails to airport staff and EOD summary emails</li>
+                        <li>All inquiries logged and stored for reporting</li>
+                        <li>Link to view all possible flight tracks responsible for the inquiry in the emails</li>
+                    </ul>
+                    <a class="feature-link" href="noiseinquiry.html">Submit a Noise Inquiry</a>
+                </div>
+
+                <div class="feature-graphic-ni">
+                    <img src="ni-screenshot.png" alt="Noise Inquiry Example">
+                </div>
+            </div>
+
+            <!-- 6 · Noise Abatement -->
+            <div class="feature-card">
+                <div class="feature-text">
+                    <span class="feature-tag">Community Relations</span>
+                    <h2>Noise Abatement</h2>
+                    <ul class="features-list">
+                        <li>Visualize flight tracks within a 5-mile radius of the airport</li>
+                        <li>Altitude-colored flight paths for easy analysis</li>
+                        <li>Review historical tracks by date and aircraft</li>
+                        <li>Export flight track reports as a PDF</li>
+                    </ul>
+                    <a class="feature-link" href="noiseabatement.html">Open Noise Abatement</a>
+                </div>
+
+                <div class="feature-graphic-na">
+                    <img src="na-screenshot.png" alt="Noise Abatement Example">
                 </div>
             </div>
 
@@ -154,6 +211,34 @@
     <footer class="footer">
         <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
     </footer>
+
+    <script>
+        window.addEventListener("load", () => {
+            const cards = document.querySelectorAll(".feature-card");
+            cards.forEach((card) => card.classList.add("fade-in"));
+
+            let lastScrollY = window.scrollY;
+
+            window.addEventListener("scroll", () => {
+                lastScrollY = window.scrollY;
+            });
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    const scrollingDown = window.scrollY > lastScrollY;
+                    if (entry.isIntersecting) {
+                        entry.target.classList.remove("fade-out-up", "fade-out-down");
+                        entry.target.classList.add("fade-in-visible");
+                    } else {
+                        entry.target.classList.remove("fade-in-visible");
+                        entry.target.classList.add(scrollingDown ? "fade-out-up" : "fade-out-down");
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            cards.forEach((card) => observer.observe(card));
+        });
+    </script>
 
 </body>
 </html>
