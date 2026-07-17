@@ -261,6 +261,8 @@
         }
         #auth-form button:hover { background: #0040cc; }
         #auth-error { font-size: 13px; color: #dc2626; text-align: center; min-height: 18px; }
+        #airport-selector { display: none; align-items: center; gap: 10px; margin-bottom: 1rem; font-size: 14px; }
+        #airport-selector select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
         #btn-logout {
             font-family: 'DM Sans', sans-serif;
             font-size: 13px;
@@ -350,6 +352,14 @@
             <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
                 <h1 style="margin:0;">Noise Abatement</h1>
                 <button id="btn-logout" onclick="window._authSignOut()">Sign Out</button>
+            </div>
+
+            <div id="airport-selector">
+                <span>Airport:</span>
+                <select id="airport-select"></select>
+            </div>
+            <div id="user-signout" style="display:none;margin-bottom:1rem;">
+                <button onclick="window._authSignOut()" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Sign Out</button>
             </div>
             <p style="margin:0 0 1.5rem;color:#666;font-size:14px;">
                 View recorded flight paths.
@@ -447,7 +457,7 @@
         import { initializeApp }         from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
                                          from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
-        import { getFirestore, collection, query, where, orderBy, limit, getDocs }
+        import { getFirestore, collection, doc, getDoc, query, where, orderBy, limit, getDocs }
                                          from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -464,7 +474,44 @@
         const auth = getAuth(app);
         const db   = getFirestore(app);
 
-        // ── Auth wiring (same pattern as your other pages) ──────────────────
+        // ── Airport config ──────────────────────────────────────────────────
+        const AIRPORT_COLLECTIONS = { owd: 'tracks_owd', pou: 'tracks_pou' };
+        const AIRPORT_LABELS      = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
+        const AIRPORT_COORDS      = { owd: [42.1905, -71.1728], pou: [41.6266, -73.8842] };
+        const AIRPORT_ELEV        = { owd: 49, pou: 165 };   // field elevation MSL (ft)
+        const PATTERN_CEIL_AGL    = 1000;                     // low-alt dot threshold (ft AGL)
+
+        let currentCollection = 'tracks_owd';
+        let currentAirportKey = 'owd';
+
+        function getFieldElev()   { return AIRPORT_ELEV[currentAirportKey]      || 49; }
+        function getAirportLabel(){ return AIRPORT_LABELS[currentAirportKey]     || 'OWD — Norwood Memorial Airport'; }
+        function getAirportCoord(){ return AIRPORT_COORDS[currentAirportKey]     || [42.1905, -71.1728]; }
+        function patternCeilMSL() { return getFieldElev() + PATTERN_CEIL_AGL; }
+
+        function switchAirport(key) {
+            currentAirportKey  = key;
+            currentCollection  = AIRPORT_COLLECTIONS[key] || 'tracks_owd';
+            // Re-centre the map and update its field marker
+            if (map) {
+                map.setView(getAirportCoord(), 12);
+                if (fieldMarker) {
+                    fieldMarker.setLatLng(getAirportCoord());
+                    fieldMarker.setTooltipContent(getAirportLabel());
+                }
+            }
+            // Clear any currently displayed track
+            if (trackLayer) trackLayer.clearLayers();
+            document.getElementById('map-title').textContent = 'Select a track';
+            document.getElementById('map-meta').textContent  = '';
+            document.getElementById('stats-row').style.display = 'none';
+            document.getElementById('btn-export-pdf').style.display = 'none';
+            document.getElementById('track-list').innerHTML =
+                '<div class="empty-state">Load a date and time range to see captured tracks.</div>';
+            document.getElementById('track-count').textContent = '';
+        }
+
+        // ── Auth wiring ─────────────────────────────────────────────────────
         window._authSignIn = async () => {
             const email = document.getElementById('auth-email').value.trim();
             const pass  = document.getElementById('auth-password').value;
@@ -476,24 +523,47 @@
                 errEl.textContent = 'Invalid email or password.';
             }
         };
-        window._authSignOut = async () => {
-            await signOut(auth);
-        };
+        window._authSignOut = async () => { await signOut(auth); };
+
+        function showAuth() {
+            document.getElementById('auth-screen').style.display  = 'flex';
+            document.getElementById('main-content').style.display = 'none';
+        }
+        function hideAuth() {
+            document.getElementById('auth-screen').style.display  = 'none';
+            document.getElementById('main-content').style.display = 'block';
+        }
+
+        async function initUser(user) {
+            try {
+                const snap = await getDoc(doc(db, 'Users', user.uid));
+                if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
+                const profile = snap.data();
+
+                if (profile.role === 'admin') {
+                    const selector = document.getElementById('airport-selector');
+                    selector.style.display = 'flex';
+                    const select = document.getElementById('airport-select');
+                    select.innerHTML = Object.entries(AIRPORT_LABELS)
+                        .map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+                    switchAirport(select.value);
+                    select.addEventListener('change', () => switchAirport(select.value));
+                } else {
+                    // Non-admin: lock to their assigned airport
+                    currentAirportKey = profile.airport || 'owd';
+                    currentCollection = AIRPORT_COLLECTIONS[currentAirportKey] || 'tracks_owd';
+                    document.getElementById('user-signout').style.display = 'block';
+                }
+
+                hideAuth();
+                initMap();
+            } catch(e) {
+                console.error('[initUser]', e);
+            }
+        }
 
         onAuthStateChanged(auth, user => {
-            const authScreen  = document.getElementById('auth-screen');
-            const mainContent = document.getElementById('main-content');
-            const logoutBtn   = document.getElementById('btn-logout');
-            if (user) {
-                authScreen.style.display  = 'none';
-                mainContent.style.display = 'block';
-                logoutBtn.style.display   = 'inline-block';
-                initMap();
-            } else {
-                authScreen.style.display  = 'flex';
-                mainContent.style.display = 'none';
-                logoutBtn.style.display   = 'none';
-            }
+            if (user) { initUser(user); } else { showAuth(); }
         });
 
         // ── Date defaults (today and 7 days ago) ────────────────────────────
@@ -528,23 +598,22 @@
         })();
 
         // ── Leaflet map ─────────────────────────────────────────────────────
-        const OWD = [42.1905, -71.1728];
-        let map, trackLayer;
+        let map, trackLayer, fieldMarker;
 
         function initMap() {
             if (map) return;
-            map = L.map('map', { center: OWD, zoom: 12 });
+            map = L.map('map', { center: getAirportCoord(), zoom: 12 });
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 18,
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
             trackLayer = L.layerGroup().addTo(map);
 
-            // Field marker
-            L.circleMarker(OWD, {
+            // Field marker — stored so switchAirport() can reposition it
+            fieldMarker = L.circleMarker(getAirportCoord(), {
                 radius: 6, color: '#0057ff', fillColor: '#0057ff',
                 fillOpacity: 1, weight: 2
-            }).bindTooltip('OWD — Norwood Memorial', { permanent: false }).addTo(map);
+            }).bindTooltip(getAirportLabel(), { permanent: false }).addTo(map);
         }
 
         // ── Altitude → colour ───────────────────────────────────────────────
@@ -649,7 +718,7 @@
                 el.innerHTML = `
                     <div class="ti-row1">
                         <span class="ti-cs">${doc.registration || 'Unknown'}</span>
-                        ${doc.minAltMSL != null && doc.minAltMSL < 1049 ? '<span class="low-alt-dot" title="Flew below 1,000 ft AGL"></span>' : ''}
+                        ${doc.minAltMSL != null && doc.minAltMSL < patternCeilMSL() ? '<span class="low-alt-dot" title="Flew below 1,000 ft AGL"></span>' : ''}
                         <span class="ti-pts">${pts.toLocaleString()} pts</span>
                     </div>
                     <div class="ti-row2">
@@ -703,7 +772,7 @@
                 ];
                 if (csVal) constraints.unshift(where('registration', '==', csVal));
 
-                const snap = await getDocs(query(collection(db, 'tracks_owd'), ...constraints));
+                const snap = await getDocs(query(collection(db, currentCollection), ...constraints));
                 tracks = snap.docs.map(d => d.data());
 
                 // Sort by timestamp desc (already ordered but ensure it)
@@ -751,7 +820,7 @@
                 pdf.setTextColor(255, 255, 255);
                 pdf.setFont('helvetica', 'bold');
                 pdf.setFontSize(14);
-                pdf.text('OWD — Norwood Memorial Airport', mg, 10);
+                pdf.text(getAirportLabel() + ' Airport', mg, 10);
                 pdf.setFontSize(9);
                 pdf.setFont('helvetica', 'normal');
                 pdf.text('Noise Abatement · Flight Track Report', mg, 16);
@@ -769,7 +838,7 @@
                 const minAlt     = alts.length ? Math.min(...alts) : null;
                 const maxAlt     = alts.length ? Math.max(...alts) : null;
                 const maxGs      = gss.length  ? Math.max(...gss)  : null;
-                const belowPatt  = d.minAltMSL != null && d.minAltMSL < 1049;
+                const belowPatt  = d.minAltMSL != null && d.minAltMSL < patternCeilMSL();
 
                 const fields = [
                     ['Registration',                    d.registration  || '—'],
@@ -960,7 +1029,7 @@
                 pdf.text('Page 1 of 1', pw - mg, ph - 8, { align: 'right' });
 
                 // ── Save ─────────────────────────────────────────────────────
-                const fname = `OWD_Track_${(d.registration || 'Unknown').replace(/\s/g,'_')}_${(d.date || '').replace(/\//g,'-')}.pdf`;
+                const fname = `${currentAirportKey.toUpperCase()}_Track_${(d.registration || 'Unknown').replace(/\s/g,'_')}_${(d.date || '').replace(/\//g,'-')}.pdf`;
                 pdf.save(fname);
 
             } catch (err) {
