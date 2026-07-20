@@ -707,7 +707,7 @@
     // CSV export
     document.getElementById('btn-export').addEventListener('click', () => {
         if (filteredRows.length === 0) return;
-        const headers = ['Date', 'Time', 'Registration', 'ICAO Type', 'Weight', 'Fee Tier', 'Fee'];
+        const headers = ['Date', 'Time', 'Registration', 'ICAO Type', 'Weight', 'Fee Tier', 'Fee', 'Paid/Unpaid'];
         const rows = filteredRows.map(r => [
             r.date,
             r.time,
@@ -716,6 +716,7 @@
             r.tier ? (MTOW_RANGES_POU[r.tier] || '') : '',
             r.needsReview ? 'Review Manually' : r.tier,
             r.needsReview ? '' : r.fee.toFixed(2),
+            '',
         ].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','));
         const knowns   = filteredRows.filter(r => !r.needsReview);
         const totalFee = knowns.reduce((sum, r) => sum + r.fee, 0);
