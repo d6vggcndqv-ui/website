@@ -547,6 +547,11 @@
                     select.innerHTML = Object.entries(AIRPORT_LABELS)
                         .map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
                     switchAirport(select.value);
+                    // Honour airport from noise inquiry deep link if present
+                    if (window._deepLinkAirport && AIRPORT_COLLECTIONS[window._deepLinkAirport]) {
+                        select.value = window._deepLinkAirport;
+                        switchAirport(window._deepLinkAirport);
+                    }
                     select.addEventListener('change', () => switchAirport(select.value));
                 } else {
                     // Non-admin: lock to their assigned airport
@@ -580,6 +585,12 @@
             const date      = params.get('date');
             const timeFrom  = params.get('time-from');
             const timeTo    = params.get('time-to');
+            const airport   = params.get('airport');
+
+            // Store airport key so initUser can apply it once the dropdown is built
+            if (airport && (airport === 'owd' || airport === 'pou')) {
+                window._deepLinkAirport = airport;
+            }
 
             if (date) {
                 document.getElementById('date-from').value = date;

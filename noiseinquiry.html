@@ -533,7 +533,9 @@
                 const timeFrom = `${pad(Math.floor(fromMins / 60))}:${pad(fromMins % 60)}`;
                 const timeTo   = `${pad(Math.floor(toMins / 60))}:${pad(toMins % 60)}`;
                 const base = window.location.href.replace('noiseinquiry.html', 'noiseabatement.html');
-                naLink = `${base}?date=${date}&time-from=${timeFrom}&time-to=${timeTo}`;
+                const airportVal = document.getElementById('airport').value;
+                const airportKey = airportVal.startsWith('POU') ? 'pou' : 'owd';
+                naLink = `${base}?airport=${airportKey}&date=${date}&time-from=${timeFrom}&time-to=${timeTo}`;
             }
 
             // ── Collect complaint types ───────────────────────────────────
