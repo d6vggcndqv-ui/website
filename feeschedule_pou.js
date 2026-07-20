@@ -79,6 +79,7 @@ const FEE_TIERS_POU = {
   'H25B':  { tier: 'Medium Jet',   fee: 60 },
   'JS41':  { tier: 'Medium Jet',   fee: 60 },
   'WW24':  { tier: 'Medium Jet',   fee: 60 },
+  'LJ45':  { tier: 'Medium Jet',   fee: 60 },
   'ASTR':  { tier: 'Medium Jet',   fee: 60 },
   'G150':  { tier: 'Medium Jet',   fee: 60 },
   'C68A':  { tier: 'Medium Jet',   fee: 60 },
