@@ -382,7 +382,7 @@ async function sendNoiseSummary() {
     const q = query(
       collection(db, "noise_inquiries"),
       where("date", "==", todayStr),
-      where("airport", "==", "POU — Dutchess County")
+      where("airport", "==", "POU — Hudson Valley Regional")
     );
     const snapshot = await getDocs(q);
  
@@ -417,7 +417,7 @@ async function sendNoiseSummary() {
  
     // ── Build email body ──────────────────────────────────────────────
     const body = `Noise Inquiry Summary — ${todayStr}
-Airport: POU — Dutchess County
+Airport: POU — Hudson Valley Regional
 Total Submissions: ${submissions.length}
  
 COMPLAINT TYPES:
