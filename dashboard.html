@@ -48,6 +48,8 @@
             border: 1px solid #e5e5e5;
             border-radius: 10px;
             padding: 18px 20px;
+            break-inside: avoid;
+            page-break-inside: avoid;
         }
         .chart-card h2 {
             font-size: 14px;
@@ -300,7 +302,8 @@
         <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
     </footer>
 
-   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
    <script type="module">
@@ -809,32 +812,77 @@
             return `Flight Operations — ${fmt(start)} to ${fmt(end)}`;
         }
 
-        document.getElementById('btn-export-pdf').addEventListener('click', () => {
+        document.getElementById('btn-export-pdf').addEventListener('click', async () => {
             const title = getPrintTitle();
-            const printTitle = document.getElementById('print-title');
-            printTitle.textContent = title;
-            printTitle.style.display = 'block';
-
             const btn = document.getElementById('btn-export-pdf');
             btn.textContent = 'Generating...';
             btn.disabled = true;
 
-            const element = document.querySelector('section');
-            const safeFilename = title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').toLowerCase() + '.pdf';
-            const opt = {
-                margin:      [10, 10, 10, 10],
-                filename:    safeFilename,
-                image:       { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, logging: false },
-                jsPDF:       { unit: 'mm', format: 'a4', orientation: 'landscape' },
-                pagebreak:   { mode: 'avoid-all' }
-            };
+            try {
+                const safeFilename = title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').toLowerCase() + '.pdf';
 
-            html2pdf().set(opt).from(element).save().then(() => {
-                printTitle.style.display = 'none';
+                // Page geometry (mm)
+                const pageWidth = 297, pageHeight = 210, margin = 10;
+                const contentWidth = pageWidth - margin * 2;
+                const gap = 5;
+                const columns = 3;
+                const colWidth = (contentWidth - gap * (columns - 1)) / columns;
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+
+                let y = margin;
+
+                // Title
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(16);
+                doc.text(title, margin, y + 6);
+                y += 12;
+
+                // Metrics row, captured as a single image spanning full width
+                const metricsEl = document.querySelector('.metrics');
+                if (metricsEl) {
+                    const canvas = await html2canvas(metricsEl, { scale: 2, useCORS: true, logging: false });
+                    const imgH = (canvas.height / canvas.width) * contentWidth;
+                    doc.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', margin, y, contentWidth, imgH);
+                    y += imgH + gap;
+                }
+
+                // Render every chart card to its own canvas so a chart can never be sliced across a page break
+                const cards = Array.from(document.querySelectorAll('.chart-card'));
+                let col = 0;
+                let rowMaxH = 0;
+
+                for (const card of cards) {
+                    const canvas = await html2canvas(card, { scale: 2, useCORS: true, logging: false });
+                    const imgH = (canvas.height / canvas.width) * colWidth;
+
+                    // Start a new page if this card would overflow the current row/page
+                    if (col === 0 && y + imgH > pageHeight - margin) {
+                        doc.addPage();
+                        y = margin;
+                    }
+
+                    const x = margin + col * (colWidth + gap);
+                    doc.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', x, y, colWidth, imgH);
+                    rowMaxH = Math.max(rowMaxH, imgH);
+
+                    col++;
+                    if (col === columns) {
+                        col = 0;
+                        y += rowMaxH + gap;
+                        rowMaxH = 0;
+                    }
+                }
+
+                doc.save(safeFilename);
+            } catch (err) {
+                console.error('PDF export failed:', err);
+                alert('PDF export failed: ' + err.message);
+            } finally {
                 btn.textContent = 'Export PDF';
                 btn.disabled = false;
-            });
+            }
         });
     </script>
 
