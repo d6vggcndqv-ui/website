@@ -848,8 +848,18 @@
                     y += imgH + gap;
                 }
 
-                // Render every chart card to its own canvas so a chart can never be sliced across a page break
+                // Render every chart card to its own canvas so a chart can never be sliced across a page break.
+                // Force every card to the same fixed height first (matching how the on-screen grid stretches
+                // cards in a row to match each other) so cards with wrapped legends don't distort row heights.
                 const cards = Array.from(document.querySelectorAll('.chart-card'));
+                const naturalHeights = cards.map(c => c.getBoundingClientRect().height);
+                const uniformHeightPx = Math.max(...naturalHeights);
+                const originalStyles = cards.map(c => ({ height: c.style.height, overflow: c.style.overflow }));
+                cards.forEach(c => {
+                    c.style.height = uniformHeightPx + 'px';
+                    c.style.overflow = 'hidden';
+                });
+
                 let col = 0;
                 let rowMaxH = 0;
 
@@ -874,6 +884,11 @@
                         rowMaxH = 0;
                     }
                 }
+
+                cards.forEach((c, i) => {
+                    c.style.height = originalStyles[i].height;
+                    c.style.overflow = originalStyles[i].overflow;
+                });
 
                 doc.save(safeFilename);
             } catch (err) {
