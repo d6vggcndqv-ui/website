@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <script src="main.js"></script>
+    <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+    <style>
+        /* ── Auth gate (same pattern as dashboard.html) ───────────────── */
+        #auth-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
+        #auth-screen h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+        #auth-form { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
+        #auth-form input { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; outline: none; }
+        #auth-form input:focus { border-color: #0057ff; }
+        #auth-form button { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px; background: #0057ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+        #auth-form button:hover { background: #0040cc; }
+        #auth-error { font-size: 13px; color: #dc2626; text-align: center; min-height: 18px; }
+
+        /* ── Airport hero (photo + logo + name) ───────────────────────── */
+        .portal-hero {
+            position: relative;
+            width: 100%;
+            max-width: 1100px;
+            margin: 0 auto 40px;
+            padding: 0 24px;
+        }
+        .portal-hero-img-wrap {
+            width: 100%;
+            height: 280px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #e8e8e8; /* fallback if photo hasn't been added yet */
+        }
+        .portal-hero-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .portal-hero-overlay {
+            position: absolute;
+            left: 24px;
+            bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 8px;
+        }
+        .portal-hero-overlay img {
+            height: 48px;
+            width: auto;
+            display: block;
+        }
+        /* ── Live map section ──────────────────────────────────────────── */
+        .portal-section {
+            width: 100%;
+            max-width: 1100px;
+            margin: 0 auto 48px;
+            padding: 0 24px;
+        }
+        .portal-section-header {
+            display: flex;
+            align-items: baseline;
+            gap: 14px;
+            margin-bottom: 12px;
+        }
+        .portal-section-header h2 {
+            margin: 0;
+            font-size: 1.3rem;
+        }
+        .portal-map-section iframe {
+            width: 100%;
+            height: 500px;
+            border: none;
+            border-radius: 8px;
+        }
+
+        /* ── Snapshot metric cards (same visual language as dashboard.html's .metric-card) ─ */
+        .snapshot-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+        .snapshot-card {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 16px 18px;
+        }
+        .snapshot-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .snapshot-value {
+            font-size: 26px;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .portal-hero-img-wrap { height: 180px; }
+            .portal-hero-overlay { left: 12px; bottom: 12px; padding: 8px 14px; gap: 10px; }
+            .portal-hero-overlay img { height: 34px; }
+            .portal-map-section iframe { height: 320px; }
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-logo">
+            <a href="https://www.fl-technologies.com" target="_blank">
+                <img src="logo.png" alt="Logo">
+            </a>
+        </div>
+
+        <!-- PORTAL NAV — keep identical across portal.html, dashboard.html, flighthistory.html, landingfees.html, noiseabatement.html -->
+        <ul class="nav-links">
+            <li><a href="portal.html">Home</a></li>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="flighthistory.html">Flight History</a></li>
+            <li><a href="landingfees.html">Landing Fees</a></li>
+            <li><a href="noiseabatement.html">Noise Abatement</a></li>
+        </ul>
+        <a class="nav-btn-secondary" href="#" onclick="if(window._authSignOut){window._authSignOut();} window.location.href='index.html'; return false;">Logout</a>
+    </nav>
+
+    <main>
+
+        <!-- Auth screen -->
+        <div id="auth-screen">
+            <h2>Sign-In</h2>
+            <form id="auth-form" onsubmit="return false;">
+                <input type="email" id="auth-email" placeholder="Email" required autocomplete="email">
+                <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
+                <button type="button" id="auth-submit" onclick="window._authSignIn()">Sign-In</button>
+                <div id="auth-error"></div>
+            </form>
+            <p style="text-align:center;font-size:13px;color:#666;margin-top:16px;">
+                Don't have an account? <a href="register.html?from=portal.html" style="color:#0057ff;text-decoration:none;font-weight:500;">Create one</a>
+            </p>
+        </div>
+
+        <!-- Main content (hidden until authenticated) -->
+        <div id="main-content" style="display:none;">
+
+            <div class="portal-hero">
+                <div class="portal-hero-img-wrap">
+                    <img id="portal-hero-img" src="" alt="" onerror="this.style.display='none';">
+                </div>
+                <div class="portal-hero-overlay">
+                    <img id="portal-logo-img" src="" alt="" onerror="this.style.display='none';">
+                </div>
+            </div>
+
+            <section class="portal-section portal-map-section">
+                <div class="portal-section-header">
+                    <h2>Live Map</h2>
+                    <a id="portal-map-fullscreen" class="map-link" href="#" target="_blank">Fullscreen</a>
+                </div>
+                <iframe id="portal-map-iframe" src="" frameborder="0"></iframe>
+            </section>
+
+            <section class="portal-section portal-snapshot">
+                <div class="portal-section-header">
+                    <h2>All Time Operations Logged</h2>
+                </div>
+                <div class="snapshot-metrics">
+                    <div class="snapshot-card"><div class="snapshot-label">Total</div><div class="snapshot-value" id="snap-total">—</div></div>
+                    <div class="snapshot-card"><div class="snapshot-label">Takeoffs</div><div class="snapshot-value" id="snap-takeoffs">—</div></div>
+                    <div class="snapshot-card"><div class="snapshot-label">Landings</div><div class="snapshot-value" id="snap-landings">—</div></div>
+                    <div class="snapshot-card"><div class="snapshot-label">Touch &amp; Gos</div><div class="snapshot-value" id="snap-tng">—</div></div>
+                </div>
+            </section>
+
+        </div> <!-- /main-content -->
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
+    </footer>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, query, where, getCountFromServer } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+            authDomain: "owd-data.firebaseapp.com",
+            projectId: "owd-data",
+            storageBucket: "owd-data.firebasestorage.app",
+            messagingSenderId: "912110224300",
+            appId: "1:912110224300:web:ba2b8073871ec023817009",
+            measurementId: "G-PHD4THC11M"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Repeatable per-airport metadata — add a new entry here when the next airport is ready, no markup changes needed.
+        const AIRPORT_INFO = {
+            pou: {
+                name: 'POU — Hudson Valley Regional',
+                hero: 'pou-hero.jpg',
+                logo: 'pou-logo.jpg',
+                mapUrl: 'https://map.fl-technologies-data.com/tar1090/'
+            }
+        };
+
+        // Matches the collection naming convention used in dashboard.html / flighthistory.html
+        const AIRPORT_COLLECTIONS = { pou: 'flights_pou' };
+        function getCollectionName(airport) {
+            return AIRPORT_COLLECTIONS[airport] || 'flights_' + airport;
+        }
+
+        async function loadSnapshot(airport) {
+            const collectionName = getCollectionName(airport);
+            const col = collection(db, collectionName);
+
+            const [totalSnap, takeoffSnap, landingSnap, tngSnap] = await Promise.all([
+                getCountFromServer(col),
+                getCountFromServer(query(col, where('event', '==', 'Takeoff'))),
+                getCountFromServer(query(col, where('event', '==', 'Landing'))),
+                getCountFromServer(query(col, where('event', '==', 'Touch and Go')))
+            ]);
+
+            document.getElementById('snap-total').textContent    = totalSnap.data().count.toLocaleString();
+            document.getElementById('snap-takeoffs').textContent = takeoffSnap.data().count.toLocaleString();
+            document.getElementById('snap-landings').textContent = landingSnap.data().count.toLocaleString();
+            document.getElementById('snap-tng').textContent      = tngSnap.data().count.toLocaleString();
+        }
+
+        function showAuth() {
+            document.getElementById('auth-screen').style.display = 'flex';
+            document.getElementById('main-content').style.display = 'none';
+        }
+        function hideAuth() {
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+        }
+
+        function renderAirport(code) {
+            const info = AIRPORT_INFO[code] || { name: code, hero: '', logo: '', mapUrl: 'https://map.fl-technologies-data.com/tar1090/' };
+            document.getElementById('portal-hero-img').src = info.hero;
+            document.getElementById('portal-hero-img').style.display = '';
+            document.getElementById('portal-hero-img').alt = info.name + ' photo';
+            document.getElementById('portal-logo-img').src = info.logo;
+            document.getElementById('portal-logo-img').style.display = '';
+            document.getElementById('portal-logo-img').alt = info.name + ' logo';
+            document.getElementById('portal-map-iframe').src = info.mapUrl;
+            document.getElementById('portal-map-fullscreen').href = info.mapUrl;
+        }
+
+        async function initUser(user) {
+            const snap = await getDoc(doc(db, 'Users', user.uid));
+            if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
+            const profile = snap.data();
+
+            // Airport selector removed for now since only POU exists — re-add the
+            // admin branch (select dropdown + AIRPORT_INFO options) once a second
+            // airport is ready. For now everyone lands on POU.
+            const airport = profile.airport || 'pou';
+            renderAirport(airport);
+            loadSnapshot(airport);
+
+            hideAuth();
+        }
+
+        window._authSignIn = async () => {
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            document.getElementById('auth-error').textContent = '';
+            try { await signInWithEmailAndPassword(auth, email, password); }
+            catch (e) { document.getElementById('auth-error').textContent = 'Invalid email or password.'; }
+        };
+
+        window._authSignOut = () => { auth.signOut(); };
+
+        onAuthStateChanged(auth, user => { if (user) { initUser(user); } else { showAuth(); } });
+    </script>
+
+</body>
+</html>

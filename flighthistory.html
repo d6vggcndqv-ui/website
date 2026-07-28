@@ -136,16 +136,15 @@
             </a>
         </div>
         
-        <!-- Make sure this is the same list in every HTML file -->
-        <ul class="nav-links"> <!-- Add links to different pages on the site to this list-->
-            <li><a href="index.html">Home</a></li>
-            <li><a href="livemap.html">Live Map</a></li>
+        <!-- PORTAL NAV — keep identical across portal.html, dashboard.html, flighthistory.html, landingfees.html, noiseabatement.html -->
+        <ul class="nav-links">
+            <li><a href="portal.html">Home</a></li>
+            <li><a href="dashboard.html">Dashboard</a></li>
             <li><a href="flighthistory.html">Flight History</a></li>
-            <li><a href="dashboard.html"> Dashboard</a></li>
             <li><a href="landingfees.html">Landing Fees</a></li>
-            <li><a href="noiseinquiry.html">Noise Inquiry</a></li>
             <li><a href="noiseabatement.html">Noise Abatement</a></li>
         </ul>
+        <a class="nav-btn-secondary" href="#" onclick="if(window._authSignOut){window._authSignOut();} window.location.href='index.html'; return false;">Logout</a>
     </nav>
 
     <main>

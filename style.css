@@ -9,10 +9,14 @@ html{
     top: 0;
     left: 0;
     width: 100%;
+    box-sizing: border-box; /* keeps padding INSIDE the 100% width instead of adding to it, which was pushing content off-screen to the right */
     background-color: #fff;
     padding: 12px 30px;
     display: flex;
     align-items: center;
+    justify-content: space-between; /* with 3 flex children (logo, nav-links, button) this makes the logo-to-links gap equal to the links-to-button gap */
+    flex-wrap: wrap; /* wraps nav items to a new line instead of overflowing/clipping */
+    row-gap: 8px;
     z-index: 1000; /* ensures navbar is above other content */
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* adds a subtle shadow for depth */
 }
@@ -42,9 +46,18 @@ main{
 .nav-links{ /* styles for the navigation links container */
     display: flex; /* arranges links in a row */
     gap: clamp(16px, 2.5vw, 60px); /* adds space between links */
-    margin-left: -25px; /* pushes links to the right */
-    margin-right: auto; /* centers the links horizontally */
     list-style: none; /* removes default list styling */
+}
+
+/* Public nav only (index.html, livemap.html, noiseinquiry.html) — centers the
+   3 links in the full navbar width and gives them their own spacing, independent
+   of the portal nav's .nav-links gap above. .navbar is position:fixed, which
+   already establishes the containing block needed for this to center correctly. */
+.nav-links-public {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    gap: clamp(30px, 6vw, 90px);
 }
 
 .nav-links li a{ /* styles for the navigation links */
@@ -58,6 +71,45 @@ main{
 
 .nav-links a:hover{
     color: #1867bc; /* changes link color on hover */
+}
+
+/* Portal / Logout call-to-action buttons (sibling to .nav-links, not part of it) */
+.nav-btn-primary,
+.nav-btn-secondary {
+    display: inline-block;
+    text-decoration: none;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 8px 20px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    cursor: pointer;
+}
+
+/* Portal button — filled, sits on public pages */
+.nav-btn-primary {
+    background-color: #0057ff;
+    color: #fff;
+    border: 1px solid #0057ff;
+}
+
+.nav-btn-primary:hover {
+    background-color: #0046cc;
+    border-color: #0046cc;
+}
+
+/* Logout button — outline, sits on portal pages */
+.nav-btn-secondary {
+    background-color: transparent;
+    color: #333;
+    border: 1px solid #ccc;
+}
+
+.nav-btn-secondary:hover {
+    background-color: #f1f1f1;
+    border-color: #999;
 }
 
 h1{
@@ -521,9 +573,21 @@ button[type="submit"]:hover {
         justify-content: center;
         margin: 0;
     }
+
+    .nav-links-public {
+        position: static;
+        transform: none;
+        gap: 16px;
+    }
  
     .nav-links li a {
         font-size: 0.9rem;
+    }
+
+    .nav-btn-primary,
+    .nav-btn-secondary {
+        font-size: 0.9rem;
+        padding: 6px 14px;
     }
  
     body {
@@ -622,4 +686,3 @@ button[type="submit"]:hover {
         top: 4px;
     }
 }
-        

@@ -59,6 +59,14 @@
             text-transform: uppercase;
             letter-spacing: 0.04em;
         }
+        .chart-range-label {
+            font-size: 11px;
+            font-weight: 500;
+            color: #999;
+            text-transform: none;
+            letter-spacing: normal;
+            margin-left: 8px;
+        }
         .chart-card.full-width {
             grid-column: 1 / -1;
         }
@@ -139,16 +147,15 @@
             </a>
         </div>
         
-        <!-- Make sure this is the same list in every HTML file -->
-        <ul class="nav-links"> <!-- Add links to different pages on the site to this list-->
-            <li><a href="index.html">Home</a></li>
-            <li><a href="livemap.html">Live Map</a></li>
+        <!-- PORTAL NAV — keep identical across portal.html, dashboard.html, flighthistory.html, landingfees.html, noiseabatement.html -->
+        <ul class="nav-links">
+            <li><a href="portal.html">Home</a></li>
+            <li><a href="dashboard.html">Dashboard</a></li>
             <li><a href="flighthistory.html">Flight History</a></li>
-            <li><a href="dashboard.html"> Dashboard</a></li>
             <li><a href="landingfees.html">Landing Fees</a></li>
-            <li><a href="noiseinquiry.html">Noise Inquiry</a></li>
             <li><a href="noiseabatement.html">Noise Abatement</a></li>
         </ul>
+        <a class="nav-btn-secondary" href="#" onclick="if(window._authSignOut){window._authSignOut();} window.location.href='index.html'; return false;">Logout</a>
     </nav>
 
     <main>
@@ -209,53 +216,21 @@
             <div class="charts-grid">
             
                 <div class="chart-card">
-                <h2>Operations by day</h2>
-                <div class="dash-legend">
-                    <span><span class="swatch" style="background:#3b82f6"></span>Takeoff</span>
-                    <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
-                    <span><span class="swatch" style="background:#f59e0b"></span>Touch &amp; Go</span>
-                </div>
-                <div style="position:relative;width:100%;height:220px;">
-                    <canvas id="chart-by-day" role="img" aria-label="Stacked bar chart of operations by day">Operations by day.</canvas>
-                </div>
-                </div>
-            
-                <div class="chart-card">
-                <h2>Operation Activity Breakdown</h2>
-                <div class="dash-legend">
-                    <span><span class="swatch" style="background:#3b82f6"></span>Takeoff</span>
-                    <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
-                    <span><span class="swatch" style="background:#f59e0b"></span>Touch &amp; Go</span>
-                </div>
-                <div style="position:relative;width:100%;height:220px;">
-                    <canvas id="chart-events" role="img" aria-label="Donut chart of event type breakdown">Event type breakdown.</canvas>
-                </div>
-                </div>
-            
-                <div class="chart-card">
-                <h2>AAC/ADG</h2>
-                <div class="dash-legend" id="cat-legend"></div>
-                <div style="position:relative;width:100%;height:220px;">
-                    <canvas id="chart-categories" role="img" aria-label="Donut chart of aircraft categories">Aircraft category breakdown.</canvas>
-                </div>
-                </div>
-
-                <div class="chart-card">
-                <h2>AAC/ADG Count</h2>
+                <h2>AAC/ADG Count<span class="chart-range-label"></span></h2>
                 <div style="position:relative;width:100%;height:220px;">
                     <canvas id="chart-cat-bar" role="img" aria-label="Horizontal bar chart of operation counts by aircraft category">Aircraft category counts.</canvas>
                 </div>
                 </div>
             
                 <div class="chart-card">
-                <h2>Busiest hours</h2>
+                <h2>Busiest hours<span class="chart-range-label"></span></h2>
                 <div style="position:relative;width:100%;height:220px;">
                     <canvas id="chart-hours" role="img" aria-label="Bar chart of operations by hour of day">Operations by hour of day.</canvas>
                 </div>
                 </div>
 
                 <div class="chart-card">
-                <h2>Operations by runway</h2>
+                <h2>Operations by runway<span class="chart-range-label"></span></h2>
                 <div class="dash-legend">
                     <span><span class="swatch" style="background:#3b82f6"></span>Takeoff</span>
                     <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
@@ -267,19 +242,7 @@
                 </div>
 
                 <div class="chart-card">
-                <h2>Operations by category</h2>
-                <div class="dash-legend">
-                    <span><span class="swatch" style="background:#3b82f6"></span>Takeoff</span>
-                    <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
-                    <span><span class="swatch" style="background:#f59e0b"></span>Touch &amp; Go</span>
-                </div>
-                <div style="position:relative;width:100%;height:220px;">
-                    <canvas id="chart-category-type" role="img" aria-label="Bar chart of operations by category">Operations by category.</canvas>
-                </div>
-                </div>
-
-                <div class="chart-card">
-                <h2>Operations by class</h2>
+                <h2>Operations by class<span class="chart-range-label"></span></h2>
                 <div class="dash-legend">
                     <span><span class="swatch" style="background:#3b82f6"></span>Takeoff</span>
                     <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
@@ -287,6 +250,18 @@
                 </div>
                 <div style="position:relative;width:100%;height:220px;">
                     <canvas id="chart-class-type" role="img" aria-label="Bar chart of operations by class">Operations by class.</canvas>
+                </div>
+                </div>
+
+                <div class="chart-card" id="card-by-day">
+                <h2>Operations by day<span class="chart-range-label"></span></h2>
+                <div class="dash-legend">
+                    <span><span class="swatch" style="background:#3b82f6"></span>Takeoff</span>
+                    <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
+                    <span><span class="swatch" style="background:#f59e0b"></span>Touch &amp; Go</span>
+                </div>
+                <div style="position:relative;width:100%;height:220px;">
+                    <canvas id="chart-by-day" role="img" aria-label="Stacked bar chart of operations by day">Operations by day.</canvas>
                 </div>
                 </div>
             
@@ -457,77 +432,63 @@
                 if (byDay[key]) byDay[key][r.event] = (byDay[key][r.event] || 0) + 1;
             });
             charts['day'] = new Chart(document.getElementById('chart-by-day'), {
+                plugins: [ChartDataLabels],
                 type: 'bar',
                 data: {
                     labels,
                     datasets: [
-                        { label: 'Takeoff',      data: labels.map(l => byDay[l]?.Takeoff || 0),          backgroundColor: COLORS.takeoff },
-                        { label: 'Landing',      data: labels.map(l => byDay[l]?.Landing || 0),          backgroundColor: COLORS.landing },
-                        { label: 'Touch and Go', data: labels.map(l => byDay[l]?.['Touch and Go'] || 0), backgroundColor: COLORS.tng     }
+                        { label: 'Takeoff',      data: labels.map(l => byDay[l]?.Takeoff || 0),          backgroundColor: COLORS.takeoff, stack: 'a' },
+                        { label: 'Landing',      data: labels.map(l => byDay[l]?.Landing || 0),          backgroundColor: COLORS.landing, stack: 'a' },
+                        { label: 'Touch and Go', data: labels.map(l => byDay[l]?.['Touch and Go'] || 0), backgroundColor: COLORS.tng,     stack: 'a' }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    layout: { padding: { top: 20 } },
-                    animation: {
-                        onComplete: function() {
-                            const chart = this;
-                            const ctx = chart.ctx;
-                            ctx.font = '10px DM Sans';
-                            ctx.fillStyle = '#444';
-                            ctx.textAlign = 'center';
-                            chart.data.datasets.forEach((dataset, i) => {
-                                chart.getDatasetMeta(i).data.forEach((bar, j) => {
-                                    const value = dataset.data[j];
-                                    if (value > 0) ctx.fillText(value, bar.x, bar.y - 4);
-                                });
-                            });
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            display: (ctx) => ctx.datasetIndex === 2,
+                            anchor: 'end',
+                            align: 'end',
+                            formatter: (value, ctx) => {
+                                return ctx.chart.data.datasets.reduce((sum, ds) => sum + (ds.data[ctx.dataIndex] || 0), 0);
+                            },
+                            font: { size: 11 },
+                            color: '#444'
                         }
                     },
+                    layout: { padding: { top: 24 } },
                     scales: {
-                        x: { grid: { display: false }, ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
-                        y: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } }
+                        x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+                        y: { stacked: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } }
                     }
                 }
             });
         }
     
-        function buildEventChart(rows) {
-            destroyChart('event');
-            const takeoffs = rows.filter(r => r.event === 'Takeoff').length;
-            const landings = rows.filter(r => r.event === 'Landing').length;
-            const tng      = rows.filter(r => r.event === 'Touch and Go').length;
-            charts['event'] = new Chart(document.getElementById('chart-events'), {
-                type: 'doughnut',
-                data: {
-                    labels: ['Takeoff', 'Landing', 'Touch and Go'],
-                    datasets: [{ data: [takeoffs, landings, tng], backgroundColor: [COLORS.takeoff, COLORS.landing, COLORS.tng], borderWidth: 0 }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } }
-            });
-        }
-    
-        function buildCategoryChart(rows) {
-            destroyChart('cat');
-            const counts = {};
-            rows.forEach(r => {
-                if (r.aircraftType === 'Rotorcraft' || r.aircraftType === 'n/a') return;
-                counts[r.aircraftType] = (counts[r.aircraftType] || 0) + 1;
-            });
-            const labels = Object.keys(counts);
-            const data   = labels.map(l => counts[l]);
-            const colors = labels.map(l => CAT_COLORS[l] || '#888888');
-            const legend = document.getElementById('cat-legend');
-            legend.innerHTML = labels.map((l, i) =>
-                `<span><span class="swatch" style="background:${colors[i]}"></span>${l} ${Math.round(counts[l]/rows.length*100)}%</span>`
-            ).join('');
-            charts['cat'] = new Chart(document.getElementById('chart-categories'), {
-                type: 'doughnut',
-                data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
-                options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } }
-            });
-        }
+        const AAC_ADG_THRESHOLD = 500;
+        const thresholdLinePlugin = {
+            id: 'thresholdLine',
+            afterDraw(chart) {
+                const xScale = chart.scales.x;
+                if (!xScale || xScale.max < AAC_ADG_THRESHOLD) return;
+                const ctx = chart.ctx;
+                const xPixel = xScale.getPixelForValue(AAC_ADG_THRESHOLD);
+                const { top, bottom } = chart.chartArea;
+                ctx.save();
+                ctx.strokeStyle = 'rgba(220, 38, 38, 0.35)';
+                ctx.lineWidth = 1.25;
+                ctx.beginPath();
+                ctx.moveTo(xPixel, top);
+                ctx.lineTo(xPixel, bottom);
+                ctx.stroke();
+                ctx.font = '10px DM Sans, sans-serif';
+                ctx.fillStyle = 'rgba(220, 38, 38, 0.7)';
+                ctx.textAlign = 'center';
+                ctx.fillText('500', xPixel, top - 4);
+                ctx.restore();
+            }
+        };
 
         function buildCatBarChart(rows) {
             destroyChart('catbar');
@@ -541,7 +502,7 @@
             const data   = sorted.map(e => e[1]);
             const colors = labels.map(l => CAT_COLORS[l] || '#888888');
             charts['catbar'] = new Chart(document.getElementById('chart-cat-bar'), {
-                plugins: [ChartDataLabels],
+                plugins: [ChartDataLabels, thresholdLinePlugin],
                 type: 'bar',
                 data: {
                     labels,
@@ -561,7 +522,7 @@
                             formatter: (value) => value
                         }
                     },
-                    layout: { padding: { right: 30 } },
+                    layout: { padding: { right: 30, top: 14 } },
                     scales: {
                         x: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } },
                         y: { grid: { display: false } }
@@ -645,53 +606,6 @@
             });
         }
 
-        function buildCategoryTypeChart(rows) {
-            destroyChart('categorytype');
-            const labels = ['Airplane', 'Rotorcraft'];
-            const counts = {
-                Airplane:   { Takeoff: 0, Landing: 0, 'Touch and Go': 0 },
-                Rotorcraft: { Takeoff: 0, Landing: 0, 'Touch and Go': 0 }
-            };
-            rows.forEach(r => {
-                if (r.category && counts[r.category]) {
-                    counts[r.category][r.event] = (counts[r.category][r.event] || 0) + 1;
-                }
-            });
-            charts['categorytype'] = new Chart(document.getElementById('chart-category-type'), {
-                plugins: [ChartDataLabels],
-                type: 'bar',
-                data: {
-                    labels,
-                    datasets: [
-                        { label: 'Takeoff',      data: labels.map(l => counts[l].Takeoff),         backgroundColor: COLORS.takeoff, stack: 'a' },
-                        { label: 'Landing',      data: labels.map(l => counts[l].Landing),         backgroundColor: COLORS.landing, stack: 'a' },
-                        { label: 'Touch and Go', data: labels.map(l => counts[l]['Touch and Go']), backgroundColor: COLORS.tng,     stack: 'a' }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        datalabels: {
-                            display: (ctx) => ctx.datasetIndex === 2,
-                            anchor: 'end',
-                            align: 'end',
-                            formatter: (value, ctx) => {
-                                return ctx.chart.data.datasets.reduce((sum, ds) => sum + (ds.data[ctx.dataIndex] || 0), 0);
-                            },
-                            font: { size: 11 },
-                            color: '#444'
-                        }
-                    },
-                    layout: { padding: { top: 24 } },
-                    scales: {
-                        x: { stacked: true, grid: { display: false } },
-                        y: { stacked: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } }
-                    }
-                }
-            });
-        }
-
         function buildClassTypeChart(rows) {
             destroyChart('classtype');
             const labels = ['Single-Engine', 'Multi-Engine', 'Turbine', 'Rotorcraft'];
@@ -741,18 +655,38 @@
             });
         }
 
+        function getRangeLabel() {
+            const picker = document.getElementById('dash-date-picker').value;
+            if (picker) {
+                const d = new Date(picker + 'T12:00:00');
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            }
+            const activeBtn = document.querySelector('.range-btn.active');
+            return activeBtn ? activeBtn.textContent : 'Today';
+        }
+
+        function updateChartRangeLabels() {
+            const label = '(' + getRangeLabel() + ')';
+            document.querySelectorAll('.chart-range-label').forEach(el => el.textContent = label);
+        }
+
+        function updateByDayCardWidth(days) {
+            const card = document.getElementById('card-by-day');
+            const isWide = days === 0 || days >= 30;
+            card.classList.toggle('full-width', isWide);
+        }
+
         async function refresh(days) {
             const rows = await loadData(days);
             updateMetrics(rows);
             buildDayChart(rows, days);
-            buildEventChart(rows);
-            buildCategoryChart(rows);
             buildHoursChart(rows);
             buildCallsignChart(rows);
             buildRunwayChart(rows);
             buildCatBarChart(rows);
-            buildCategoryTypeChart(rows);
             buildClassTypeChart(rows);
+            updateChartRangeLabels();
+            updateByDayCardWidth(days);
         }
     
         async function refreshForDate(dateStr) {
@@ -768,14 +702,13 @@
             const rows = snap.docs.map(d => d.data());
             updateMetrics(rows);
             buildDayChart(rows, 1, dateStr);
-            buildEventChart(rows);
-            buildCategoryChart(rows);
             buildHoursChart(rows);
             buildCallsignChart(rows);
             buildRunwayChart(rows);
             buildCatBarChart(rows);
-            buildCategoryTypeChart(rows);
             buildClassTypeChart(rows);
+            updateChartRangeLabels();
+            updateByDayCardWidth(1);
         }
     
         document.querySelectorAll('.range-btn').forEach(btn => {
@@ -864,24 +797,40 @@
                 let rowMaxH = 0;
 
                 for (const card of cards) {
-                    const canvas = await html2canvas(card, { scale: 2, useCORS: true, logging: false });
-                    const imgH = (canvas.height / canvas.width) * colWidth;
+                    const isFullWidth = card.classList.contains('full-width');
 
-                    // Start a new page if this card would overflow the current row/page
+                    // If a full-width card appears mid-row, close out the current row first
+                    if (isFullWidth && col !== 0) {
+                        y += rowMaxH + gap;
+                        col = 0;
+                        rowMaxH = 0;
+                    }
+
+                    const targetWidth = isFullWidth ? contentWidth : colWidth;
+                    const canvas = await html2canvas(card, { scale: 2, useCORS: true, logging: false });
+                    const imgH = (canvas.height / canvas.width) * targetWidth;
+
+                    // Start a new page if this row would overflow the current page
                     if (col === 0 && y + imgH > pageHeight - margin) {
                         doc.addPage();
                         y = margin;
                     }
 
                     const x = margin + col * (colWidth + gap);
-                    doc.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', x, y, colWidth, imgH);
-                    rowMaxH = Math.max(rowMaxH, imgH);
+                    doc.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', x, y, targetWidth, imgH);
 
-                    col++;
-                    if (col === columns) {
+                    if (isFullWidth) {
+                        y += imgH + gap;
                         col = 0;
-                        y += rowMaxH + gap;
                         rowMaxH = 0;
+                    } else {
+                        rowMaxH = Math.max(rowMaxH, imgH);
+                        col++;
+                        if (col === columns) {
+                            col = 0;
+                            y += rowMaxH + gap;
+                            rowMaxH = 0;
+                        }
                     }
                 }
 
