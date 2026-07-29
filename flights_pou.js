@@ -57,6 +57,7 @@ function isOnGround(alt) {
 
 async function logFlight(registration, aacAdg, category, aircraftClass, event, runway = "n/a") {
   try {
+    if (category === "Rotorcraft") runway = "n/a";
     const now = new Date();
     const cutoff = new Date(now.getTime() - COOLDOWN_MS).toISOString();
     const dedupCheck = query(
