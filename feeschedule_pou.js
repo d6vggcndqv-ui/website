@@ -53,6 +53,7 @@ const FEE_TIERS_POU = {
   'SF50':  { tier: 'Very Light Jet',   fee: 35 },
   'HA4T':  { tier: 'Very Light Jet',   fee: 35 },
   'EA50':  { tier: 'Very Light Jet',   fee: 35 },
+  'EPIC':  { tier: 'Very Light Jet',   fee: 35 },
   'C501':  { tier: 'Light Jet',   fee: 40 },
   'C510':  { tier: 'Light Jet',   fee: 40 },
   'C525':  { tier: 'Light Jet',   fee: 40 },
