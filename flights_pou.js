@@ -466,6 +466,168 @@ ${linkLines}`;
 })();
 
 
+// ════════════════════════════════════════════════════════════════════
+// END OF MONTH NOISE INQUIRY SUMMARY  —  NEW FEATURE (additive)
+// Runs at 11:59 PM on the last day of each month. If more than one
+// noise inquiry was submitted that month for POU, sends a digest email
+// via Web3Forms. Reuses the same "noise_inquiries" collection as the
+// daily summary above; does not modify or depend on that code.
+// ════════════════════════════════════════════════════════════════════
+
+async function sendMonthlyNoiseSummary() {
+  try {
+    const now = new Date();
+    const monthNum = now.getMonth(); // 0-indexed
+    const year = now.getFullYear();
+    const monthName = now.toLocaleString('en-US', { month: 'long' });
+
+    // ── Query noise_inquiries for this month's POU submissions ────────
+    // "date" is stored as "MM/DD/YYYY", so match on the "MM/" and "/YYYY" parts.
+    const monthPadded = String(monthNum + 1).padStart(2, '0');
+    const q = query(
+      collection(db, "noise_inquiries"),
+      where("airport", "==", "POU — Hudson Valley Regional")
+    );
+    const snapshot = await getDocs(q);
+
+    // Filter client-side for this month/year, since Firestore can't do
+    // substring matching on the "MM/DD/YYYY" string field.
+    const submissions = snapshot.docs
+      .map(d => d.data())
+      .filter(s => {
+        if (!s.date) return false;
+        const parts = s.date.split('/'); // [MM, DD, YYYY]
+        return parts.length === 3 && parts[0] === monthPadded && parts[2] === String(year);
+      });
+
+    if (submissions.length <= 1) {
+      console.log(`[MonthlyNoiseSummary] Only ${submissions.length} submission(s) this month — no summary needed.`);
+      return;
+    }
+
+    // ── Tally complaint types across the whole month ──────────────────
+    const typeCounts = {};
+    submissions.forEach(s => {
+      (s.complaint_types || []).forEach(t => {
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+      });
+    });
+    const typeLines = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => `  • ${type} — ${count} report${count > 1 ? 's' : ''}`)
+      .join('\n');
+
+    // ── Submissions per day (busiest days first) ───────────────────────
+    const dayCounts = {};
+    submissions.forEach(s => {
+      if (s.date) dayCounts[s.date] = (dayCounts[s.date] || 0) + 1;
+    });
+    const dayLines = Object.entries(dayCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([date, count]) => `  • ${date} — ${count} submission${count > 1 ? 's' : ''}`)
+      .join('\n');
+
+    // ── Unique addresses, ranked by number of submissions ──────────────
+    const addressCounts = {};
+    submissions.forEach(s => {
+      if (s.address) addressCounts[s.address] = (addressCounts[s.address] || 0) + 1;
+    });
+    const addressLines = Object.entries(addressCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([address, count]) => `  • ${address} — ${count} submission${count > 1 ? 's' : ''}`)
+      .join('\n');
+
+    // ── Comments (non-empty only) ──────────────────────────────────────
+    const comments = submissions.map(s => s.comments).filter(Boolean);
+    const commentLines = comments.length > 0
+      ? comments.map(c => `  • "${c}"`).join('\n')
+      : '  None';
+
+    // ── Noise abatement links ───────────────────────────────────────────
+    const linkLines = submissions.some(s => s.noise_abatement_link)
+      ? submissions
+          .filter(s => s.noise_abatement_link)
+          .map((s, i) => `  • Event ${i + 1} (${s.date || 'Unknown date'}, ${s.event_time || 'Unknown time'}): ${s.noise_abatement_link}`)
+          .join('\n')
+      : '  None';
+
+    // ── Build email body ───────────────────────────────────────────────
+    const body = `Noise Inquiry Monthly Summary — ${monthName} ${year}
+Airport: POU — Hudson Valley Regional
+Total Submissions: ${submissions.length}
+
+COMPLAINT TYPES:
+${typeLines}
+
+SUBMISSIONS BY DAY:
+${dayLines}
+
+LOCATIONS REPORTED FROM:
+${addressLines}
+
+COMMENTS:
+${commentLines}
+
+NOISE ABATEMENT LINKS:
+${linkLines}`;
+
+    // ── Send via Web3Forms ─────────────────────────────────────────────
+    const formData = new FormData();
+    formData.append('access_key', '44fd3732-39ce-45f0-b09c-9e1ae5ab4dae');
+    formData.append('subject', `Noise Inquiry Monthly Summary — POU — ${monthName} ${year}`);
+    formData.append('message', body);
+
+    const response = await fetch('https://api.web3forms.com/submit', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (response.ok) {
+      console.log('[MonthlyNoiseSummary] Summary email sent successfully.');
+    } else {
+      console.error('[MonthlyNoiseSummary] Web3Forms submission failed:', response.status);
+    }
+
+  } catch (err) {
+    console.error('[MonthlyNoiseSummary] Error sending summary:', err);
+  }
+}
+
+// ── Schedule monthly summary for 11:59 PM on the last day of the month ──
+(function scheduleMonthlyNoiseSummary() {
+  function isLastDayOfMonth(d) {
+    const tomorrow = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    return tomorrow.getMonth() !== d.getMonth();
+  }
+
+  function msUntilNext1159PM(from) {
+    const target = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 23, 59, 0, 0);
+    let ms = target - from;
+    if (ms < 0) ms += 24 * 60 * 60 * 1000;
+    return ms;
+  }
+
+  function scheduleNext() {
+    const now = new Date();
+    const msUntil1159 = msUntilNext1159PM(now);
+    const fireAt = new Date(now.getTime() + msUntil1159);
+
+    if (isLastDayOfMonth(fireAt)) {
+      console.log(`[MonthlyNoiseSummary] Monthly summary scheduled in ${Math.round(msUntil1159 / 60000)} minutes (last day of month).`);
+      setTimeout(() => {
+        sendMonthlyNoiseSummary();
+        scheduleNext(); // queue up next month's check after firing
+      }, msUntil1159);
+    } else {
+      // Not the last day yet — recheck at the next 11:59 PM without firing.
+      setTimeout(scheduleNext, msUntil1159);
+    }
+  }
+
+  scheduleNext();
+})();
+
+
 /* =====================================================================
    FLIGHT PATH CAPTURE  —  NEW FEATURE  (additive; added 2026-07-17)
    ---------------------------------------------------------------------
