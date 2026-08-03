@@ -119,7 +119,7 @@ async function fetchAndDetect() {
         if (flight.category === "A7") {
           aircraftTypeCache[flight.hex] = "n/a";
         } else {
-          aircraftTypeCache[flight.hex] = aircraftRegistry[flight.hex.toLowerCase()] || "Unknown";
+          aircraftTypeCache[flight.hex] = (typeof aircraftRegistry !== "undefined" && aircraftRegistry[flight.hex.toLowerCase()]) || "Unknown";
         }
       }
       const aacAdg = aircraftTypeCache[flight.hex];
