@@ -47,8 +47,47 @@ async function findCameraEvent(registration, isoTimestamp, windowSeconds = 60) {
  * @returns {string} HTML string for the icon link
  */
 function cameraIconHtml(eventId) {
-    return `<a href="${CAMERA_API_BASE}/events/${eventId}/video?api_key=${CAMERA_API_KEY}" download title="Download footage" style="text-decoration:none;font-size:11px;color:#0057ff;margin-left:4px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M3 7h3l2-3h8l2 3h3v13H3z"></path><circle cx="12" cy="13" r="4"></circle></svg></a>`;
+function cameraIconHtml(eventId) {
+    return `<a href="#" data-camera-download="${eventId}" title="Download footage" style="text-decoration:none;font-size:11px;color:#0057ff;margin-left:4px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M3 7h3l2-3h8l2 3h3v13H3z"></path><circle cx="12" cy="13" r="4"></circle></svg></a>`;
 }
+
+/**
+ * Fetches a camera video as a blob (bypassing the cross-origin limitation on the
+ * `download` attribute) and triggers a browser save dialog for it.
+ * @param {number|string} eventId
+ * @param {HTMLElement} linkEl - the clicked icon link, used to show a temporary "Downloading..." state
+ */
+async function downloadCameraVideo(eventId, linkEl) {
+    const originalHtml = linkEl.innerHTML;
+    linkEl.innerHTML = '⏳';
+    try {
+        const res = await fetch(`${CAMERA_API_BASE}/events/${eventId}/video?api_key=${CAMERA_API_KEY}`);
+        if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `event-${eventId}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+        console.warn('Camera video download failed:', e);
+        alert('Could not download footage. Please try again.');
+    } finally {
+        linkEl.innerHTML = originalHtml;
+    }
+}
+
+// Event delegation: handles clicks on any camera download icon, since icons
+// are injected dynamically after initial page render.
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('[data-camera-download]');
+    if (!link) return;
+    e.preventDefault();
+    downloadCameraVideo(link.getAttribute('data-camera-download'), link);
+});
 
 /**
  * For each row in a rendered page, kicks off a camera lookup and fills in
