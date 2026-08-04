@@ -29,14 +29,21 @@ async function findCameraEvent(registration, isoTimestamp, windowSeconds = 60) {
         api_key:        CAMERA_API_KEY,
     });
 
-    try {
-        const res = await fetch(`${CAMERA_API_BASE}/events?${params}`);
-        if (!res.ok) return null;
-        const data = await res.json();
-        return data.total > 0 ? data.events[0] : null;
-    } catch (e) {
-        console.warn('Camera lookup failed:', e);
-        return null;
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAYS_MS = [500, 1000]; // delay before attempt 2 and attempt 3
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+            const res = await fetch(`${CAMERA_API_BASE}/events?${params}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            return data.total > 0 ? data.events[0] : null;
+        } catch (e) {
+            const isLastAttempt = attempt === MAX_ATTEMPTS;
+            console.warn(`Camera lookup failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
+            if (isLastAttempt) return null;
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt - 1]));
+        }
     }
 }
 
@@ -47,7 +54,7 @@ async function findCameraEvent(registration, isoTimestamp, windowSeconds = 60) {
  * @returns {string} HTML string for the icon link
  */
 function cameraIconHtml(eventId) {
-    return `<a href="#" data-camera-download="${eventId}" title="Download footage" style="text-decoration:none;font-size:11px;color:#0057ff;margin-left:4px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M3 7h3l2-3h8l2 3h3v13H3z"></path><circle cx="12" cy="13" r="4"></circle></svg></a>`;
+    return `<a href="${CAMERA_API_BASE}/events/${eventId}/thumbnail?api_key=${CAMERA_API_KEY}" target="_blank" title="View photo" style="text-decoration:none;font-size:11px;color:#0057ff;margin-left:4px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M3 7h3l2-3h8l2 3h3v13H3z"></path><circle cx="12" cy="13" r="4"></circle></svg></a>`;
 }
 
 /**
@@ -81,12 +88,13 @@ async function downloadCameraVideo(eventId, linkEl) {
 
 // Event delegation: handles clicks on any camera download icon, since icons
 // are injected dynamically after initial page render.
-document.addEventListener('click', (e) => {
-    const link = e.target.closest('[data-camera-download]');
-    if (!link) return;
-    e.preventDefault();
-    downloadCameraVideo(link.getAttribute('data-camera-download'), link);
-});
+// TEMPORARILY DISABLED while testing plain-link behavior:
+// document.addEventListener('click', (e) => {
+//     const link = e.target.closest('[data-camera-download]');
+//     if (!link) return;
+//     e.preventDefault();
+//     downloadCameraVideo(link.getAttribute('data-camera-download'), link);
+// });
 
 /**
  * For each row in a rendered page, kicks off a camera lookup and fills in
