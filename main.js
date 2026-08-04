@@ -47,7 +47,6 @@ async function findCameraEvent(registration, isoTimestamp, windowSeconds = 60) {
  * @returns {string} HTML string for the icon link
  */
 function cameraIconHtml(eventId) {
-function cameraIconHtml(eventId) {
     return `<a href="#" data-camera-download="${eventId}" title="Download footage" style="text-decoration:none;font-size:11px;color:#0057ff;margin-left:4px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M3 7h3l2-3h8l2 3h3v13H3z"></path><circle cx="12" cy="13" r="4"></circle></svg></a>`;
 }
 
