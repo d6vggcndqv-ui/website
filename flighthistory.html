@@ -11,6 +11,9 @@
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
    <style>
+        .page-header-row { position:relative; text-align:center; margin-bottom:1rem; }
+        .page-header-row h1 { margin:0; }
+        #page-airport-logo { position:absolute; right:0; top:50%; transform:translateY(-50%); height:56px; width:auto; display:block; }
         .history-controls {
             display: flex;
             flex-wrap: wrap;
@@ -165,15 +168,14 @@
 
         <!-- Main content (hidden until authenticated) -->
         <div id="main-content" style="display:none;">
-        <h1>Flight History</h1>
+        <div class="page-header-row">
+            <h1 style="margin:0;">Flight History</h1>
+            <img id="page-airport-logo" src="" alt="" style="display:none;" onerror="this.style.display='none';">
+        </div>
 
         <div id="airport-selector">
             <span>Airport:</span>
             <select id="airport-select"></select>
-            <button id="btn-logout" onclick="window._authSignOut()">Sign Out</button>
-        </div>
-        <div id="user-signout" style="display:none; margin-bottom:1rem;">
-            <button onclick="window._authSignOut()" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Sign Out</button>
         </div>
 
         <section>
@@ -296,6 +298,14 @@
 
     const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou' };
     const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
+    // Matches portal.html's AIRPORT_INFO logo convention
+    const AIRPORT_LOGOS = { pou: 'pou-logo.jpg' };
+    function setAirportLogo(code) {
+        const img = document.getElementById('page-airport-logo');
+        const src = AIRPORT_LOGOS[code];
+        if (src) { img.src = src; img.style.display = ''; }
+        else { img.style.display = 'none'; }
+    }
     let currentCollection = 'flights';
 
     function getCollectionName(airport) {
@@ -326,10 +336,11 @@
                 const select = document.getElementById('airport-select');
                 select.innerHTML = Object.entries(AIRPORT_LABELS).map(([k,v]) => `<option value="${k}">${v}</option>`).join('');
                 currentCollection = getCollectionName(select.value);
-                select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); const { from, to } = todayRange(); loadAll(from, to); });
+                setAirportLogo(select.value);
+                select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); setAirportLogo(select.value); const { from, to } = todayRange(); loadAll(from, to); });
             } else {
                 currentCollection = getCollectionName(profile.airport);
-                document.getElementById('user-signout').style.display = 'block';
+                setAirportLogo(profile.airport);
             }
             console.log('[initUser] currentCollection:', currentCollection);
             hideAuth();
@@ -391,7 +402,7 @@
             <tr>
                 <td>${r.date}</td>
                 <td>${r.time}</td>
-                <td>${r.registration}</td>
+                <td>${r.registration}<span data-camera-slot="${r.docId}"></span></td>
                 <td><span class="badge ${badgeClass(r.event)}">${r.event}</span></td>
                 <td>${r.runway || 'n/a'}</td>
                 <td>${r.aircraftType}</td>
@@ -403,6 +414,10 @@
         btnPrev.disabled = currentPage <= 1;
         btnNext.disabled = currentPage >= totalPages;
         meta.textContent = `Showing ${filteredRows.length} result${filteredRows.length !== 1 ? 's' : ''}`;
+
+        if (currentCollection === 'flights_pou') {
+            attachCameraIcons(pageRows);
+        }
     }
     
     function applyFilters() {
@@ -441,7 +456,7 @@
         if (toISO)   constraints.push(where('timestamp', '<=', toISO));
         const q = query(collection(db, currentCollection), ...constraints);
         const snapshot = await getDocs(q);
-        allRows = snapshot.docs.map(d => d.data());
+        allRows = snapshot.docs.map(d => ({ ...d.data(), docId: d.id }));
         filteredRows = [...allRows];
         renderPage();
         } catch (err) {

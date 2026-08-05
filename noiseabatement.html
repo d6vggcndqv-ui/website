@@ -14,6 +14,9 @@
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
     <style>
+        .page-header-row { position:relative; text-align:center; }
+        .page-header-row h1 { margin:0; }
+        #page-airport-logo { position:absolute; right:0; top:50%; transform:translateY(-50%); height:56px; width:auto; display:block; }
         /* ── Controls ───────────────────────────────────────────────── */
         .viewer-controls {
             display: flex;
@@ -349,17 +352,14 @@
         <!-- Main content -->
         <div id="main-content" style="display:none;">
 
-            <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+            <div class="page-header-row" style="margin-bottom:4px;">
                 <h1 style="margin:0;">Noise Abatement</h1>
-                <button id="btn-logout" onclick="window._authSignOut()">Sign Out</button>
+                <img id="page-airport-logo" src="" alt="" style="display:none;" onerror="this.style.display='none';">
             </div>
 
             <div id="airport-selector">
                 <span>Airport:</span>
                 <select id="airport-select"></select>
-            </div>
-            <div id="user-signout" style="display:none;margin-bottom:1rem;">
-                <button onclick="window._authSignOut()" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Sign Out</button>
             </div>
             <p style="margin:0 0 1.5rem;color:#666;font-size:14px;">
                 View recorded flight paths.
@@ -383,7 +383,14 @@
                 <label>Registration (optional)
                     <input type="text" id="filter-cs" placeholder="e.g. N16002" style="width:130px;">
                 </label>
+                <label>Exceedance
+                    <select id="filter-exceedance" onchange="renderList()">
+                        <option value="all">All Tracks</option>
+                        <option value="exceedance">Exceedance Only</option>
+                    </select>
+                </label>
                 <button class="primary" id="btn-load" onclick="loadTracks()">Load Tracks</button>
+                <button id="btn-reset" onclick="resetFilters()">Reset</button>
                 <span id="load-status" style="font-size:13px;color:#666;align-self:center;"></span>
             </div>
 
@@ -477,8 +484,19 @@
         // ── Airport config ──────────────────────────────────────────────────
         const AIRPORT_COLLECTIONS = { owd: 'tracks_owd', pou: 'tracks_pou' };
         const AIRPORT_LABELS      = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
+        // Matches portal.html's AIRPORT_INFO logo convention
+        const AIRPORT_LOGOS = { pou: 'pou-logo.jpg' };
+        function setAirportLogo(code) {
+            const img = document.getElementById('page-airport-logo');
+            const src = AIRPORT_LOGOS[code];
+            if (src) { img.src = src; img.style.display = ''; }
+            else { img.style.display = 'none'; }
+        }
         const AIRPORT_COORDS      = { owd: [42.1905, -71.1728], pou: [41.6266, -73.8842] };
         const AIRPORT_ELEV        = { owd: 49, pou: 165 };   // field elevation MSL (ft)
+        // Matches TRACK_RADIUS_KM in each airport's tracking script (e.g. flights_pou.js).
+        // OWD value not yet confirmed — using POU's for now until flights_owd.js is checked.
+        const AIRPORT_TRACK_RADIUS_KM = { owd: 8.05, pou: 8.05 };
         const PATTERN_CEIL_AGL    = 1000;                     // low-alt dot threshold (ft AGL)
 
         let currentCollection = 'tracks_owd';
@@ -487,17 +505,24 @@
         function getFieldElev()   { return AIRPORT_ELEV[currentAirportKey]      || 49; }
         function getAirportLabel(){ return AIRPORT_LABELS[currentAirportKey]     || 'OWD — Norwood Memorial Airport'; }
         function getAirportCoord(){ return AIRPORT_COORDS[currentAirportKey]     || [42.1905, -71.1728]; }
+        function getTrackRadiusKm(){ return AIRPORT_TRACK_RADIUS_KM[currentAirportKey] || 8.05; }
         function patternCeilMSL() { return getFieldElev() + PATTERN_CEIL_AGL; }
 
         function switchAirport(key) {
             currentAirportKey  = key;
             currentCollection  = AIRPORT_COLLECTIONS[key] || 'tracks_owd';
+            setAirportLogo(key);
             // Re-centre the map and update its field marker
             if (map) {
                 map.setView(getAirportCoord(), 12);
                 if (fieldMarker) {
                     fieldMarker.setLatLng(getAirportCoord());
                     fieldMarker.setTooltipContent(getAirportLabel());
+                }
+                if (radiusCircle) {
+                    radiusCircle.setLatLng(getAirportCoord());
+                    radiusCircle.setRadius(getTrackRadiusKm() * 1000);
+                    radiusCircle.setTooltipContent(`${getTrackRadiusKm().toFixed(2)} km tracking radius`);
                 }
             }
             // Clear any currently displayed track
@@ -557,7 +582,7 @@
                     // Non-admin: lock to their assigned airport
                     currentAirportKey = profile.airport || 'owd';
                     currentCollection = AIRPORT_COLLECTIONS[currentAirportKey] || 'tracks_owd';
-                    document.getElementById('user-signout').style.display = 'block';
+                    setAirportLogo(currentAirportKey);
                 }
 
                 hideAuth();
@@ -609,7 +634,7 @@
         })();
 
         // ── Leaflet map ─────────────────────────────────────────────────────
-        let map, trackLayer, fieldMarker;
+        let map, trackLayer, fieldMarker, radiusCircle;
 
         function initMap() {
             if (map) return;
@@ -619,6 +644,13 @@
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
             trackLayer = L.layerGroup().addTo(map);
+
+            // Tracking radius — matches TRACK_RADIUS_KM in the airport's tracking script
+            radiusCircle = L.circle(getAirportCoord(), {
+                radius: getTrackRadiusKm() * 1000, // Leaflet circles use meters
+                color: '#0057ff', weight: 1.5, fillColor: '#0057ff', fillOpacity: 0.04,
+                dashArray: '4,4', interactive: false
+            }).bindTooltip(`${getTrackRadiusKm().toFixed(2)} km tracking radius`, { sticky: true }).addTo(map);
 
             // Field marker — stored so switchAirport() can reposition it
             fieldMarker = L.circleMarker(getAirportCoord(), {
@@ -699,21 +731,58 @@
             document.getElementById('stats-row').style.display = 'grid';
         }
 
+        // ── Reset filters to defaults ─────────────────────────────────────────
+        window.resetFilters = function resetFilters() {
+            document.getElementById('date-from').value = '';
+            document.getElementById('date-to').value   = '';
+            document.getElementById('time-from').value = '00:00';
+            document.getElementById('time-to').value   = '23:59';
+            document.getElementById('filter-cs').value = '';
+            document.getElementById('filter-exceedance').value = 'all';
+
+            tracks = [];
+            renderList();
+
+            document.getElementById('track-list').innerHTML =
+                '<div class="empty-state">Load a date and time range to see captured tracks.<br></div>';
+            document.getElementById('track-count').textContent = '';
+            document.getElementById('load-status').textContent = '';
+
+            document.getElementById('map-title').textContent = 'Select a track';
+            document.getElementById('map-meta').textContent  = '';
+            document.getElementById('btn-export-pdf').style.display = 'none';
+            document.getElementById('stats-row').style.display = 'none';
+            selectedDoc = null;
+            if (trackLayer) trackLayer.clearLayers();
+        }
+
         // ── Render the list ─────────────────────────────────────────────────
         let tracks = [];
 
         function renderList() {
             const listEl  = document.getElementById('track-list');
             const countEl = document.getElementById('track-count');
-            countEl.textContent = tracks.length ? `${tracks.length} track${tracks.length !== 1 ? 's' : ''}` : '';
 
-            if (!tracks.length) {
-                listEl.innerHTML = '<div class="empty-state">No tracks found for this date range.<br>Try widening the window or check the Firestore console.</div>';
+            // ── Apply Exceedance filter (does not mutate the underlying tracks array) ──
+            const filterMode = document.getElementById('filter-exceedance')
+                ? document.getElementById('filter-exceedance').value
+                : 'all';
+            const visibleTracks = filterMode === 'exceedance'
+                ? tracks.filter(doc => doc.minAltMSL != null && doc.minAltMSL < patternCeilMSL())
+                : tracks;
+
+            countEl.textContent = visibleTracks.length ? `${visibleTracks.length} track${visibleTracks.length !== 1 ? 's' : ''}` : '';
+
+            if (!visibleTracks.length) {
+                listEl.innerHTML = filterMode === 'exceedance'
+                    ? '<div class="empty-state">No exceedances found for this date range.</div>'
+                    : '<div class="empty-state">No tracks found for this date range.<br>Try widening the window or check the Firestore console.</div>';
                 return;
             }
 
             listEl.innerHTML = '';
-            tracks.forEach((doc, idx) => {
+            visibleTracks.forEach((doc) => {
+                const idx = tracks.indexOf(doc);
                 const el = document.createElement('div');
                 el.className = 'track-item';
                 el.dataset.idx = idx;
@@ -729,6 +798,7 @@
                 el.innerHTML = `
                     <div class="ti-row1">
                         <span class="ti-cs">${doc.registration || 'Unknown'}</span>
+                        <span data-camera-slot="${doc.docId}"></span>
                         ${doc.minAltMSL != null && doc.minAltMSL < patternCeilMSL() ? '<span class="low-alt-dot" title="Flew below 1,000 ft AGL"></span>' : ''}
                         <span class="ti-pts">${pts.toLocaleString()} pts</span>
                     </div>
@@ -752,7 +822,46 @@
                 });
                 listEl.appendChild(el);
             });
+
+            if (currentCollection === 'tracks_pou') {
+                attachTrackCameraIcons(visibleTracks);
+            }
         }
+
+        // Tracks span a start-to-end duration (sometimes 15+ minutes), and the
+        // actual camera-captured moment (takeoff/landing) can fall anywhere
+        // within that span, not just near the endpoints. Search centered on
+        // the track's midpoint, with a window wide enough to cover the full
+        // duration plus a buffer on each side.
+        function attachTrackCameraIcons(trackRows) {
+            trackRows.forEach(async (r) => {
+                const startTime = r.start || r.timestamp;
+                const endTime = r.end || r.timestamp;
+                const startMs = new Date(startTime).getTime();
+                const endMs = new Date(endTime).getTime();
+
+                let searchTime = startTime;
+                let windowSeconds = 60;
+
+                if (!isNaN(startMs) && !isNaN(endMs) && endMs > startMs) {
+                    const midMs = (startMs + endMs) / 2;
+                    searchTime = new Date(midMs).toISOString();
+                    const halfSpanSeconds = (endMs - startMs) / 2 / 1000;
+                    windowSeconds = Math.ceil(halfSpanSeconds) + 60; // buffer on each side
+                }
+
+                const event = await findCameraEvent(r.registration, searchTime, windowSeconds);
+                if (!event) return;
+                if (event.registration && event.registration.toUpperCase() !== r.registration.toUpperCase()) {
+                    console.warn(`Camera event registration mismatch: expected ${r.registration}, got ${event.registration}`);
+                    return;
+                }
+                const slot = document.querySelector(`[data-camera-slot="${r.docId}"]`);
+                if (!slot) return;
+                slot.innerHTML = cameraIconHtml(event.id);
+            });
+        }
+        window.renderList = renderList;
 
         // ── Load from Firestore ─────────────────────────────────────────────
         window.loadTracks = async function() {
@@ -784,7 +893,7 @@
                 if (csVal) constraints.unshift(where('registration', '==', csVal));
 
                 const snap = await getDocs(query(collection(db, currentCollection), ...constraints));
-                tracks = snap.docs.map(d => d.data());
+                tracks = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
 
                 // Sort by timestamp desc (already ordered but ensure it)
                 tracks.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
@@ -925,6 +1034,13 @@
 
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                         maxZoom: 18, crossOrigin: true
+                    }).addTo(offMap);
+
+                    // Tracking radius circle — mirrors the one shown on the live map
+                    L.circle(getAirportCoord(), {
+                        radius: getTrackRadiusKm() * 1000,
+                        color: '#0057ff', weight: 1.5, fillColor: '#0057ff', fillOpacity: 0.04,
+                        dashArray: '4,4', renderer, interactive: false
                     }).addTo(offMap);
 
                     // Draw the track using Canvas polylines

@@ -107,6 +107,10 @@ function attachCameraIcons(pageRows) {
     pageRows.forEach(r => {
         findCameraEvent(r.registration, r.timestamp, 60).then(event => {
             if (!event) return;
+            if (event.registration && event.registration.toUpperCase() !== r.registration.toUpperCase()) {
+                console.warn(`Camera event registration mismatch: expected ${r.registration}, got ${event.registration}`);
+                return;
+            }
             const slot = document.querySelector(`[data-camera-slot="${r.docId}"]`);
             if (!slot) return; // page changed since lookup started
             slot.innerHTML = cameraIconHtml(event.id);
