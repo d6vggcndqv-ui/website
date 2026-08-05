@@ -11,6 +11,9 @@
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
     <style>
+        .page-header-row { position:relative; text-align:center; margin-bottom:1rem; }
+        .page-header-row h1 { margin:0; }
+        #page-airport-logo { position:absolute; right:0; top:50%; transform:translateY(-50%); height:56px; width:auto; display:block; }
         .metrics {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -66,6 +69,31 @@
             text-transform: none;
             letter-spacing: normal;
             margin-left: 8px;
+        }
+        .all-time-note {
+            font-size: 12px;
+            color: #999;
+            margin-left: -6px;
+        }
+        #day-zero-tooltip {
+            display: none;
+            position: fixed;
+            max-width: 240px;
+            background: #1f2937;
+            color: #fff;
+            font-size: 12px;
+            line-height: 1.4;
+            padding: 10px 12px;
+            border-radius: 8px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+            z-index: 9999;
+            pointer-events: none;
+        }
+        .cdg-summary {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #dc2626;
+            font-weight: 500;
         }
         .chart-card.full-width {
             grid-column: 1 / -1;
@@ -176,15 +204,14 @@
 
         <!-- Main content (hidden until authenticated) -->
         <div id="main-content" style="display:none;">
-        <h1>Analytics Dashboard</h1>
+        <div class="page-header-row">
+            <h1 style="margin:0;">Analytics Dashboard</h1>
+            <img id="page-airport-logo" src="" alt="" style="display:none;" onerror="this.style.display='none';">
+        </div>
 
         <div id="airport-selector">
             <span>Airport:</span>
             <select id="airport-select"></select>
-            <button id="btn-logout" onclick="window._authSignOut()">Sign Out</button>
-        </div>
-        <div id="user-signout" style="display:none; margin-bottom:1rem;">
-            <button onclick="window._authSignOut()" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Sign Out</button>
         </div>
         
 
@@ -198,6 +225,7 @@
                 <button class="range-btn" data-days="30">Last 30 days</button>
                 <button class="range-btn" data-days="90">Last 90 days</button>
                 <button class="range-btn" data-days="0">All time</button>
+                <span class="all-time-note" id="all-time-note" style="display:none;">Since 5/21/26</span>
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
                 <input type="date" id="dash-date-picker" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#111;">
                 <button id="dash-date-btn" style="font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Go</button>
@@ -220,6 +248,7 @@
                 <div style="position:relative;width:100%;height:220px;">
                     <canvas id="chart-cat-bar" role="img" aria-label="Horizontal bar chart of operation counts by aircraft category">Aircraft category counts.</canvas>
                 </div>
+                <div id="cdg-summary" class="cdg-summary"></div>
                 </div>
             
                 <div class="chart-card">
@@ -269,6 +298,8 @@
             
             </div>
         </section>
+
+        <div id="day-zero-tooltip"></div>
         </div> <!-- /main-content -->
     </main>
 
@@ -302,6 +333,23 @@
 
         const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou' };
         const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
+        // Matches portal.html's AIRPORT_INFO logo convention
+        const AIRPORT_LOGOS = { pou: 'pou-logo.jpg' };
+        // Collections whose logging history doesn't go back to the beginning of time —
+        // "All time" for these should be qualified with when the data actually starts.
+        const ALL_TIME_START = { flights_pou: '5/21/26' };
+        function setAirportLogo(code) {
+            const img = document.getElementById('page-airport-logo');
+            const src = AIRPORT_LOGOS[code];
+            if (src) { img.src = src; img.style.display = ''; }
+            else { img.style.display = 'none'; }
+        }
+        function updateAllTimeNote() {
+            const note = document.getElementById('all-time-note');
+            const start = ALL_TIME_START[currentCollection];
+            if (start) { note.textContent = 'Since ' + start; note.style.display = ''; }
+            else { note.style.display = 'none'; }
+        }
         let currentCollection = 'flights';
 
         function getCollectionName(airport) {
@@ -327,12 +375,14 @@
                 const select = document.getElementById('airport-select');
                 select.innerHTML = Object.entries(AIRPORT_LABELS).map(([k,v]) => `<option value="${k}">${v}</option>`).join('');
                 currentCollection = getCollectionName(select.value);
-                select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); refresh(activeDays); });
+                setAirportLogo(select.value);
+                updateAllTimeNote();
+                select.addEventListener('change', () => { currentCollection = getCollectionName(select.value); setAirportLogo(select.value); updateAllTimeNote(); refresh(activeDays); });
             } else {
                 currentCollection = getCollectionName(profile.airport);
-                document.getElementById('user-signout').style.display = 'block';
+                setAirportLogo(profile.airport);
+                updateAllTimeNote();
             }
-            document.getElementById('btn-logout').style.display = 'inline-block';
             hideAuth();
             refresh(activeDays);
         }
@@ -345,7 +395,6 @@
             catch(e) { document.getElementById('auth-error').textContent = 'Invalid email or password.'; }
         });
 
-        document.getElementById('btn-logout').addEventListener('click', () => auth.signOut());
         window._authSignOut = () => { auth.signOut(); showAuth(); };
 
         onAuthStateChanged(auth, user => { if (user) { initUser(user); } else { showAuth(); } });
@@ -414,6 +463,87 @@
             
         }
     
+        // Generic message shown when a day has zero logged operations (usually a system outage,
+        // not actually zero traffic). Add a specific date key like '8/2' to override the message
+        // for a known incident, e.g. ZERO_DAY_MESSAGES['8/2'] = 'Offline 6am-2pm for hardware swap.'
+        const DEFAULT_ZERO_DAY_MESSAGE = 'No operations were logged this day. This is most likely due to a system outage or maintenance, not an actual absence of activity.';
+        const ZERO_DAY_MESSAGES = {};
+        function getZeroDayMessage(label) {
+            return ZERO_DAY_MESSAGES[label] || DEFAULT_ZERO_DAY_MESSAGE;
+        }
+
+        const zeroDayIconPlugin = {
+            id: 'zeroDayIcon',
+            afterDraw(chart) {
+                const yScale = chart.scales.y;
+                if (!yScale) return;
+                const baseline = yScale.getPixelForValue(0);
+                const ctx = chart.ctx;
+                const icons = [];
+                chart.data.labels.forEach((label, i) => {
+                    const total = chart.data.datasets.reduce((sum, ds) => sum + (ds.data[i] || 0), 0);
+                    if (total !== 0) return;
+                    const bar = chart.getDatasetMeta(0).data[i];
+                    if (!bar) return;
+                    const x = bar.x;
+                    const y = baseline - 40;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(x, y, 8, 0, Math.PI * 2);
+                    ctx.fillStyle = '#f59e0b';
+                    ctx.fill();
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 11px DM Sans, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('i', x, y + 0.5);
+                    ctx.restore();
+                    icons.push({ x, y, r: 9, label });
+                });
+                chart.$zeroDayIcons = icons;
+            }
+        };
+
+        function showZeroDayTooltip(clientX, clientY, label) {
+            const tooltip = document.getElementById('day-zero-tooltip');
+            tooltip.textContent = getZeroDayMessage(label);
+            tooltip.style.left = (clientX + 12) + 'px';
+            tooltip.style.top = (clientY + 12) + 'px';
+            tooltip.style.display = 'block';
+        }
+        function hideZeroDayTooltip() {
+            const tooltip = document.getElementById('day-zero-tooltip');
+            if (tooltip) tooltip.style.display = 'none';
+        }
+
+        function bindZeroDayIconEvents() {
+            const canvas = document.getElementById('chart-by-day');
+            if (canvas.dataset.zeroDayBound) return; // avoid stacking listeners across rebuilds
+            canvas.dataset.zeroDayBound = 'true';
+
+            function iconAtEvent(e) {
+                const chart = charts['day'];
+                if (!chart || !chart.$zeroDayIcons) return null;
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                return chart.$zeroDayIcons.find(icon => Math.hypot(icon.x - x, icon.y - y) <= icon.r + 4) || null;
+            }
+
+            canvas.addEventListener('click', (e) => {
+                const hit = iconAtEvent(e);
+                if (hit) showZeroDayTooltip(e.clientX, e.clientY, hit.label);
+                else hideZeroDayTooltip();
+            });
+            canvas.addEventListener('mousemove', (e) => {
+                canvas.style.cursor = iconAtEvent(e) ? 'pointer' : 'default';
+            });
+            document.addEventListener('click', (e) => {
+                if (e.target === canvas) return; // canvas's own handler already dealt with this click
+                hideZeroDayTooltip();
+            });
+        }
+
         function buildDayChart(rows, days, specificDate) {
             destroyChart('day');
             const numDays = specificDate ? 1 : (days > 0 ? days : 30);
@@ -432,7 +562,7 @@
                 if (byDay[key]) byDay[key][r.event] = (byDay[key][r.event] || 0) + 1;
             });
             charts['day'] = new Chart(document.getElementById('chart-by-day'), {
-                plugins: [ChartDataLabels],
+                plugins: [ChartDataLabels, zeroDayIconPlugin],
                 type: 'bar',
                 data: {
                     labels,
@@ -464,6 +594,7 @@
                     }
                 }
             });
+            bindZeroDayIconEvents();
         }
     
         const AAC_ADG_THRESHOLD = 500;
@@ -501,6 +632,11 @@
             const labels = sorted.map(e => e[0]);
             const data   = sorted.map(e => e[1]);
             const colors = labels.map(l => CAT_COLORS[l] || '#888888');
+
+            const cdgSummary = document.getElementById('cdg-summary');
+            const overThreshold = sorted.filter(e => e[1] > AAC_ADG_THRESHOLD).map(e => e[0]);
+            cdgSummary.textContent = overThreshold.length ? 'CDG: ' + overThreshold.join(', ') : '';
+
             charts['catbar'] = new Chart(document.getElementById('chart-cat-bar'), {
                 plugins: [ChartDataLabels, thresholdLinePlugin],
                 type: 'bar',
@@ -662,7 +798,11 @@
                 return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             }
             const activeBtn = document.querySelector('.range-btn.active');
-            return activeBtn ? activeBtn.textContent : 'Today';
+            const label = activeBtn ? activeBtn.textContent : 'Today';
+            const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
+            const start = ALL_TIME_START[currentCollection];
+            if (days === 0 && start) return label + ', Since ' + start;
+            return label;
         }
 
         function updateChartRangeLabels() {
@@ -737,7 +877,10 @@
             const activeBtn = document.querySelector('.range-btn.active');
             const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
             if (days === 1) return 'Flight Operations — Today, ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-            if (days === 0) return 'Flight Operations — All Time';
+            if (days === 0) {
+                const start = ALL_TIME_START[currentCollection];
+                return 'Flight Operations — All Time' + (start ? ' (Since ' + start + ')' : '');
+            }
             const end = new Date();
             const start = new Date();
             start.setDate(start.getDate() - days);
