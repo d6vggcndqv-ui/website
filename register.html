@@ -114,15 +114,13 @@
                 <img src="logo.png" alt="Logo">
             </a>
         </div>
-        <ul class="nav-links">
+        <!-- PUBLIC NAV — keep identical across index.html, livemap.html, noiseinquiry.html -->
+        <ul class="nav-links nav-links-public">
             <li><a href="index.html">Home</a></li>
             <li><a href="livemap.html">Live Map</a></li>
-            <li><a href="flighthistory.html">Flight History</a></li>
-            <li><a href="dashboard.html"> Dashboard</a></li>
-            <li><a href="landingfees.html">Landing Fees</a></li>
             <li><a href="noiseinquiry.html">Noise Inquiry</a></li>
-            <li><a href="noiseabatement.html">Noise Abatement</a></li>
         </ul>
+        <a class="nav-btn-primary" href="portal.html">Portal &rarr;</a>
     </nav>
 
     <main>
@@ -148,7 +146,7 @@
                     <div id="register-success"></div>
                     <button type="button" id="reg-submit">Create account</button>
                 </div>
-                <div class="signin-link">Already have an account? <a href="flighthistory.html">Sign in</a></div>
+                <div class="signin-link">Already have an account? <a href="portal.html">Sign in</a></div>
             </div>
         </div>
     </main>
@@ -219,7 +217,7 @@
 
             successEl.textContent = 'Account created! Redirecting...';
             const params = new URLSearchParams(window.location.search);
-            const from = params.get('from') || 'flighthistory.html';
+            const from = params.get('from') || 'portal.html';
             setTimeout(() => { window.location.href = from; }, 1500);
 
         } catch(e) {
