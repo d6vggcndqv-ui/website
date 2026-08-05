@@ -466,7 +466,7 @@
         // Generic message shown when a day has zero logged operations (usually a system outage,
         // not actually zero traffic). Add a specific date key like '8/2' to override the message
         // for a known incident, e.g. ZERO_DAY_MESSAGES['8/2'] = 'Offline 6am-2pm for hardware swap.'
-        const DEFAULT_ZERO_DAY_MESSAGE = 'No operations were logged this day. This is most likely due to a system outage or maintenance, not an actual absence of activity.';
+        const DEFAULT_ZERO_DAY_MESSAGE = 'No operations were logged this day. This is due to system maintenance, not an actual absence of activity.';
         const ZERO_DAY_MESSAGES = {};
         function getZeroDayMessage(label) {
             return ZERO_DAY_MESSAGES[label] || DEFAULT_ZERO_DAY_MESSAGE;
