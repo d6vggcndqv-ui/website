@@ -7864,6 +7864,7 @@ const typeCodeRegistry = {
   'N270LB': 'FA7X',
   'N281MM': 'FA7X',
   'N294X': 'FA7X',
+  'N294QS': 'E545',
   'N300CR': 'FA7X',
   'N302FJ': 'FA7X',
   'N302ML': 'FA7X',
