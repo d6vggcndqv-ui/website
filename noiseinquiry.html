@@ -426,39 +426,39 @@
 
                     <div class="chip-grid">
                         <label class="chip-label">
-                            <input type="checkbox" name="complaint_type[]" value="Too Loud & Low">
+                            <input type="checkbox" name="primary_concern" value="Too Loud & Low">
                             <span>Too Loud &amp; Low</span>
                         </label>
                         <label class="chip-label">
-                            <input type="checkbox" name="complaint_type[]" value="Too Loud">
+                            <input type="checkbox" name="primary_concern" value="Too Loud">
                             <span>Too Loud</span>
                         </label>
                         <label class="chip-label">
-                            <input type="checkbox" name="complaint_type[]" value="Too Low">
+                            <input type="checkbox" name="primary_concern" value="Too Low">
                             <span>Too Low</span>
                         </label>
                         <label class="chip-label">
-                            <input type="checkbox" name="complaint_type[]" value="Too Frequent">
+                            <input type="checkbox" name="primary_concern" value="Too Frequent">
                             <span>Too Frequent</span>
                         </label>
                         <label class="chip-label">
-                            <input type="checkbox" name="complaint_type[]" value="Hovering">
+                            <input type="checkbox" name="primary_concern" value="Hovering">
                             <span>Hovering</span>
                         </label>
                         <label class="chip-label">
-                            <input type="checkbox" name="complaint_type[]" value="Excessive Vibration">
+                            <input type="checkbox" name="primary_concern" value="Excessive Vibration">
                             <span>Excessive Vibration</span>
                         </label>
                         <label class="chip-label">
-                            <input type="checkbox" name="complaint_type[]" value="Too Early or Late">
+                            <input type="checkbox" name="primary_concern" value="Too Early or Late">
                             <span>Too Early or Late</span>
                         </label>
                         <label class="chip-label">
-                            <input type="checkbox" name="complaint_type[]" value="Change in Flight Pattern">
+                            <input type="checkbox" name="primary_concern" value="Change in Flight Pattern">
                             <span>Change in Flight Pattern</span>
                         </label>
                         <label class="chip-label">
-                            <input type="checkbox" name="complaint_type[]" value="General / Other">
+                            <input type="checkbox" name="primary_concern" value="General / Other">
                             <span>General / Other</span>
                         </label>
                     </div>
@@ -537,7 +537,7 @@
 
             // ── Collect complaint types ───────────────────────────────────
             const complaintTypes = Array.from(
-                document.querySelectorAll('input[name="complaint_type[]"]:checked')
+                document.querySelectorAll('input[name="primary_concern"]:checked')
             ).map(cb => cb.value);
 
             // ── Build Firestore document ──────────────────────────────────
