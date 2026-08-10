@@ -421,7 +421,7 @@ async function sendNoiseSummary() {
 Airport: POU — Hudson Valley Regional
 Total Submissions: ${submissions.length}
  
-COMPLAINT TYPES:
+PRIMARY CONCERN:
 ${typeLines}
  
 LOCATIONS REPORTED FROM:
@@ -556,7 +556,7 @@ async function sendMonthlyNoiseSummary() {
 Airport: POU — Hudson Valley Regional
 Total Submissions: ${submissions.length}
 
-COMPLAINT TYPES:
+PRIMARY CONCERN:
 ${typeLines}
 
 SUBMISSIONS BY DAY:
