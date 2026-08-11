@@ -160,6 +160,8 @@
         #auth-form button { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px; background: #0057ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
         #auth-form button:hover { background: #0040cc; }
         #auth-error { font-size: 13px; color: #dc2626; text-align: center; min-height: 18px; }
+        .forgot-link { font-size: 12px; color: #0057ff; text-decoration: none; }
+        .forgot-link:hover { text-decoration: underline; }
         #airport-selector { display: none; align-items: center; gap: 10px; margin-bottom: 1rem; font-size: 14px; }
         #airport-selector select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
         #btn-logout { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; margin-left: auto; display: none; }
@@ -199,6 +201,9 @@
             </form>
             <p style="text-align:center;font-size:13px;color:#666;margin-top:16px;">
                 Don't have an account? <a href="register.html?from=dashboard.html" style="color:#0057ff;text-decoration:none;font-weight:500;">Create one</a>
+            </p>
+            <p style="text-align:center;margin-top:8px;">
+                <a href="#" class="forgot-link" onclick="window._forgotPassword(); return false;">Forgot password?</a>
             </p>
         </div>
 
@@ -314,7 +319,7 @@
    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
    <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
         import { getFirestore, collection, doc, getDoc, query, orderBy, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     
         const firebaseConfig = {
@@ -390,10 +395,25 @@
         document.getElementById('auth-submit').addEventListener('click', async () => {
             const email = document.getElementById('auth-email').value.trim();
             const password = document.getElementById('auth-password').value;
+            document.getElementById('auth-error').style.color = '#dc2626';
             document.getElementById('auth-error').textContent = '';
             try { await signInWithEmailAndPassword(auth, email, password); }
             catch(e) { document.getElementById('auth-error').textContent = 'Invalid email or password.'; }
         });
+
+        window._forgotPassword = async () => {
+            const email = document.getElementById('auth-email').value.trim();
+            const errEl = document.getElementById('auth-error');
+            if (!email) { errEl.style.color = '#dc2626'; errEl.textContent = 'Enter your email above first, then click "Forgot password?"'; return; }
+            try {
+                await sendPasswordResetEmail(auth, email, { url: 'https://fl-technologies-data.com/portal.html', handleCodeInApp: false });
+                errEl.style.color = '#166534';
+                errEl.textContent = 'Password reset email sent — check your inbox.';
+            } catch (e) {
+                errEl.style.color = '#dc2626';
+                errEl.textContent = 'Could not send reset email. Check the address and try again.';
+            }
+        };
 
         window._authSignOut = () => { auth.signOut(); showAuth(); };
 
