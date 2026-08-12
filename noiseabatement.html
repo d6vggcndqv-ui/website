@@ -504,6 +504,13 @@
         const AIRPORT_TRACK_RADIUS_KM = { owd: 8.05, pou: 8.05 };
         const PATTERN_CEIL_AGL    = 1000;                     // low-alt dot threshold (ft AGL)
 
+        // FAA-designated hot spots shown on the map when POU is selected
+        // Centroids derived from FAA airport diagram polygons (KPOU)
+        const POU_HOTSPOTS = [
+            { label: 'HS 1', lat: 41.62215924845616, lon: -73.89089257898618 },
+            { label: 'HS 2', lat: 41.62338542722897, lon: -73.88858893258008 },
+        ];
+
         let currentCollection = 'tracks_owd';
         let currentAirportKey = 'owd';
 
@@ -528,6 +535,30 @@
                     radiusCircle.setLatLng(getAirportCoord());
                     radiusCircle.setRadius(getTrackRadiusKm() * 1000);
                     radiusCircle.setTooltipContent(`${getTrackRadiusKm().toFixed(2)} km tracking radius`);
+                }
+                // Clear existing hotspot markers then draw POU-specific ones
+                if (hotspotLayer) { map.removeLayer(hotspotLayer); hotspotLayer = null; }
+                if (key === 'pou') {
+                    hotspotLayer = L.layerGroup().addTo(map);
+                    POU_HOTSPOTS.forEach(hs => {
+                        L.circle([hs.lat, hs.lon], {
+                            radius: 60,
+                            color: '#16a34a', fillColor: '#22c55e',
+                            fillOpacity: 0.25, weight: 2
+                        }).bindTooltip(`FAA Hot Spot — ${hs.label}`, { sticky: true })
+                          .addTo(hotspotLayer);
+                        // Label using a lightweight DivIcon
+                        L.marker([hs.lat, hs.lon], {
+                            icon: L.divIcon({
+                                className: '',
+                                html: `<span style="font-size:11px;font-weight:700;color:#15803d;
+                                              background:rgba(255,255,255,0.85);padding:1px 4px;
+                                              border-radius:3px;white-space:nowrap;">${hs.label}</span>`,
+                                iconAnchor: [-8, 6]
+                            }),
+                            interactive: false
+                        }).addTo(hotspotLayer);
+                    });
                 }
             }
             // Clear any currently displayed track
@@ -592,11 +623,9 @@
                     const select = document.getElementById('airport-select');
                     select.innerHTML = Object.entries(AIRPORT_LABELS)
                         .map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-                    switchAirport(select.value);
                     // Honour airport from noise inquiry deep link if present
                     if (window._deepLinkAirport && AIRPORT_COLLECTIONS[window._deepLinkAirport]) {
                         select.value = window._deepLinkAirport;
-                        switchAirport(window._deepLinkAirport);
                     }
                     select.addEventListener('change', () => switchAirport(select.value));
                 } else {
@@ -608,6 +637,13 @@
 
                 hideAuth();
                 initMap();
+                // switchAirport must run AFTER initMap so the map exists for hotspot drawing
+                if (profile.role === 'admin') {
+                    const select = document.getElementById('airport-select');
+                    switchAirport(select.value);
+                } else {
+                    switchAirport(currentAirportKey);
+                }
             } catch(e) {
                 console.error('[initUser]', e);
             }
@@ -655,7 +691,7 @@
         })();
 
         // ── Leaflet map ─────────────────────────────────────────────────────
-        let map, trackLayer, fieldMarker, radiusCircle;
+        let map, trackLayer, fieldMarker, radiusCircle, hotspotLayer;
 
         function initMap() {
             if (map) return;
