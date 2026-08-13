@@ -23,8 +23,8 @@ const HELICOPTER_DISTANCE_KM = 1;
 const COOLDOWN_MS = 60000;
 
 const RUNWAYS = [
-  { name: "6/24", lat1: 41.621906, lon1: -73.891963, lat2: 41.630346, lon2: -73.878236 },
-  { name: "15/33", lat1: 41.630282, lon1: -73.885205, lat2: 41.624559, lon2: -73.878530 }
+  { names: ["6", "24"], lat1: 41.621906, lon1: -73.891963, lat2: 41.630346, lon2: -73.878236 },
+  { names: ["15", "33"], lat1: 41.630282, lon1: -73.885205, lat2: 41.624559, lon2: -73.878530 }
 ];
 const RUNWAY_CORRIDOR_KM = 0.15;
 
@@ -46,7 +46,7 @@ function isOnRunway(lat, lon) {
     const closestLat = rwy.lat1 + t * dx;
     const closestLon = rwy.lon1 + t * dy;
     const dist = getDistance(lat, lon, closestLat, closestLon);
-    if (dist <= RUNWAY_CORRIDOR_KM) return rwy.name;
+    if (dist <= RUNWAY_CORRIDOR_KM) return t < 0.5 ? rwy.names[0] : rwy.names[1];
   }
   return null;
 }
