@@ -38,7 +38,22 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function isOnRunway(lat, lon) {
+function getBearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function angleDiff(a, b) {
+  const diff = Math.abs(a - b) % 360;
+  return diff > 180 ? 360 - diff : diff;
+}
+
+function isOnRunway(lat, lon, track) {
   for (const rwy of RUNWAYS) {
     const dx = rwy.lat2 - rwy.lat1;
     const dy = rwy.lon2 - rwy.lon1;
@@ -46,7 +61,16 @@ function isOnRunway(lat, lon) {
     const closestLat = rwy.lat1 + t * dx;
     const closestLon = rwy.lon1 + t * dy;
     const dist = getDistance(lat, lon, closestLat, closestLon);
-    if (dist <= RUNWAY_CORRIDOR_KM) return t < 0.5 ? rwy.names[0] : rwy.names[1];
+    if (dist <= RUNWAY_CORRIDOR_KM) {
+      if (typeof track === "number") {
+        const bearingForward = getBearing(rwy.lat1, rwy.lon1, rwy.lat2, rwy.lon2);
+        const bearingReverse = (bearingForward + 180) % 360;
+        const diffForward = angleDiff(track, bearingForward);
+        const diffReverse = angleDiff(track, bearingReverse);
+        return diffForward <= diffReverse ? rwy.names[1] : rwy.names[0];
+      }
+      return t < 0.5 ? rwy.names[0] : rwy.names[1];
+    }
   }
   return null;
 }
@@ -205,7 +229,7 @@ async function fetchAndDetect() {
       }
 
       // --- track descending on runway ---
-      const currentRunway = isOnRunway(flight.lat, flight.lon);
+      const currentRunway = isOnRunway(flight.lat, flight.lon, flight.track);
       if (currentRunway) state.lastRunway = currentRunway;
 
       if (!isHelicopter && currentRunway &&
