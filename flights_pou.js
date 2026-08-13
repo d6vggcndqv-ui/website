@@ -27,6 +27,7 @@ const RUNWAYS = [
   { names: ["15", "33"], lat1: 41.630282, lon1: -73.885205, lat2: 41.624559, lon2: -73.878530 }
 ];
 const RUNWAY_CORRIDOR_KM = 0.15;
+const LOW_SPEED_THRESHOLD_KTS = 10;
 
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -166,7 +167,9 @@ async function fetchAndDetect() {
         minGsOnRunway: null,
         gsAccelCount: 0,
         didDecelerateOnRunway: false,
-        consecutiveDecelsOnRunway: 0
+        consecutiveDecelsOnRunway: 0,
+        wasOnRunway: false,
+        runwayEntryTrack: null
       };
 
       const currentAlt = flight.alt_baro;
@@ -229,8 +232,20 @@ async function fetchAndDetect() {
       }
 
       // --- track descending on runway ---
-      const currentRunway = isOnRunway(flight.lat, flight.lon, flight.track);
+      const positionOnRunway = isOnRunway(flight.lat, flight.lon);
+      if (positionOnRunway && !state.wasOnRunway) {
+        state.runwayEntryTrack = typeof flight.track === "number" ? flight.track : null;
+      }
+      state.wasOnRunway = !!positionOnRunway;
+
+      const trackForRunway = (currentGs < LOW_SPEED_THRESHOLD_KTS && typeof state.runwayEntryTrack === "number")
+        ? state.runwayEntryTrack
+        : flight.track;
+
+      const currentRunway = isOnRunway(flight.lat, flight.lon, trackForRunway);
       if (currentRunway) state.lastRunway = currentRunway;
+
+      if (!positionOnRunway) state.runwayEntryTrack = null;
 
       if (!isHelicopter && currentRunway &&
           !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
