@@ -67,7 +67,7 @@ function isOnRunway(lat, lon, track) {
         const bearingReverse = (bearingForward + 180) % 360;
         const diffForward = angleDiff(track, bearingForward);
         const diffReverse = angleDiff(track, bearingReverse);
-        return diffForward <= diffReverse ? rwy.names[1] : rwy.names[0];
+        return diffForward <= diffReverse ? rwy.names[0] : rwy.names[1];
       }
       return t < 0.5 ? rwy.names[0] : rwy.names[1];
     }
