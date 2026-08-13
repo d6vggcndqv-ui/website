@@ -43362,6 +43362,7 @@ const typeCodeRegistry = {
   'N33LP': 'BE36',
   'N33LS': 'RV12',
   'N33LV': 'GLF4',
+  'N33MS': 'GLF6',
   'N33MC': 'P180',
   'N33MG': 'C182',
   'N33MH': 'C303',
