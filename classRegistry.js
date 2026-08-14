@@ -156324,6 +156324,7 @@ const classRegistry = {
   "a76c32": "Multi-Engine",
   "a76c3c": "Turbine",
   "a76c46": "Turbine",
+  "a76c4f": "Single-Engine",
   "a76c4e": "Single-Engine",
   "a76c53": "Single-Engine",
   "a76c54": "Single-Engine",
