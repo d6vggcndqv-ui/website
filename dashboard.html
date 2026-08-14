@@ -263,6 +263,13 @@
                 </div>
                 </div>
 
+                <div class="chart-card" id="card-dow" style="display:none;">
+                <h2>Busiest Days<span class="chart-range-label"></span></h2>
+                <div style="position:relative;width:100%;height:220px;">
+                    <canvas id="chart-dow" role="img" aria-label="Bar chart of average operations by day of week">Average operations by day of week.</canvas>
+                </div>
+                </div>
+
                 <div class="chart-card">
                 <h2>Operations by runway<span class="chart-range-label"></span></h2>
                 <div class="dash-legend">
@@ -732,6 +739,62 @@
             });
         }
     
+        function buildDowChart(rows, days) {
+            destroyChart('dow');
+            const card = document.getElementById('card-dow');
+
+            // Only meaningful for ranges spanning multiple weeks — hide for Today/7 days/custom date
+            if (!(days === 0 || days >= 30)) {
+                card.style.display = 'none';
+                return;
+            }
+            card.style.display = '';
+
+            let numDays;
+            if (days > 0) {
+                numDays = days;
+            } else if (rows.length === 0) {
+                numDays = 1;
+            } else {
+                const earliest = rows.reduce((min, r) => {
+                    const t = new Date(r.timestamp).getTime();
+                    return t < min ? t : min;
+                }, Infinity);
+                numDays = Math.max(1, Math.ceil((Date.now() - earliest) / 86400000) + 1);
+            }
+
+            const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const occurrences = Array(7).fill(0);
+            const totals = Array(7).fill(0);
+
+            for (let i = numDays - 1; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                occurrences[d.getDay()]++;
+            }
+            rows.forEach(r => {
+                totals[new Date(r.timestamp).getDay()]++;
+            });
+
+            const averages = totals.map((total, i) => occurrences[i] ? +(total / occurrences[i]).toFixed(1) : 0);
+
+            charts['dow'] = new Chart(document.getElementById('chart-dow'), {
+                type: 'bar',
+                data: {
+                    labels: weekdayLabels,
+                    datasets: [{ label: 'Avg. Operations', data: averages, backgroundColor: '#6366f1', borderRadius: 4 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { maxTicksLimit: 5 } }
+                    }
+                }
+            });
+        }
+
         function buildCallsignChart(rows) {}
     
         function buildRunwayChart(rows) {
@@ -857,6 +920,7 @@
             updateMetrics(rows);
             buildDayChart(rows, days);
             buildHoursChart(rows);
+            buildDowChart(rows, days);
             buildCallsignChart(rows);
             buildRunwayChart(rows);
             buildCatBarChart(rows);
@@ -879,6 +943,7 @@
             updateMetrics(rows);
             buildDayChart(rows, 1, dateStr);
             buildHoursChart(rows);
+            buildDowChart(rows, 1);
             buildCallsignChart(rows);
             buildRunwayChart(rows);
             buildCatBarChart(rows);
@@ -963,7 +1028,7 @@
                 // Render every chart card to its own canvas so a chart can never be sliced across a page break.
                 // Force every card to the same fixed height first (matching how the on-screen grid stretches
                 // cards in a row to match each other) so cards with wrapped legends don't distort row heights.
-                const cards = Array.from(document.querySelectorAll('.chart-card'));
+                const cards = Array.from(document.querySelectorAll('.chart-card')).filter(c => c.offsetParent !== null);
                 const naturalHeights = cards.map(c => c.getBoundingClientRect().height);
                 const uniformHeightPx = Math.max(...naturalHeights);
                 const originalStyles = cards.map(c => ({ height: c.style.height, overflow: c.style.overflow }));
