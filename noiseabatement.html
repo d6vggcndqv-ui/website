@@ -742,17 +742,33 @@
 
             // Draw altitude-coloured segments
             for (let i = 0; i < pts.length - 1; i++) {
-                const seg = L.polyline(
-                    [[pts[i].lat, pts[i].lon], [pts[i+1].lat, pts[i+1].lon]],
-                    { color: altColor(pts[i].alt), weight: 3.5, opacity: 0.92, lineCap: 'round' }
-                );
+                const coords = [[pts[i].lat, pts[i].lon], [pts[i+1].lat, pts[i+1].lon]];
                 const p = pts[i];
-                seg.bindPopup(
-                    `<b>${doc.registration}</b><br>` +
+                const popupContent = `<b>${doc.registration}</b><br>` +
                     `Alt: <b>${p.alt.toLocaleString()} ft MSL</b><br>` +
                     `GS: ${p.gs} kt &nbsp;|&nbsp; Hdg: ${p.trk}°<br>` +
-                    `T+${fmtDur(p.t)}`,
-                    { maxWidth: 200 }
+                    `T+${fmtDur(p.t)}`;
+
+                // Midpoint of this segment — popup always opens here so it sits on the visible line
+                const midLat = (pts[i].lat + pts[i+1].lat) / 2;
+                const midLon = (pts[i].lon + pts[i+1].lon) / 2;
+
+                // Invisible wide underlay — makes the click target much easier to hit
+                const hit = L.polyline(coords, {
+                    color: 'transparent', weight: 20, opacity: 0, lineCap: 'round'
+                });
+                hit.on('click', function(e) {
+                    L.popup({ maxWidth: 200 })
+                        .setLatLng([midLat, midLon])
+                        .setContent(popupContent)
+                        .openOn(map);
+                    L.DomEvent.stopPropagation(e);
+                });
+                trackLayer.addLayer(hit);
+
+                // Visible coloured segment on top
+                const seg = L.polyline(coords,
+                    { color: altColor(pts[i].alt), weight: 3.5, opacity: 0.92, lineCap: 'round', interactive: false }
                 );
                 trackLayer.addLayer(seg);
             }
