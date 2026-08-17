@@ -457,8 +457,12 @@
         if (registration && !r.registration.toUpperCase().includes(registration)) return false;
         if (from || to) {
             // compare using timestamp for accuracy
+            // NOTE: bare "YYYY-MM-DD" strings parse as UTC midnight, while
+            // "YYYY-MM-DDT23:59:59" parses as LOCAL time — mixing the two
+            // shifts the "from" boundary by your UTC offset. Anchor both
+            // ends to local time explicitly.
             const ts = new Date(r.timestamp);
-            if (from && ts < new Date(from)) return false;
+            if (from && ts < new Date(from + 'T00:00:00')) return false;
             if (to   && ts > new Date(to + 'T23:59:59')) return false;
         }
         return true;
@@ -496,7 +500,7 @@
     document.getElementById('btn-apply').addEventListener('click', () => {
         const from = document.getElementById('filter-from').value;
         const to   = document.getElementById('filter-to').value;
-        const fromISO = from ? new Date(from).toISOString() : null;
+        const fromISO = from ? new Date(from + 'T00:00:00').toISOString() : null;
         const toISO   = to   ? new Date(to + 'T23:59:59').toISOString() : null;
         loadAll(fromISO, toISO).then(() => applyFilters());
     });
