@@ -482,6 +482,7 @@
         const snapshot = await getDocs(q);
         allRows = snapshot.docs.map(d => ({ ...d.data(), docId: d.id }));
         filteredRows = [...allRows];
+        currentPage = 1;
         renderPage();
         } catch (err) {
         console.error(err);
