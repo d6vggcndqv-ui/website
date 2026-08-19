@@ -611,8 +611,9 @@ button[type="submit"]:hover {
  
     /* Hero */
     .hero-section {
-        height: auto;
-        min-height: 60vh;
+        height: 70vh;
+        display: flex;
+        align-items: center;
     }
  
     .hero-section-text {
