@@ -33,6 +33,9 @@
     <main>
         
         <div class="hero-section">
+
+            <video class="hero-video" id="heroVideo" src="takeoff4.mp4" poster="takeoff4-poster.jpg" muted playsinline autoplay preload="auto"></video>
+
             <div class="hero-section-text">
                 <h1>Live Video, Recorded Activity, Operations Data and Reports </h1>
                 <p id="intro-text">FlightLevel Technologies is built to give airport leadership a comprehensive and actionable understanding of their airport network.</p>
@@ -211,6 +214,96 @@
 
     <script>
         window.addEventListener("load", () => {
+
+            // ── Hero takeoff video, scrubbed by scroll position ───────
+            const heroSection = document.querySelector(".hero-section");
+            const heroVideo = document.getElementById("heroVideo");
+
+            if (heroSection && heroVideo) {
+                let videoReady = false;
+                let ticking = false;
+
+                // Capture the hero's resting position (relative to the
+                // viewport) before any scrolling happens. Using this as the
+                // baseline means progress starts moving the instant the user
+                // scrolls at all, instead of waiting for the hero to reach
+                // the very top of the viewport (which is offset by the fixed
+                // navbar / body padding-top).
+                const initialTop = heroSection.getBoundingClientRect().top;
+
+                const scrubVideo = () => {
+                    if (!videoReady || !heroVideo.duration) {
+                        ticking = false;
+                        return;
+                    }
+
+                    const rect = heroSection.getBoundingClientRect();
+                    const heroHeight = rect.height;
+
+                    let progress = (initialTop - rect.top) / heroHeight;
+                    progress = Math.min(Math.max(progress, 0), 1);
+
+                    heroVideo.currentTime = progress * heroVideo.duration;
+                    ticking = false;
+                };
+
+                heroVideo.addEventListener("loadedmetadata", () => {
+                    videoReady = true;
+                });
+
+                // "playing" fires once the browser has actually started
+                // rendering real video frames (not just the poster). At that
+                // point we pause immediately and hand control over to scroll.
+                heroVideo.addEventListener("playing", () => {
+                    videoReady = true;
+                    heroVideo.pause();
+                    scrubVideo();
+                });
+
+                // Safari sometimes needs this instead of/in addition to loadedmetadata
+                heroVideo.addEventListener("canplay", () => {
+                    videoReady = true;
+                });
+
+                window.addEventListener("scroll", () => {
+                    // Safety net: if autoplay was blocked and the video never
+                    // fired "playing", force a kickstart on first scroll so
+                    // scrubbing still works instead of staying stuck on poster.
+                    if (!videoReady && heroVideo.paused) {
+                        heroVideo.play().then(() => heroVideo.pause()).catch(() => {});
+                    }
+
+                    if (!ticking) {
+                        window.requestAnimationFrame(scrubVideo);
+                        ticking = true;
+                    }
+                });
+
+                window.addEventListener("resize", scrubVideo);
+
+                // Safari (and some other browsers) can reset video playback
+                // state on fullscreen toggles, tab switches, etc. Re-kickstart
+                // whenever the page becomes visible/active again if needed.
+                document.addEventListener("visibilitychange", () => {
+                    if (document.visibilityState === "visible" && heroVideo.paused) {
+                        heroVideo.play().then(() => {
+                            heroVideo.pause();
+                            scrubVideo();
+                        }).catch(() => {});
+                    }
+                });
+
+                window.addEventListener("focus", () => {
+                    if (heroVideo.paused) {
+                        heroVideo.play().then(() => {
+                            heroVideo.pause();
+                            scrubVideo();
+                        }).catch(() => {});
+                    }
+                });
+            }
+            // ── /Hero takeoff video ────────────────────────────────────
+
             const cards = document.querySelectorAll(".feature-card");
             cards.forEach((card) => card.classList.add("fade-in"));
 

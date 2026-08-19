@@ -525,14 +525,29 @@ button[type="submit"]:hover {
         }
 
         .hero-section{
-            background-image: url(background7.jpeg);
-            background-size: cover;
-            background-attachment: fixed;
-            background-repeat: no-repeat;
+            position: relative;
+            overflow: hidden;
             height: 90vh;
+            background-color: #1a1a1a; /* shows briefly before video/poster paints */
         }
 
+        .hero-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center 35%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        
+
         .hero-section-text{
+            position: relative;
+            z-index: 1;
             display: flex;
             flex-direction: column; 
             color: white; 
@@ -598,8 +613,6 @@ button[type="submit"]:hover {
     .hero-section {
         height: auto;
         min-height: 60vh;
-        background-attachment: scroll; /* fixed doesn't work well on mobile */
-        background-position: center;
     }
  
     .hero-section-text {
