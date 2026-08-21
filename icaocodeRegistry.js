@@ -35805,6 +35805,7 @@ const typeCodeRegistry = {
   'N294X': 'F7X',
   'N294ZP': 'PAY1',
   'N29509': 'C177',
+  'N295QS': 'E545',
   'N2950B': 'BE35',
   'N2950C': 'C180',
   'N2950D': 'C170',
