@@ -77192,6 +77192,7 @@ const registrationRegistry = {
   "a3095d": "N295PL",
   "a30961": "N295PQ",
   "a3097a": "N295QQ",
+  "a3097c": "N295QS",
   "a30984": "N295R",
   "a30985": "N295RA",
   "a3098a": "N295RF",
