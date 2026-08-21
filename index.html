@@ -8,6 +8,30 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+        // Prevent the browser from restoring the previous scroll position
+        // on refresh — always start at the top instead.
+        if ("scrollRestoration" in history) {
+            history.scrollRestoration = "manual";
+        }
+        window.scrollTo(0, 0);
+
+        // If the URL has a leftover #hash from a nav-link click (e.g.
+        // #how-it-works), the browser will jump straight there on every
+        // subsequent refresh regardless of the scroll-restoration setting
+        // above. Force it back to the top once the page has fully loaded
+        // (after that automatic hash-scroll would have happened), and
+        // strip the hash from the address bar so future refreshes start
+        // clean too.
+        window.addEventListener("load", () => {
+            if (window.location.hash) {
+                window.scrollTo(0, 0);
+                history.replaceState(null, "", window.location.pathname + window.location.search);
+            }
+        });
+    </script>
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
 </head>
@@ -40,26 +64,155 @@
                 <h1>Live Video, Recorded Activity, Operations Data and Reports </h1>
                 <p id="intro-text">FlightLevel Technologies is built to give airport leadership a comprehensive and actionable understanding of their airport network.</p>
 
-                <div class="hero-icon">
-                    <img src="plane-icon.png" alt="Plane Icon">
-                    <img src="antenna-icon.png" alt="Antenna Icon">
-                    <img src="camera-icon2.png" alt="Camera Icon">
-                    <img src="computer-icon2.png" alt="Computer Icon">
-                </div>
+                <nav class="hero-nav">
+                    <a href="#overview">Overview</a>
+                    <a href="#how-it-works">How It Works</a>
+                    <a href="#features">Features</a>
+                </nav>
 
             </div>
 
         </div>
 
-        <div class="post-hero-section"> 
-            <h1>Video Recordings, 24/7 Data Collection & Analytics </h1>
-            <p id="post-hero-text">FlightLevel Technologies provides live views of taxiway and runway activity along with recordings of operations for training purposes and incident investigation. 24/7 data collection and analytics ensure airport leadership can make informed decisions and generate FAA-ready reports in seconds. Additional features include a live airspace map, noise abatement tools, and landing fee billing.   </p>
+        <div class="post-hero-section" id="overview">
+
+            <video class="overview-video" src="overview.mp4" poster="overview-poster.jpg" muted playsinline autoplay loop preload="auto"></video>
+            <div class="overview-overlay"></div>
+
+            <div class="overview-content">
+                <h1>Video Recordings, 24/7 Data Collection &amp; Analytics </h1>
+
+                <ul class="overview-list">
+                    <li>Live Views of Taxiway and Runway Activity</li>
+                    <li>Recorded Operations for Training Purposes and Incident Investigation</li>
+                    <li>24/7 Data Collection and Analytics</li>
+                    <li>FAA-Ready Reports in Seconds</li>
+                    <li>Adaptable Across Large Airport Networks</li>
+                </ul>
+
+                <div class="stat-row">
+                    <div class="stat-item">
+                        <svg class="stat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M12 7v5l3.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="stat-number">24/7</span>
+                        <span class="stat-label">Live Monitoring</span>
+                    </div>
+                    <div class="stat-item">
+                        <svg class="stat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <rect x="3" y="7" width="13" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M16 10.5 21 8v8l-5-2.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            <circle cx="9.5" cy="12" r="2.25" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        <span class="stat-number">HD</span>
+                        <span class="stat-label">Recorded Video Footage</span>
+                    </div>
+                    <div class="stat-item">
+                        <svg class="stat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="stat-number">Instant</span>
+                        <span class="stat-label">FAA-Ready Reports</span>
+                    </div>
+                    <div class="stat-item">
+                        <svg class="stat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M12 3 5 6v5.5c0 4.6 3 7.9 7 9.5 4-1.6 7-4.9 7-9.5V6l-7-3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="stat-number">100%</span>
+                        <span class="stat-label">Data Ownership</span>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <div class="section-divider"></div>
 
+        <!-- ── How It Works ──────────────────────────────────────────── -->
+        <section class="how-it-works-section" id="how-it-works">
+
+            <h2>How It Works</h2>
+            <p class="hiw-intro">From the aircraft to your portal — here's how FlightLevel Technologies turns raw signals into actionable insights.</p>
+
+            <div class="hiw-diagram-wrap">
+                <svg class="hiw-diagram" viewBox="0 0 900 620" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+
+                    <!-- Plane + broadcast signal -->
+                    <text x="450" y="70" text-anchor="middle" class="hiw-plane">✈</text>
+                    <path class="hiw-arc a1" d="M428,102 Q450,120 472,102" />
+                    <path class="hiw-arc a2" d="M414,102 Q450,142 486,102" />
+                    <path class="hiw-arc a3" d="M400,102 Q450,164 500,102" />
+
+                    <!-- Static structural connector down to junction -->
+                    <line class="hiw-connector" x1="450" y1="168" x2="450" y2="200" />
+                    <circle class="hiw-node" cx="450" cy="200" r="4" />
+
+                    <!-- Tier 1: plane splits to Antenna and Camera -->
+                    <path class="hiw-branch antenna" pathLength="1" d="M450,200 Q350,250 317,267" />
+                    <path class="hiw-branch camera" pathLength="1" d="M450,200 Q550,250 583,267" />
+
+                    <!-- Tier 2: Antenna and Camera converge into System -->
+                    <path class="hiw-branch to-system-a" pathLength="1" d="M309,347 Q350,390 391,413" />
+                    <path class="hiw-branch to-system-b" pathLength="1" d="M591,347 Q550,390 509,413" />
+
+                    <!-- Antenna icon -->
+                    <g transform="translate(250,300) scale(2.3)">
+                        <g class="hiw-icon-group antenna">
+                            <path class="icon-shape" d="M0,-26 L-16,20 M0,-26 L16,20 M-9,4 L9,4" />
+                            <path class="icon-shape" d="M-14,-30 Q0,-42 14,-30" />
+                        </g>
+                    </g>
+
+                    <!-- Camera icon -->
+                    <g transform="translate(650,300) scale(2.3)">
+                        <g class="hiw-icon-group camera">
+                            <rect class="icon-shape" x="-20" y="-14" width="30" height="24" rx="4" />
+                            <path class="icon-shape" d="M10,-6 L26,-14 V10 L10,2 Z" stroke-linejoin="round" />
+                            <circle class="icon-shape" cx="-6" cy="-2" r="6" />
+                        </g>
+                    </g>
+
+                    <!-- System icon -->
+                    <g transform="translate(450,460) scale(2.3)">
+                        <g class="hiw-icon-group system">
+                            <rect class="icon-shape" x="-22" y="-18" width="44" height="30" rx="3" />
+                            <path class="icon-shape" d="M-22,18 H22 M-8,18 V26 M8,18 V26 M-14,26 H14" stroke-linecap="round" />
+                            <path class="icon-shape" d="M-12,-4 L-4,-10 L4,-2 L14,-12" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+                        </g>
+                    </g>
+
+                </svg>
+
+                <!-- Labels sit in the open space to the left/right of the
+                     Antenna and Camera icons, anchored flush to the
+                     wrapper's own edges (0%/100% — not arbitrary
+                     percentages) so they can't drift, with a fixed width
+                     narrow enough to never reach the icons or the
+                     connecting lines between them. -->
+                <div class="hiw-label antenna">
+                    <h3>1. Antenna Receives</h3>
+                    <p>Ground antenna picks up the aircraft's ADS-B broadcast in real time</p>
+                </div>
+                <div class="hiw-label camera">
+                    <h3>2. Camera Tracks</h3>
+                    <p>Camera locks onto aircraft and records operation</p>
+                </div>
+                <div class="hiw-label system">
+                    <h3>3. System Analyzes</h3>
+                    <p>Software decodes signal, processes data, matches operation to recording, and displays data in the user portal</p>
+                </div>
+            </div>
+
+        </section>
+        <!-- ── /How It Works ──────────────────────────────────────────── -->
+
         <!-- ── Feature Sections ───────────────────────────────────── -->
-        <div class="features-section">
+        <video class="features-bg-video" id="featuresBgVideo" src="trail.mp4" muted playsinline autoplay preload="auto"></video>
+
+        <div class="features-section" id="features">
+
+            <h2 class="features-heading">Features</h2>
 
             <!-- 1 · Live Map -->
                 <div class="feature-card">
@@ -75,8 +228,7 @@
                         <a class="feature-link" href="livemap.html">Open Live Map</a>
                     </div>
                     <div class="feature-graphic">
-                        <img src="map_screenshot3.png" alt="Live Map">
-                        <!-- <img src="map-data.png" alt="Live Map data points"> -->
+                        <video src="livemap.mp4" poster="livemap-poster.jpg" muted playsinline autoplay loop preload="auto"></video>
                     </div>
                 </div>
 
@@ -93,8 +245,27 @@
                     <a class="feature-link" href="flighthistory.html">Browse Flight History</a>
                 </div>
 
-                <div class="feature-graphic-fh">
-                   <img src="fh-screenshot3.png" alt="Flight History Example">
+                <div class="feature-graphic">
+                    <div class="fh-mock" id="fhMock">
+                        <div class="fh-mock-topbar">
+                            <span class="fh-mock-meta" id="fhMeta">Showing 0 results</span>
+                            <div class="fh-export-wrap">
+                                <button class="fh-mock-export" id="fhExportBtn">Export CSV</button>
+                                <span class="fh-download-toast" id="fhDownloadToast">Downloaded ✓</span>
+                            </div>
+                        </div>
+                        <table class="fh-mock-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Registration</th>
+                                    <th>Event</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fhTbody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -112,8 +283,110 @@
                     <a class="feature-link" href="dashboard.html">View Dashboard</a>
                 </div>
 
-                <div class="feature-graphic-db">
-                    <img src="dashboard-screenshot2.png" alt="Analytics Dashboard Example">
+                <div class="feature-graphic">
+                    <div class="db-mock" id="dbMock">
+
+                        <div class="db-mock-metrics">
+                            <div class="db-metric">
+                                <span class="db-metric-label">Total Operations</span>
+                                <span class="db-metric-value">428</span>
+                            </div>
+                            <div class="db-metric">
+                                <span class="db-metric-label">Daily Average</span>
+                                <span class="db-metric-value">61</span>
+                            </div>
+                            <div class="db-metric">
+                                <span class="db-metric-label">Peak Hour</span>
+                                <span class="db-metric-value">14:00</span>
+                            </div>
+                        </div>
+
+                        <div class="db-mock-charts">
+
+                            <div class="db-chart-card">
+                                <h4>AAC/ADG Count</h4>
+                                <div class="db-hbar-chart">
+                                    <div class="db-hbar-rows">
+                                        <div class="db-hbar-row">
+                                            <span class="db-hbar-label">A-I</span>
+                                            <div class="db-hbar-track"><div class="db-hbar-fill" style="--target:84%; background:#60a5fa;"></div></div>
+                                            <span class="db-hbar-value">210</span>
+                                        </div>
+                                        <div class="db-hbar-row">
+                                            <span class="db-hbar-label">B-II</span>
+                                            <div class="db-hbar-track"><div class="db-hbar-fill" style="--target:21.6%; background:#10b981;"></div></div>
+                                            <span class="db-hbar-value">54</span>
+                                        </div>
+                                        <div class="db-hbar-row">
+                                            <span class="db-hbar-label">B-I</span>
+                                            <div class="db-hbar-track"><div class="db-hbar-fill" style="--target:18%; background:#34d399;"></div></div>
+                                            <span class="db-hbar-value">45</span>
+                                        </div>
+                                        <div class="db-hbar-row">
+                                            <span class="db-hbar-label">C-II</span>
+                                            <div class="db-hbar-track"><div class="db-hbar-fill" style="--target:13.2%; background:#f59e0b;"></div></div>
+                                            <span class="db-hbar-value">33</span>
+                                        </div>
+                                        <div class="db-hbar-row">
+                                            <span class="db-hbar-label">C-III</span>
+                                            <div class="db-hbar-track"><div class="db-hbar-fill" style="--target:6.4%; background:#ef4444;"></div></div>
+                                            <span class="db-hbar-value">16</span>
+                                        </div>
+                                    </div>
+                                    <div class="db-hbar-axis">
+                                        <div class="db-hbar-gridline" style="left:0%;"></div>
+                                        <div class="db-hbar-gridline" style="left:20%;"></div>
+                                        <div class="db-hbar-gridline" style="left:40%;"></div>
+                                        <div class="db-hbar-gridline" style="left:60%;"></div>
+                                        <div class="db-hbar-gridline" style="left:80%;"></div>
+                                        <div class="db-hbar-gridline" style="left:100%;"></div>
+                                        <div class="db-hbar-axis-labels">
+                                            <span>0</span><span>50</span><span>100</span><span>150</span><span>200</span><span>250</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="db-chart-card">
+                                <h4>Operations by Runway</h4>
+                                <div class="db-vbar-chart">
+                                    <div class="db-vbar-col">
+                                        <div class="db-vbar-stack">
+                                            <div class="db-vbar-seg" style="--target:38%; background:#3b82f6;"></div>
+                                            <div class="db-vbar-seg" style="--target:30%; background:#22c55e;"></div>
+                                            <div class="db-vbar-seg" style="--target:8%; background:#f59e0b;"></div>
+                                        </div>
+                                        <span class="db-vbar-label">5</span>
+                                    </div>
+                                    <div class="db-vbar-col">
+                                        <div class="db-vbar-stack">
+                                            <div class="db-vbar-seg" style="--target:50%; background:#3b82f6;"></div>
+                                            <div class="db-vbar-seg" style="--target:40%; background:#22c55e;"></div>
+                                            <div class="db-vbar-seg" style="--target:6%; background:#f59e0b;"></div>
+                                        </div>
+                                        <span class="db-vbar-label">23</span>
+                                    </div>
+                                    <div class="db-vbar-col">
+                                        <div class="db-vbar-stack">
+                                            <div class="db-vbar-seg" style="--target:20%; background:#3b82f6;"></div>
+                                            <div class="db-vbar-seg" style="--target:16%; background:#22c55e;"></div>
+                                            <div class="db-vbar-seg" style="--target:7%; background:#f59e0b;"></div>
+                                        </div>
+                                        <span class="db-vbar-label">14</span>
+                                    </div>
+                                    <div class="db-vbar-col">
+                                        <div class="db-vbar-stack">
+                                            <div class="db-vbar-seg" style="--target:14%; background:#3b82f6;"></div>
+                                            <div class="db-vbar-seg" style="--target:18%; background:#22c55e;"></div>
+                                            <div class="db-vbar-seg" style="--target:3%; background:#f59e0b;"></div>
+                                        </div>
+                                        <span class="db-vbar-label">32</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -131,8 +404,31 @@
                     <a class="feature-link" href="landingfees.html">View Landing Fees</a>
                 </div>
 
-                <div class="feature-graphic-lf">
-                    <img src="lf-screenshot.png" alt="Landing Fees Example">
+                <div class="feature-graphic">
+                    <div class="lf-mock" id="lfMock">
+                        <div class="lf-mock-topbar">
+                            <span class="lf-mock-meta" id="lfMeta">Showing 0 results</span>
+                            <div class="lf-export-wrap">
+                                <button class="lf-mock-export" id="lfExportBtn">Export CSV</button>
+                                <span class="lf-download-toast" id="lfDownloadToast">Downloaded ✓</span>
+                            </div>
+                        </div>
+                        <table class="lf-mock-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Registration</th>
+                                    <th>ICAO Type</th>
+                                    <th>Fee</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lfTbody"></tbody>
+                        </table>
+                        <div class="lf-mock-total">
+                            <span>Total Fees Owed</span>
+                            <span id="lfTotal">$0.00</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -150,8 +446,55 @@
                     <a class="feature-link" href="noiseinquiry.html">Submit a Noise Inquiry</a>
                 </div>
 
-                <div class="feature-graphic-ni">
-                    <img src="ni-screenshot.png" alt="Noise Inquiry Example">
+                <div class="feature-graphic">
+                    <div class="ni-mock" id="niMock">
+
+                        <div class="ni-mock-form" id="niForm">
+                            <div class="ni-mock-field-row">
+                                <div class="ni-mock-field">
+                                    <label>First Name</label>
+                                    <input type="text" readonly id="niFirst">
+                                </div>
+                                <div class="ni-mock-field">
+                                    <label>Last Name</label>
+                                    <input type="text" readonly id="niLast">
+                                </div>
+                            </div>
+                            <div class="ni-mock-field">
+                                <label>Email</label>
+                                <input type="text" readonly id="niEmail">
+                            </div>
+                            <div class="ni-mock-field">
+                                <label>Street Address</label>
+                                <input type="text" readonly id="niAddress">
+                            </div>
+                            <div class="ni-mock-field-row">
+                                <div class="ni-mock-field">
+                                    <label>Date of Event</label>
+                                    <input type="text" readonly id="niDate">
+                                </div>
+                                <div class="ni-mock-field">
+                                    <label>Time of Event</label>
+                                    <input type="text" readonly id="niTime">
+                                </div>
+                            </div>
+                            <div class="ni-mock-chip-row">
+                                <span class="ni-mock-chip" id="niChip1">Too Loud</span>
+                                <span class="ni-mock-chip" id="niChip2">Too Frequent</span>
+                                <span class="ni-mock-chip" id="niChip3">Hovering</span>
+                                <span class="ni-mock-chip" id="niChip4">Excessive Vibration</span>
+                                <span class="ni-mock-chip">Too Early or Late</span>
+                                <span class="ni-mock-chip">Change in Flight Pattern</span>
+                            </div>
+                            <button class="ni-mock-submit" id="niSubmitBtn">Submit Inquiry</button>
+                        </div>
+
+                        <div class="ni-mock-success" id="niSuccess">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 12l3 3 5-6"></path></svg>
+                            <span>Your inquiry was submitted successfully. We'll follow up if we need more information.</span>
+                        </div>
+
+                    </div>
                 </div>
             </div>
 
@@ -161,7 +504,7 @@
                     <span class="feature-tag">Community Relations</span>
                     <h2>Noise Abatement</h2>
                     <ul class="features-list">
-                        <li>Visualize flight tracks within a 5-mile radius of the airport</li>
+                        <li>Visualize flight tracks within a set radius of the airport</li>
                         <li>Altitude-colored flight paths for easy analysis</li>
                         <li>Review historical tracks by date and aircraft</li>
                         <li>Export flight track reports as a PDF</li>
@@ -169,8 +512,34 @@
                     <a class="feature-link" href="noiseabatement.html">Open Noise Abatement</a>
                 </div>
 
-                <div class="feature-graphic-na">
-                    <img src="na-screenshot.png" alt="Noise Abatement Example">
+                <div class="feature-graphic">
+                    <div class="na-mock" id="naMock">
+
+                        <div class="na-mock-map">
+                            <div id="naLeafletMap" class="na-leaflet-map"></div>
+
+                            <svg class="na-track-overlay" viewBox="0 0 300 180" preserveAspectRatio="none">
+                                <path class="na-seg" pathLength="1" d="M115,20 Q130,33 140,45" stroke="#3b82f6" />
+                                <path class="na-seg" pathLength="1" d="M140,45 Q148,55 153,63" stroke="#22c55e" />
+                                <path class="na-seg" pathLength="1" d="M153,63 Q160,70 168,75" stroke="#84cc16" />
+                                <path class="na-seg" pathLength="1" d="M168,75 Q178,80 173,88" stroke="#f59e0b" />
+                                <path class="na-seg" pathLength="1" d="M173,88 Q163,94 150,90" stroke="#dc2626" />
+                                <path class="na-seg" pathLength="1" d="M150,90 L150,90" stroke="#dc2626" />
+
+                                <circle class="na-dot na-dot-start" id="naDotStart" cx="115" cy="20" r="4.5" />
+                                <circle class="na-dot na-dot-end" id="naDotEnd" cx="150" cy="90" r="4.5" />
+                            </svg>
+                        </div>
+
+                        <div class="na-mock-bottom">
+                            <span class="na-mock-meta" id="naMeta">Loading track…</span>
+                            <div class="na-export-wrap">
+                                <button class="na-mock-export" id="naExportBtn">⬇ Export PDF</button>
+                                <span class="na-report-toast" id="naReportToast">Report Generated ✓</span>
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
             </div>
 
@@ -301,10 +670,606 @@
                         }).catch(() => {});
                     }
                 });
+
+                // Browsers can suspend/deprioritize offscreen video after it's
+                // been scrolled far away for a while (a resource-saving
+                // behavior), which can leave it stuck on a stale frame even
+                // though `videoReady` was already true from earlier. Re-prime
+                // it every time the hero actually re-enters the viewport —
+                // not just once on initial load — so scrolling back to the
+                // top always re-triggers the animation correctly.
+                const heroVisibilityObserver = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            heroVideo.play().then(() => {
+                                heroVideo.pause();
+                                scrubVideo();
+                            }).catch(() => {
+                                scrubVideo();
+                            });
+                        }
+                    });
+                }, { threshold: 0.1 });
+
+                heroVisibilityObserver.observe(heroSection);
             }
             // ── /Hero takeoff video ────────────────────────────────────
 
-            const cards = document.querySelectorAll(".feature-card");
+            // ── Flight History card mockup — animated table fill + CSV
+            //    export loop, matching the real page's columns/badges. ──
+            const fhMock = document.getElementById("fhMock");
+
+            if (fhMock) {
+                const fhTbody = document.getElementById("fhTbody");
+                const fhMeta = document.getElementById("fhMeta");
+                const fhExportBtn = document.getElementById("fhExportBtn");
+                const fhDownloadToast = document.getElementById("fhDownloadToast");
+
+                const fhRows = [
+                    { date: "08/21", time: "14:32", reg: "N678FX", event: "Takeoff", badge: "takeoff" },
+                    { date: "08/21", time: "14:28", reg: "N807DC", event: "Landing", badge: "landing" },
+                    { date: "08/21", time: "14:21", reg: "N635SF", event: "Touch and Go", badge: "tng" },
+                    { date: "08/21", time: "14:15", reg: "N412VC", event: "Landing", badge: "landing" },
+                    { date: "08/21", time: "14:09", reg: "N815AM", event: "Takeoff", badge: "takeoff" },
+                    { date: "08/20", time: "19:47", reg: "N120QS", event: "Landing", badge: "landing" },
+                    { date: "08/20", time: "19:33", reg: "N547JP", event: "Takeoff", badge: "takeoff" },
+                    { date: "08/20", time: "19:12", reg: "N851NN", event: "Touch and Go", badge: "tng" },
+                ];
+
+                let fhTimeouts = [];
+                let fhLoopTimeout = null;
+
+                const fhClearTimers = () => {
+                    fhTimeouts.forEach((t) => clearTimeout(t));
+                    fhTimeouts = [];
+                    if (fhLoopTimeout) clearTimeout(fhLoopTimeout);
+                };
+
+                const fhRunCycle = () => {
+                    fhTbody.innerHTML = "";
+                    fhMeta.textContent = "Showing 0 results";
+                    fhExportBtn.classList.remove("pressed");
+                    fhDownloadToast.classList.remove("show");
+
+                    fhRows.forEach((r, i) => {
+                        const t = setTimeout(() => {
+                            const tr = document.createElement("tr");
+                            tr.innerHTML = `
+                                <td style="animation-delay:0s">${r.date}</td>
+                                <td style="animation-delay:0s">${r.time}</td>
+                                <td style="animation-delay:0s">${r.reg}</td>
+                                <td style="animation-delay:0s"><span class="fh-badge fh-badge-${r.badge}">${r.event}</span></td>
+                            `;
+                            fhTbody.appendChild(tr);
+                            fhMeta.textContent = `Showing ${i + 1} result${i === 0 ? "" : "s"}`;
+                        }, i * 450);
+                        fhTimeouts.push(t);
+                    });
+
+                    const pressTime = fhRows.length * 450 + 700;
+                    fhTimeouts.push(setTimeout(() => {
+                        fhExportBtn.classList.add("pressed");
+                    }, pressTime));
+                    fhTimeouts.push(setTimeout(() => {
+                        fhExportBtn.classList.remove("pressed");
+                    }, pressTime + 250));
+                    fhTimeouts.push(setTimeout(() => {
+                        fhDownloadToast.classList.add("show");
+                    }, pressTime + 300));
+                    fhTimeouts.push(setTimeout(() => {
+                        fhDownloadToast.classList.remove("show");
+                    }, pressTime + 1500));
+
+                    fhLoopTimeout = setTimeout(fhRunCycle, pressTime + 1800);
+                };
+
+                const fhObserver = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            fhClearTimers();
+                            fhRunCycle();
+                        } else {
+                            fhClearTimers();
+                        }
+                    });
+                }, { threshold: 0.3 });
+
+                fhObserver.observe(fhMock);
+            }
+            // ── /Flight History mockup ───────────────────────────────────────
+
+            // ── Dashboard card mockup — bars grow in, hold, then loop ──────
+            const dbMock = document.getElementById("dbMock");
+
+            if (dbMock) {
+                const dbBars = dbMock.querySelectorAll(".db-hbar-fill, .db-vbar-seg");
+                let dbTimeouts = [];
+                let dbLoopTimeout = null;
+
+                const dbClearTimers = () => {
+                    dbTimeouts.forEach((t) => clearTimeout(t));
+                    dbTimeouts = [];
+                    if (dbLoopTimeout) clearTimeout(dbLoopTimeout);
+                };
+
+                const dbRunCycle = () => {
+                    dbBars.forEach((bar) => bar.classList.remove("grow"));
+                    // Force reflow so the transition restarts from 0 every cycle
+                    void dbMock.offsetWidth;
+
+                    dbBars.forEach((bar, i) => {
+                        const t = setTimeout(() => {
+                            bar.classList.add("grow");
+                        }, i * 60);
+                        dbTimeouts.push(t);
+                    });
+
+                    const cycleLength = dbBars.length * 60 + 800 + 1800;
+                    dbLoopTimeout = setTimeout(dbRunCycle, cycleLength);
+                };
+
+                const dbObserver = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            dbClearTimers();
+                            dbRunCycle();
+                        } else {
+                            dbClearTimers();
+                        }
+                    });
+                }, { threshold: 0.3 });
+
+                dbObserver.observe(dbMock);
+            }
+            // ── /Dashboard mockup ─────────────────────────────────────────────
+
+            // ── Landing Fees card mockup — same fill + export pattern as
+            //    Flight History, plus a running total that ticks up. ──────
+            const lfMock = document.getElementById("lfMock");
+
+            if (lfMock) {
+                const lfTbody = document.getElementById("lfTbody");
+                const lfMeta = document.getElementById("lfMeta");
+                const lfExportBtn = document.getElementById("lfExportBtn");
+                const lfDownloadToast = document.getElementById("lfDownloadToast");
+                const lfTotalEl = document.getElementById("lfTotal");
+
+                const lfRows = [
+                    { time: "14:28", reg: "N807DC", icao: "TBM7", fee: 35.0 },
+                    { time: "14:15", reg: "N412VC", icao: "PC12", fee: 35.0 },
+                    { time: "13:47", reg: "N120QS", icao: "C560", fee: 40.0 },
+                    { time: "13:02", reg: "N851NN", icao: "C56X", fee: 60.0 },
+                    { time: "12:21", reg: "N586DT", icao: "F2TH", fee: 80.0 },
+                    { time: "11:38", reg: "N303DU", icao: "GLF5", fee: 80.0 },
+                    { time: "10:52", reg: "N214RJ", icao: "SF50", fee: 35.0 },
+                ];
+
+                let lfTimeouts = [];
+                let lfLoopTimeout = null;
+
+                const lfClearTimers = () => {
+                    lfTimeouts.forEach((t) => clearTimeout(t));
+                    lfTimeouts = [];
+                    if (lfLoopTimeout) clearTimeout(lfLoopTimeout);
+                };
+
+                const lfRunCycle = () => {
+                    lfTbody.innerHTML = "";
+                    lfMeta.textContent = "Showing 0 results";
+                    lfTotalEl.textContent = "$0.00";
+                    lfExportBtn.classList.remove("pressed");
+                    lfDownloadToast.classList.remove("show");
+
+                    let runningTotal = 0;
+
+                    lfRows.forEach((r, i) => {
+                        const t = setTimeout(() => {
+                            const tr = document.createElement("tr");
+                            tr.innerHTML = `
+                                <td>${r.time}</td>
+                                <td>${r.reg} <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg></td>
+                                <td>${r.icao}</td>
+                                <td><span class="lf-fee-amount">$${r.fee.toFixed(2)}</span></td>
+                            `;
+                            lfTbody.appendChild(tr);
+                            lfMeta.textContent = `Showing ${i + 1} result${i === 0 ? "" : "s"}`;
+                            runningTotal += r.fee;
+                            lfTotalEl.textContent = `$${runningTotal.toFixed(2)}`;
+                        }, i * 450);
+                        lfTimeouts.push(t);
+                    });
+
+                    const pressTime = lfRows.length * 450 + 700;
+                    lfTimeouts.push(setTimeout(() => {
+                        lfExportBtn.classList.add("pressed");
+                    }, pressTime));
+                    lfTimeouts.push(setTimeout(() => {
+                        lfExportBtn.classList.remove("pressed");
+                    }, pressTime + 250));
+                    lfTimeouts.push(setTimeout(() => {
+                        lfDownloadToast.classList.add("show");
+                    }, pressTime + 300));
+                    lfTimeouts.push(setTimeout(() => {
+                        lfDownloadToast.classList.remove("show");
+                    }, pressTime + 1500));
+
+                    lfLoopTimeout = setTimeout(lfRunCycle, pressTime + 1800);
+                };
+
+                const lfObserver = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            lfClearTimers();
+                            lfRunCycle();
+                        } else {
+                            lfClearTimers();
+                        }
+                    });
+                }, { threshold: 0.3 });
+
+                lfObserver.observe(lfMock);
+            }
+            // ── /Landing Fees mockup ──────────────────────────────────────────
+
+            // ── Noise Inquiry card mockup — types into fields, selects
+            //    chips, presses submit, shows the real success banner. ──────
+            const niMock = document.getElementById("niMock");
+
+            if (niMock) {
+                const niForm = document.getElementById("niForm");
+                const niFirst = document.getElementById("niFirst");
+                const niLast = document.getElementById("niLast");
+                const niEmail = document.getElementById("niEmail");
+                const niAddress = document.getElementById("niAddress");
+                const niDate = document.getElementById("niDate");
+                const niTime = document.getElementById("niTime");
+                const niChip1 = document.getElementById("niChip1");
+                const niChip2 = document.getElementById("niChip2");
+                const niChip3 = document.getElementById("niChip3");
+                const niChip4 = document.getElementById("niChip4");
+                const niSubmitBtn = document.getElementById("niSubmitBtn");
+                const niSuccess = document.getElementById("niSuccess");
+
+                let niTimeouts = [];
+                let niLoopTimeout = null;
+
+                const niClearTimers = () => {
+                    niTimeouts.forEach((t) => clearTimeout(t));
+                    niTimeouts = [];
+                    if (niLoopTimeout) clearTimeout(niLoopTimeout);
+                };
+
+                // Types `text` into `el` one character at a time, starting
+                // `delay` ms from now, and calls `onDone` when finished.
+                const niType = (el, text, delay, charSpeed, onDone) => {
+                    const t = setTimeout(() => {
+                        let i = 0;
+                        const step = () => {
+                            el.value = text.slice(0, i);
+                            i++;
+                            if (i <= text.length) {
+                                const t2 = setTimeout(step, charSpeed);
+                                niTimeouts.push(t2);
+                            } else if (onDone) {
+                                onDone();
+                            }
+                        };
+                        step();
+                    }, delay);
+                    niTimeouts.push(t);
+                };
+
+                const niRunCycle = () => {
+                    niForm.classList.remove("hide");
+                    niSuccess.classList.remove("show");
+                    niFirst.value = "";
+                    niLast.value = "";
+                    niEmail.value = "";
+                    niAddress.value = "";
+                    niDate.value = "";
+                    niTime.value = "";
+                    niChip1.classList.remove("checked");
+                    niChip2.classList.remove("checked");
+                    niChip3.classList.remove("checked");
+                    niChip4.classList.remove("checked");
+                    niSubmitBtn.classList.remove("pressed");
+
+                    niType(niFirst, "Sarah", 300, 65);
+                    niType(niLast, "Miller", 900, 65);
+                    niType(niEmail, "smiller@email.com", 1600, 38);
+                    niType(niAddress, "482 Airport Rd", 2500, 45);
+                    niType(niDate, "08/21/2026", 3400, 45);
+                    niType(niTime, "14:32", 3900, 45);
+
+                    niTimeouts.push(setTimeout(() => niChip1.classList.add("checked"), 4400));
+                    niTimeouts.push(setTimeout(() => niChip2.classList.add("checked"), 4650));
+                    niTimeouts.push(setTimeout(() => niChip3.classList.add("checked"), 4900));
+                    niTimeouts.push(setTimeout(() => niChip4.classList.add("checked"), 5150));
+
+                    const pressTime = 5700;
+                    niTimeouts.push(setTimeout(() => niSubmitBtn.classList.add("pressed"), pressTime));
+                    niTimeouts.push(setTimeout(() => niSubmitBtn.classList.remove("pressed"), pressTime + 200));
+                    niTimeouts.push(setTimeout(() => niForm.classList.add("hide"), pressTime + 250));
+                    niTimeouts.push(setTimeout(() => niSuccess.classList.add("show"), pressTime + 500));
+
+                    const cycleLength = pressTime + 2600;
+                    niLoopTimeout = setTimeout(niRunCycle, cycleLength);
+                };
+
+                const niObserver = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            niClearTimers();
+                            niRunCycle();
+                        } else {
+                            niClearTimers();
+                        }
+                    });
+                }, { threshold: 0.3 });
+
+                niObserver.observe(niMock);
+            }
+            // ── /Noise Inquiry mockup ─────────────────────────────────────────
+
+            // ── Noise Abatement card mockup — real Leaflet map (same as the
+            //    actual product) as a static backdrop, with a hand-drawn
+            //    curved track overlay on top (map view is fixed/non-
+            //    interactive, so a real lat/lng polyline can't easily
+            //    produce a smooth "turn to final" curve — this gives full
+            //    control over the shape while still sitting on real tiles).
+            const naMock = document.getElementById("naMock");
+
+            if (naMock && window.L) {
+                const naMeta = document.getElementById("naMeta");
+                const naExportBtn = document.getElementById("naExportBtn");
+                const naReportToast = document.getElementById("naReportToast");
+                const naSegs = naMock.querySelectorAll(".na-seg");
+                const naDotStart = document.getElementById("naDotStart");
+                const naDotEnd = document.getElementById("naDotEnd");
+
+                let naMap = null;
+                let naTimeouts = [];
+                let naLoopTimeout = null;
+
+                const naClearTimers = () => {
+                    naTimeouts.forEach((t) => clearTimeout(t));
+                    naTimeouts = [];
+                    if (naLoopTimeout) clearTimeout(naLoopTimeout);
+                };
+
+                const naFinalSeg = naSegs[naSegs.length - 2]; // kept for reference; no longer patched in isolation
+                const naRunwaySeg = naSegs[naSegs.length - 1]; // straight rollout from runway 24 down to runway 6's end
+
+                const naInitMap = () => {
+                    naMap = L.map("naLeafletMap", {
+                        zoomControl: false,
+                        dragging: false,
+                        scrollWheelZoom: false,
+                        doubleClickZoom: false,
+                        boxZoom: false,
+                        keyboard: false,
+                        touchZoom: false,
+                        attributionControl: true,
+                    }).setView([41.6262, -73.8845], 12);
+
+                    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+                        attribution: "© OpenStreetMap, © CARTO",
+                        maxZoom: 19,
+                    }).addTo(naMap);
+
+                    // Tiles can report the wrong size on the very first
+                    // render if the card was still animating in — fix it
+                    // up shortly after creation and on resize, then use
+                    // Leaflet's own projection (not a hand-guessed pixel
+                    // position) to find exactly where runway 24's threshold
+                    // and runway 6's threshold (both from flights_pou.js)
+                    // fall within this fixed, non-interactive view.
+                    //
+                    // Rather than patching just the final hook segment onto
+                    // an otherwise-fixed lead-in shape (which produced an
+                    // unnatural sharp turn when the real endpoint didn't
+                    // line up with that fixed shape), the whole descent is
+                    // computed as ONE smooth quadratic arc from the fixed
+                    // start point to the real runway 24 threshold, then
+                    // sampled into 5 equal chords for the 5 altitude-band
+                    // colors — guaranteeing no seams or sharp corners,
+                    // since every segment comes from the same curve.
+                    const alignTrackToRunway = () => {
+                        naMap.invalidateSize();
+                        const size = naMap.getSize();
+                        if (!size.x || !size.y) return;
+
+                        const toViewBox = (lat, lng) => {
+                            const pt = naMap.latLngToContainerPoint([lat, lng]);
+                            return [(pt.x / size.x) * 300, (pt.y / size.y) * 180];
+                        };
+
+                        const rwy24 = toViewBox(41.630346, -73.878236); // RWY 24 threshold (entry point)
+                        const rwy6 = toViewBox(41.621906, -73.891963);  // RWY 6 threshold (far end / rollout stop)
+
+                        const start = [115, 20]; // fixed high-altitude starting point
+                        const end = rwy24;
+
+                        // Wide, gentle bow: offset the curve's control point
+                        // perpendicular to the direct start→end line.
+                        const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+                        const dx = end[0] - start[0];
+                        const dy = end[1] - start[1];
+                        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const perp = [dy / len, -dx / len];
+                        const bow = len * 0.35;
+                        const ctrl = [mid[0] + perp[0] * bow, mid[1] + perp[1] * bow];
+
+                        const quadPoint = (t) => {
+                            const mt = 1 - t;
+                            return [
+                                mt * mt * start[0] + 2 * mt * t * ctrl[0] + t * t * end[0],
+                                mt * mt * start[1] + 2 * mt * t * ctrl[1] + t * t * end[1],
+                            ];
+                        };
+
+                        // Sample the arc at 6 points (t = 0, 0.2, ... 1) and
+                        // draw the 5 hook segments as chords between them —
+                        // fine enough sampling to read as one smooth curve.
+                        const points = [0, 0.2, 0.4, 0.6, 0.8, 1].map(quadPoint);
+                        for (let i = 0; i < 5; i++) {
+                            const [x1, y1] = points[i];
+                            const [x2, y2] = points[i + 1];
+                            naSegs[i].setAttribute("d", `M${x1},${y1} L${x2},${y2}`);
+                        }
+
+                        naRunwaySeg.setAttribute("d", `M${rwy24[0]},${rwy24[1]} L${rwy6[0]},${rwy6[1]}`);
+                        naDotStart.setAttribute("cx", start[0]);
+                        naDotStart.setAttribute("cy", start[1]);
+                        naDotEnd.setAttribute("cx", rwy6[0]);
+                        naDotEnd.setAttribute("cy", rwy6[1]);
+                    };
+
+                    setTimeout(alignTrackToRunway, 80);
+                    window.addEventListener("resize", () => naMap && alignTrackToRunway());
+                };
+
+                const naRunCycle = () => {
+                    naSegs.forEach((s) => s.classList.remove("draw"));
+                    naDotStart.classList.remove("show");
+                    naDotEnd.classList.remove("show");
+                    naExportBtn.classList.remove("ready", "pressed");
+                    naReportToast.classList.remove("show");
+                    naMeta.textContent = "Loading track…";
+                    void naMock.offsetWidth;
+
+                    naTimeouts.push(setTimeout(() => naDotStart.classList.add("show"), 150));
+
+                    naSegs.forEach((seg, i) => {
+                        const t = setTimeout(() => {
+                            seg.classList.add("draw");
+                        }, 300 + i * 450);
+                        naTimeouts.push(t);
+                    });
+
+                    const segsDoneTime = 300 + naSegs.length * 450 + 200;
+                    naTimeouts.push(setTimeout(() => {
+                        naDotEnd.classList.add("show");
+                        naMeta.textContent = "Track 1 of 1 · 2m 14s";
+                        naExportBtn.classList.add("ready");
+                    }, segsDoneTime));
+
+                    const pressTime = segsDoneTime + 900;
+                    naTimeouts.push(setTimeout(() => naExportBtn.classList.add("pressed"), pressTime));
+                    naTimeouts.push(setTimeout(() => naExportBtn.classList.remove("pressed"), pressTime + 220));
+                    naTimeouts.push(setTimeout(() => naReportToast.classList.add("show"), pressTime + 350));
+                    naTimeouts.push(setTimeout(() => naReportToast.classList.remove("show"), pressTime + 1600));
+
+                    const cycleLength = pressTime + 2000;
+                    naLoopTimeout = setTimeout(naRunCycle, cycleLength);
+                };
+
+                const naObserver = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            if (!naMap) naInitMap();
+                            naClearTimers();
+                            naRunCycle();
+                        } else {
+                            naClearTimers();
+                        }
+                    });
+                }, { threshold: 0.3 });
+
+                naObserver.observe(naMock);
+            }
+            // ── /Noise Abatement mockup ───────────────────────────────────────
+
+            // ── Features section background video — scroll-scrubbed sky
+            //    trail, tied to progress through the whole (multi-screen-
+            //    tall) features section rather than just one viewport. ──
+            const featuresSection = document.querySelector(".features-section");
+            const featuresBgVideo = document.getElementById("featuresBgVideo");
+
+            if (featuresSection && featuresBgVideo) {
+                let bgVideoReady = false;
+                let bgTicking = false;
+
+                const scrubBgVideo = () => {
+                    if (!bgVideoReady || !featuresBgVideo.duration) {
+                        bgTicking = false;
+                        return;
+                    }
+
+                    const rect = featuresSection.getBoundingClientRect();
+                    const scrollableRange = rect.height - window.innerHeight;
+
+                    let progress = scrollableRange > 0 ? -rect.top / scrollableRange : 0;
+                    progress = Math.min(Math.max(progress, 0), 1);
+
+                    featuresBgVideo.currentTime = progress * featuresBgVideo.duration;
+                    bgTicking = false;
+                };
+
+                featuresBgVideo.addEventListener("loadedmetadata", () => {
+                    bgVideoReady = true;
+                });
+
+                featuresBgVideo.addEventListener("playing", () => {
+                    bgVideoReady = true;
+                    featuresBgVideo.pause();
+                    scrubBgVideo();
+                });
+
+                const featuresBgObserver = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            featuresBgVideo.classList.add("visible");
+                            featuresBgVideo.play().then(() => {
+                                featuresBgVideo.pause();
+                                scrubBgVideo();
+                            }).catch(() => {
+                                scrubBgVideo();
+                            });
+                        } else {
+                            featuresBgVideo.classList.remove("visible");
+                        }
+                    });
+                }, { threshold: 0 });
+
+                featuresBgObserver.observe(featuresSection);
+
+                window.addEventListener("scroll", () => {
+                    if (!bgTicking) {
+                        window.requestAnimationFrame(scrubBgVideo);
+                        bgTicking = true;
+                    }
+                });
+
+                window.addEventListener("resize", scrubBgVideo);
+            }
+            // ── /Features background video ─────────────────────────────────
+
+            // ── How It Works diagram — replays every time it re-enters view ──
+            const hiwSection = document.querySelector(".how-it-works-section");
+
+            if (hiwSection) {
+                const hiwObserver = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            // Force a reflow between removing and re-adding the
+                            // class so the CSS animations restart from 0% each
+                            // time, instead of no-op'ing because the class was
+                            // "already" applied.
+                            hiwSection.classList.remove("play");
+                            void hiwSection.offsetWidth;
+                            hiwSection.classList.add("play");
+                        } else {
+                            hiwSection.classList.remove("play");
+                        }
+                    });
+                }, { threshold: 0.35 });
+
+                hiwObserver.observe(hiwSection);
+            }
+            // ── /How It Works diagram ──────────────────────────────────────
+
+            const cards = document.querySelectorAll(".feature-card, .stat-row");
             cards.forEach((card) => card.classList.add("fade-in"));
 
             let lastScrollY = window.scrollY;

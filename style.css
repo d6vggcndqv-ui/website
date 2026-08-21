@@ -2,12 +2,11 @@ html{
     font-size: 16px; /* sets a base font size for the entire document, 1rem=16px 2rem=32px */
     font-family: "DM Sans", sans-serif; /* sets the font family for the entire document */
     scrollbar-gutter: stable; /* prevents layout shifts when scrollbar appears/disappears */
+    scroll-behavior: smooth; /* smooth in-page scrolling for hero-nav anchor links */
 }
 
 .navbar{ /* styles for the navigation bar */
-    position: fixed; /* keeps navbar at the top when you scroll */
-    top: 0;
-    left: 0;
+    position: static; /* was: fixed — scrolls away with the page instead of staying pinned */
     width: 100%;
     box-sizing: border-box; /* keeps padding INSIDE the 100% width instead of adding to it, which was pushing content off-screen to the right */
     background-color: #fff;
@@ -36,7 +35,7 @@ body{
     display: flex;
     flex-direction: column;
     min-height: 100vh; /* makes body take up at least full screen */
-    padding-top: 120px; /* adds space at the top to prevent content from being hidden behind the navbar */
+    /* padding-top removed — no longer needed since .navbar isn't fixed */
 }
 
 main{
@@ -259,38 +258,353 @@ button[type="submit"]:hover {
 }
 
 .post-hero-section {
-    padding-right: 10%;
-    padding-left: 10%;
-    margin-top: 60px;
+    position: relative;
+    overflow: hidden;
+    min-height: 70vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 10%;
+    margin-top: 10px;
     text-align: center;
+    scroll-margin-top: 24px; /* small breathing room above the section when jumped to */
+    background-color: #05100f; /* shows briefly before video/poster paints, matches footage tone */
+}
+
+.overview-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.overview-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    background: linear-gradient(180deg, rgba(3, 12, 12, 0.82) 0%, rgba(3, 12, 12, 0.72) 55%, rgba(3, 12, 12, 0.88) 100%);
+    pointer-events: none;
+}
+
+.overview-content {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+}
+
+.overview-content h1 {
+    color: #fff;
 }
 
 #post-hero-text {
     font-size: 1.2rem;
     margin-top: 20px;
     line-height: 1.6;
-    color: #444;
+    color: #d7e2e0;
+    max-width: 780px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.overview-list {
+    list-style: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 56px;
+    max-width: 860px;
+    margin: 48px auto 0;
+    padding: 0;
+    text-align: left;
+}
+
+.overview-list li {
+    position: relative;
+    padding-left: 34px;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    color: #e8f1ef;
+    font-weight: 500;
+}
+
+.overview-list li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: #8fd6c9;
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 48px;
+    margin-top: 56px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 130px;
+}
+
+.stat-icon {
+    width: 28px;
+    height: 28px;
+    color: #8fd6c9;
+    margin-bottom: 10px;
+}
+
+.stat-number {
+    font-size: clamp(1.8rem, 3vw, 2.6rem);
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.1;
+}
+
+.stat-label {
+    margin-top: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8fd6c9;
 }
 
       /* ── Feature Sections ───────────────────────────────────────── */
 
+        .features-bg-video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: -1; /* sits behind normal page content; sections with their own opaque background (hero, overview, how-it-works) naturally cover it where they overlap */
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .features-bg-video.visible {
+            opacity: 1;
+        }
+
         .features-section {
+            position: relative;
+            background: transparent; /* lets the fixed sky video show through the gaps around/behind the (opaque) cards */
             display: flex;
             flex-direction: column;
             gap: 80px;
             margin: 60px auto;
             max-width: 100%;
             padding: 0 24px;
+            scroll-margin-top: 24px; /* small breathing room above the section when jumped to */
+        }
+
+        .how-it-works-section {
+            scroll-margin-top: -20px; /* negative value = scroll a bit further down than the section's own top */
+            text-align: center;
+            padding: 30px 8% 60px;
+            background: radial-gradient(ellipse 80% 90% at 50% 45%, rgba(0, 87, 255, 0.12) 0%, rgba(0, 87, 255, 0.04) 55%, rgba(0, 87, 255, 0) 100%), #fff;
+            overflow: hidden; /* keeps the gradient's edges clean within the section */
+        }
+
+        .how-it-works-section h2 {
+            font-size: clamp(1.8rem, 3vw, 2.4rem);
+            font-weight: 700;
+            margin: 8px 0 0;
+        }
+
+        .hiw-intro {
+            color: #555;
+            font-size: 1.05rem;
+            max-width: 640px;
+            margin: 8px auto 0;
+            line-height: 1.5;
+        }
+
+        /* ── Diagram ─────────────────────────────────────────────────── */
+        .hiw-diagram-wrap {
+            position: relative;
+            z-index: 0;
+            max-width: 900px;
+            margin: 20px auto 0;
+            padding-bottom: 100px; /* reserves room for the System label, which sits absolutely positioned past the SVG's own bottom edge */
+        }
+
+        .hiw-diagram {
+            width: 100%;
+            height: auto;
+            display: block;
+            overflow: visible;
+        }
+
+        .hiw-plane {
+            font-size: 92px;
+            fill: #0057ff;
+            text-anchor: middle;
+        }
+
+        .hiw-arc {
+            fill: none;
+            stroke: #0057ff;
+            stroke-width: 3;
+            stroke-linecap: round;
+            opacity: 0;
+            transform-origin: 450px 130px;
+        }
+
+        .hiw-connector {
+            stroke: #c7d0da;
+            stroke-width: 2;
+            stroke-dasharray: 4 6;
+        }
+
+        .hiw-node {
+            fill: #0057ff;
+        }
+
+        .hiw-branch {
+            fill: none;
+            stroke: #0057ff;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-dasharray: 1;
+            stroke-dashoffset: 1;
+        }
+
+        .hiw-icon-group {
+            opacity: 0.25;
+            transform-box: fill-box;
+            transform-origin: center;
+        }
+
+        .hiw-icon-group .icon-shape {
+            stroke: #0057ff;
+            stroke-width: 1.8;
+            fill: none;
+        }
+
+        /* ── Step labels — sit beside their icons in the open space ─────
+           Anchored to the wrapper's own edges (left:0 / right:0 — not
+           arbitrary percentages) since that's the positioning style that
+           proved reliable for centering before. Width is kept narrow
+           enough that these never reach the icons or connecting lines,
+           regardless of screen size. */
+        .hiw-label {
+            position: absolute;
+            width: 190px;
+            opacity: 0;
+        }
+
+        .hiw-label.antenna {
+            left: 0;
+            top: 46%;
+            text-align: center;
+        }
+
+        .hiw-label.camera {
+            right: 0;
+            top: 46%;
+            text-align: center;
+        }
+
+        .hiw-label.system {
+            left: 0;
+            right: 0;
+            top: 76%;
+            width: 320px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .hiw-label h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 0 0 8px;
+        }
+
+        .hiw-label p {
+            font-size: 0.95rem;
+            line-height: 1.55;
+            color: #555;
+            margin: 0;
+        }
+
+        /* ── Animation sequence — only runs while .play is present ─────
+           JS toggles .play on/off via IntersectionObserver, forcing a
+           reflow in between so the whole sequence restarts every time
+           the section re-enters the viewport. */
+        @keyframes hiwArcPulse {
+            0% { opacity: 0; transform: scale(0.6); }
+            45% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.3); }
+        }
+
+        @keyframes hiwDraw {
+            to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes hiwPop {
+            0% { opacity: 0.25; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes hiwFade {
+            0% { opacity: 0; transform: translateY(8px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .how-it-works-section.play .hiw-arc.a1 { animation: hiwArcPulse 1s ease-out 0.1s 1 both; }
+        .how-it-works-section.play .hiw-arc.a2 { animation: hiwArcPulse 1s ease-out 0.3s 1 both; }
+        .how-it-works-section.play .hiw-arc.a3 { animation: hiwArcPulse 1s ease-out 0.5s 1 both; }
+
+        .how-it-works-section.play .hiw-branch.antenna { animation: hiwDraw 0.7s ease-out 0.6s forwards; }
+        .how-it-works-section.play .hiw-icon-group.antenna { animation: hiwPop 0.5s ease-out 1.2s forwards; }
+
+        .how-it-works-section.play .hiw-branch.camera { animation: hiwDraw 0.7s ease-out 0.75s forwards; }
+        .how-it-works-section.play .hiw-icon-group.camera { animation: hiwPop 0.5s ease-out 1.35s forwards; }
+
+        .how-it-works-section.play .hiw-branch.to-system-a { animation: hiwDraw 0.7s ease-out 2s forwards; }
+        .how-it-works-section.play .hiw-branch.to-system-b { animation: hiwDraw 0.7s ease-out 2.15s forwards; }
+        .how-it-works-section.play .hiw-icon-group.system { animation: hiwPop 0.5s ease-out 2.85s forwards; }
+
+        .how-it-works-section.play .hiw-label.antenna { animation: hiwFade 0.5s ease-out 1.4s forwards; }
+        .how-it-works-section.play .hiw-label.camera { animation: hiwFade 0.5s ease-out 1.55s forwards; }
+        .how-it-works-section.play .hiw-label.system { animation: hiwFade 0.5s ease-out 3.05s forwards; }
+
+        .features-heading {
+            text-align: center;
+            font-size: clamp(1.8rem, 3vw, 2.4rem);
+            font-weight: 700;
+            margin: 0 0 -56px;
         }
 
         /* Alternating card layout */
         .feature-card {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 48px;
+            gap: 64px;
             align-items: center;
             margin-top: 10%;
-            background-color: white;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.16) 100%);
+            backdrop-filter: blur(16px) saturate(160%);
+            -webkit-backdrop-filter: blur(16px) saturate(160%);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+            border-radius: 20px;
+            padding: 40px;
         }
 
         .fade-in {
@@ -367,109 +681,776 @@ button[type="submit"]:hover {
         .feature-link:hover { gap: 10px; }
         .feature-link::after { content: "→"; }
 
-        /* When you add a real image, remove the dashed border and placeholder styles */
-        .feature-graphic img {
-            width: 105%;
-            height: 105%;
+        /* ── Graphic side — one uniform system for all six cards ─────────
+           Fixed aspect ratio + consistent frame (border, radius, soft
+           shadow) so every card reads as the same "screen" regardless of
+           whether it holds a video, image, or placeholder. */
+        .feature-graphic {
+            width: 100%;
+            aspect-ratio: 16 / 10;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.1);
+            background-color: #f4f5f7;
+        }
+
+        .feature-graphic img,
+        .feature-graphic video {
+            width: 100%;
+            height: 100%;
             object-fit: cover;
             display: block;
-            border-radius: 1%;
         }
 
-        .feature-graphic-fh {
+        /* ── Flight History card mockup — mirrors the real table/badge/
+           button styling from flighthistory.html so this reads as an
+           authentic preview rather than a generic placeholder. ────────── */
+        .fh-mock {
             width: 100%;
             height: 100%;
-            border-radius: 1%;
-            overflow: hidden; /* ensures the image respects the rounded corners */
+            box-sizing: border-box;
+            background: #fff;
+            padding: 16px 18px;
+            display: flex;
+            flex-direction: column;
+            font-family: "DM Sans", sans-serif;
         }
 
-        
-
-        .feature-graphic-fh img {
-            width: 150%;
-            height: 100%;
-            display: block;
-            border-radius: 1%;
-            object-position: left;
+        .fh-mock-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            flex-shrink: 0;
         }
 
+        .fh-mock-meta {
+            font-size: 12px;
+            color: #666;
+        }
 
-        .feature-graphic-db {
+        .fh-mock-export {
+            font-family: "DM Sans", sans-serif;
+            font-size: 12px;
+            padding: 6px 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            color: #111;
+            transition: transform 0.15s ease, background 0.15s ease;
+        }
+
+        .fh-mock-export.pressed {
+            transform: scale(0.94);
+            background: #f0f0f0;
+        }
+
+        .fh-export-wrap {
+            position: relative;
+        }
+
+        .fh-download-toast {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            white-space: nowrap;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 11px;
+            border-radius: 99px;
+            background: #dcfce7;
+            color: #166534;
+            opacity: 0;
+            transform: translateY(-4px);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            pointer-events: none;
+        }
+
+        .fh-download-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .fh-mock-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
+        }
+
+        .fh-mock-table th {
+            text-align: left;
+            padding: 7px 10px;
+            border-bottom: 2px solid #ddd;
+            font-weight: 600;
+            color: #111;
+            white-space: nowrap;
+        }
+
+        .fh-mock-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid #eee;
+            white-space: nowrap;
+            color: #222;
+            opacity: 0;
+            animation: fhRowIn 0.4s ease forwards;
+        }
+
+        @keyframes fhRowIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fh-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 9px;
+            border-radius: 99px;
+        }
+        .fh-badge-takeoff { background: #dbeafe; color: #1e40af; }
+        .fh-badge-landing { background: #dcfce7; color: #166534; }
+        .fh-badge-tng { background: #fef9c3; color: #854d0e; }
+
+        /* ── /Flight History mockup ─────────────────────────────────────── */
+
+        /* ── Dashboard card mockup — mirrors real metric-tile and
+           chart-card styling from dashboard.html; bars are hand-built
+           with CSS custom properties + transitions (no charting library
+           needed for a small looping decorative preview). ────────────── */
+        .db-mock {
             width: 100%;
             height: 100%;
-            border-radius: 1%;
-            overflow: hidden; /* ensures the image respects the rounded corners */
+            box-sizing: border-box;
+            background: #fff;
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-family: "DM Sans", sans-serif;
         }
 
-        .feature-graphic-db img {
+        .db-mock-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .db-metric {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 7px 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .db-metric-label {
+            font-size: 9px;
+            color: #666;
+        }
+
+        .db-metric-value {
+            font-size: 15px;
+            font-weight: 600;
+            color: #111;
+        }
+
+        .db-mock-charts {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 10px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .db-chart-card {
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 9px 11px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .db-chart-card h4 {
+            font-size: 9px;
+            font-weight: 600;
+            color: #444;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            margin: 0 0 8px;
+            flex-shrink: 0;
+        }
+
+        /* Horizontal bar chart (AAC/ADG Count) */
+        .db-hbar-chart {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            padding-bottom: 13px; /* reserves room for the axis number row below */
+        }
+
+        .db-hbar-rows {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            flex: 1;
+            gap: 4px;
+        }
+
+        .db-hbar-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .db-hbar-label {
+            font-size: 9px;
+            color: #555;
+            width: 24px;
+            flex-shrink: 0;
+        }
+
+        .db-hbar-track {
+            flex: 1;
+            height: 8px;
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .db-hbar-fill {
+            height: 100%;
+            width: 0;
+            border-radius: 3px;
+            transition: width 0.8s ease;
+        }
+
+        .db-hbar-fill.grow {
+            width: var(--target);
+        }
+
+        .db-hbar-value {
+            font-size: 9px;
+            color: #444;
+            width: 22px;
+            flex-shrink: 0;
+            text-align: right;
+        }
+
+        /* Axis overlay — aligned to sit exactly over the track column by
+           matching the label width (24px) + gap (6px) on the left, and
+           value width (22px) + gap (6px) on the right. */
+        .db-hbar-axis {
+            position: absolute;
+            left: 30px;
+            right: 28px;
+            top: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .db-hbar-gridline {
+            position: absolute;
+            top: 0;
+            bottom: 13px;
+            width: 1px;
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        .db-hbar-axis-labels {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 12px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 7px;
+            color: #999;
+        }
+
+        .db-hbar-axis-labels span:first-child { transform: translateX(-1px); }
+        .db-hbar-axis-labels span:last-child { transform: translateX(1px); }
+
+        /* Vertical stacked bar chart (Ops by Runway) */
+        .db-vbar-chart {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-around;
+            flex: 1;
+            gap: 8px;
+        }
+
+        .db-vbar-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            flex: 1;
+            height: 100%;
+        }
+
+        .db-vbar-stack {
+            display: flex;
+            flex-direction: column-reverse;
+            width: 60%;
+            max-width: 22px;
+            height: 100%;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .db-vbar-seg {
+            width: 100%;
+            height: 0;
+            transition: height 0.8s ease;
+        }
+
+        .db-vbar-seg.grow {
+            height: var(--target);
+        }
+
+        .db-vbar-label {
+            font-size: 9px;
+            color: #555;
+            flex-shrink: 0;
+        }
+
+        /* ── /Dashboard mockup ───────────────────────────────────────────── */
+
+        /* ── Landing Fees card mockup — mirrors real table/badge/button
+           styling from landingfees.html. ────────────────────────────── */
+        .lf-mock {
             width: 100%;
             height: 100%;
-            object-fit: scale-down;
-            display: block;
-            border-radius: 1%;
+            box-sizing: border-box;
+            background: #fff;
+            padding: 16px 18px;
+            display: flex;
+            flex-direction: column;
+            font-family: "DM Sans", sans-serif;
         }
 
-        .feature-card:nth-child(3) .feature-graphic-db {
-            width: 130%;
-            margin-left: -20%;
+        .lf-mock-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            flex-shrink: 0;
         }
 
-
-        .feature-graphic-lf {
-            width: 120%;
-            height: 100%;
-            border-radius: 1%;
-            overflow: hidden; /* ensures the image respects the rounded corners */
+        .lf-mock-meta {
+            font-size: 12px;
+            color: #666;
         }
 
-        .feature-graphic-lf img {
+        .lf-export-wrap {
+            position: relative;
+        }
+
+        .lf-mock-export {
+            font-family: "DM Sans", sans-serif;
+            font-size: 12px;
+            padding: 6px 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            color: #111;
+            transition: transform 0.15s ease, background 0.15s ease;
+        }
+
+        .lf-mock-export.pressed {
+            transform: scale(0.94);
+            background: #f0f0f0;
+        }
+
+        .lf-download-toast {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            white-space: nowrap;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 11px;
+            border-radius: 99px;
+            background: #dcfce7;
+            color: #166534;
+            opacity: 0;
+            transform: translateY(-4px);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            pointer-events: none;
+        }
+
+        .lf-download-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .lf-mock-table {
             width: 100%;
-            height: 110%;
-            object-fit: scale-down;
-            object-position: left;
-            display: block;
-            border-radius: 1%;
-        }
-        
-        .feature-card:nth-child(4) {
-            grid-template-columns: 1.1fr 0.9fr;
+            border-collapse: collapse;
+            font-size: 12.5px;
         }
 
-        .feature-card:nth-child(4) .feature-text {
-            padding-left: 20%;
-            padding-top: 10%;
+        .lf-mock-table th {
+            text-align: left;
+            padding: 7px 10px;
+            border-bottom: 2px solid #ddd;
+            font-weight: 600;
+            color: #111;
+            white-space: nowrap;
         }
 
-        .feature-graphic-ni {
+        .lf-mock-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid #eee;
+            white-space: nowrap;
+            color: #222;
+            opacity: 0;
+            animation: lfRowIn 0.4s ease forwards;
+        }
+
+        @keyframes lfRowIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .lf-fee-amount {
+            font-weight: 600;
+            color: #111;
+        }
+
+        .lf-mock-total {
+            margin-top: auto;
+            padding-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12.5px;
+            border-top: 1px solid #eee;
+        }
+
+        .lf-mock-total span:first-child {
+            color: #666;
+        }
+
+        .lf-mock-total span:last-child {
+            font-weight: 700;
+            font-size: 14px;
+            color: #111;
+        }
+
+        /* ── /Landing Fees mockup ────────────────────────────────────────── */
+
+        /* ── Noise Inquiry card mockup — mirrors real field/chip/button/
+           success-banner styling from noiseinquiry.html. ────────────────── */
+        .ni-mock {
             width: 100%;
             height: 100%;
-            border-radius: 1%;
-            overflow: hidden; /* ensures the image respects the rounded corners */
+            box-sizing: border-box;
+            background: #fff;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: "DM Sans", sans-serif;
+            position: relative;
         }
 
-        .feature-graphic-ni img {
-            width: 105%;
-            height: 95%;
-            object-fit: scale-down;
-            object-position: left;
-            display: block;
-            border-radius: 1%;
+        .ni-mock-form {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            transition: opacity 0.3s ease, transform 0.3s ease;
         }
 
-        .feature-graphic-na {
+        .ni-mock-form.hide {
+            opacity: 0;
+            transform: scale(0.97);
+            pointer-events: none;
+        }
+
+        .ni-mock-field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .ni-mock-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .ni-mock-field label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .ni-mock-field input {
+            font-family: "DM Sans", sans-serif;
+            font-size: 11px;
+            padding: 6px 9px;
+            border: 1px solid #d0d5dd;
+            border-radius: 6px;
+            background: #fff;
+            color: #111;
+        }
+
+        .ni-mock-chip-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+        }
+
+        .ni-mock-chip {
+            font-size: 8.5px;
+            font-weight: 500;
+            padding: 5px 6px;
+            border: 1.3px solid #d0d5dd;
+            border-radius: 6px;
+            color: #444;
+            background: #fff;
+            text-align: center;
+            transition: all 0.15s ease;
+        }
+
+        .ni-mock-chip.checked {
+            background: #0057ff;
+            border-color: #0057ff;
+            color: #fff;
+        }
+
+        .ni-mock-submit {
+            align-self: flex-start;
+            font-family: "DM Sans", sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 7px 18px;
+            background: #0057ff;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            margin-top: 2px;
+            transition: transform 0.15s ease, background 0.15s ease;
+        }
+
+        .ni-mock-submit.pressed {
+            transform: scale(0.94);
+            background: #0030aa;
+        }
+
+        .ni-mock-success {
+            position: absolute;
+            top: 50%;
+            left: 20px;
+            right: 20px;
+            transform: translateY(-50%) scale(0.96);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 10px;
+            padding: 14px 16px;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #166534;
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+        }
+
+        .ni-mock-success svg {
+            flex-shrink: 0;
+        }
+
+        .ni-mock-success.show {
+            opacity: 1;
+            transform: translateY(-50%) scale(1);
+        }
+
+        /* ── /Noise Inquiry mockup ───────────────────────────────────────── */
+
+        /* ── Noise Abatement card mockup — animated altitude-coloured
+           track draw, mirroring real map/button styling from
+           noiseabatement.html. ──────────────────────────────────────────── */
+        .na-mock {
             width: 100%;
             height: 100%;
-            border-radius: 1%;
-            overflow: hidden; /* ensures the image respects the rounded corners */
+            box-sizing: border-box;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            font-family: "DM Sans", sans-serif;
         }
 
-        .feature-graphic-na img {
-            width: 105%;
-            height: 95%;
-            object-fit: scale-down;
-            object-position: left;
-            display: block;
-            border-radius: 1%;
+        .na-mock-map {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+        }
+
+        .na-leaflet-map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .na-track-overlay {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 450; /* sits above Leaflet's own panes (tile/overlay/marker), which top out around 200–400 */
+        }
+
+        /* Disable pointer interaction — this map is a decorative backdrop,
+           not a functional widget, even though it's real Leaflet + tiles. */
+        .na-leaflet-map .leaflet-container {
+            cursor: default;
+        }
+
+        /* Keep the required attribution but make it unobtrusive at this size */
+        .na-leaflet-map .leaflet-control-attribution {
+            font-size: 7px;
+            padding: 0 3px;
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .na-seg {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-dasharray: 1;
+            stroke-dashoffset: 1;
+        }
+
+        .na-seg.draw {
+            transition: stroke-dashoffset 0.55s ease;
+            stroke-dashoffset: 0;
+        }
+
+        .na-dot {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .na-dot.show {
+            opacity: 1;
+        }
+
+        .na-dot-start {
+            fill: #22c55e;
+            stroke: #166534;
+            stroke-width: 1.5;
+        }
+
+        .na-dot-end {
+            fill: #dc2626;
+            stroke: #991b1b;
+            stroke-width: 1.5;
+        }
+
+        .na-mock-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-top: 1px solid #eee;
+            flex-shrink: 0;
+        }
+
+        .na-mock-meta {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .na-export-wrap {
+            position: relative;
+            z-index: 1100; /* higher than Leaflet's own controls/attribution, which default to z-index:1000 */
+        }
+
+        .na-mock-export {
+            font-family: "DM Sans", sans-serif;
+            font-size: 11.5px;
+            font-weight: 600;
+            padding: 6px 13px;
+            border: 1px solid #0057ff;
+            border-radius: 6px;
+            background: #fff;
+            color: #0057ff;
+            opacity: 0.4;
+            pointer-events: none;
+            transition: opacity 0.3s ease, transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+
+        .na-mock-export.ready {
+            opacity: 1;
+        }
+
+        .na-mock-export.pressed {
+            transform: scale(0.94);
+            background: #0057ff;
+            color: #fff;
+        }
+
+        .na-report-toast {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            right: 0;
+            white-space: nowrap;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 11px;
+            border-radius: 99px;
+            background: #dcfce7;
+            color: #166534;
+            opacity: 0;
+            transform: translateY(4px);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            pointer-events: none;
+        }
+
+        .na-report-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ── /Noise Abatement mockup ─────────────────────────────────────── */
+
+        /* Placeholder shown for cards that don't have real footage yet —
+           swap the inner <div class="feature-placeholder"> for a real
+           <img>/<video> when ready; the outer .feature-graphic frame
+           doesn't need to change. */
+        .feature-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(100deg, #eef0f4 40%, #f8f9fb 50%, #eef0f4 60%);
+            background-size: 250% 100%;
+            animation: placeholderShimmer 2.8s ease-in-out infinite;
+        }
+
+        .feature-placeholder span {
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            color: #9aa1ac;
+            text-transform: uppercase;
+        }
+
+        @keyframes placeholderShimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -50% 0; }
         }
 
         /* Divider between hero text and feature sections */
@@ -477,10 +1458,9 @@ button[type="submit"]:hover {
             width: 60px;
             height: 3px;
             background: #0057ff;
-            margin: 48px auto 0;
+            margin: 40px auto 0;
             border-radius: 2px;
             margin-bottom: 0;
-            margin-top: 10%;
         }
 
         /* ── Responsive ─────────────────────────────────────────────── */
@@ -504,24 +1484,6 @@ button[type="submit"]:hover {
             content: "✈";
             margin-right: 10px;
             color: #0057ff;
-        }
-
-        .feature-card:nth-child(2) .feature-text {
-            padding-left: 56%;
-        }
-
-        .feature-card:nth-child(2) .feature-graphic-fh {
-            overflow: visible;
-            width: 109%;
-            padding-left: 0;
-        }
-
-        .feature-card:nth-child(2) {
-            grid-template-columns: 0.9fr 1.1fr;
-        }
-
-        .feature-card:nth-child(3) {
-            grid-template-columns: 0.9fr 1.1fr;
         }
 
         .hero-section{
@@ -554,17 +1516,37 @@ button[type="submit"]:hover {
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
         }
 
-        .hero-icon{
+        .hero-nav {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 16px;
-            margin: 0 auto;
+            gap: 12px;
+            margin: 36px auto 0;
+            flex-wrap: wrap;
         }
-        
-        .hero-icon img{
-            width: 25%;
-            height: 25%;
+
+        .hero-nav a {
+            display: inline-flex;
+            align-items: center;
+            color: #fff;
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            padding: 10px 22px;
+            border: 1px solid rgba(255, 255, 255, 0.55);
+            border-radius: 999px;
+            background-color: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            text-shadow: none;
+            transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .hero-nav a:hover {
+            background-color: rgba(255, 255, 255, 0.18);
+            border-color: #fff;
+            transform: translateY(-1px);
         }
 
         /* ── Mobile ─────────────────────────────────────────────────────── */
@@ -605,9 +1587,7 @@ button[type="submit"]:hover {
         padding: 6px 14px;
     }
  
-    body {
-        padding-top: 100px;
-    }
+    /* body padding-top removed — no longer needed since .navbar isn't fixed */
  
     /* Hero */
     .hero-section {
@@ -633,17 +1613,86 @@ button[type="submit"]:hover {
     }
 
  
-    .hero-icon {
+    .hero-nav {
         flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 24px;
+    }
+
+    .hero-nav a {
+        font-size: 0.85rem;
+        padding: 8px 16px;
+    }
+ 
+    /* How It Works */
+    .how-it-works-section {
+        min-height: 0;
+        padding: 60px 6% 70px;
+    }
+
+    .hiw-diagram-wrap {
+        margin-top: 40px;
+        padding-bottom: 0;
+    }
+
+    /* On mobile we hide the SVG diagram entirely and stack the three
+       steps as a simple list — same content, no illegible tiny diagram. */
+    .hiw-diagram {
+        display: none;
+    }
+
+    .hiw-label {
+        position: static !important;
+        left: auto !important;
+        right: auto !important;
+        top: auto !important;
+        transform: none !important;
+        width: 100% !important;
+        text-align: center !important;
+        margin-top: 28px;
+        opacity: 1 !important;
+        animation: none !important;
+    }
+
+    .hiw-label:first-of-type {
+        margin-top: 0;
+    }
+
+    /* Overview / post-hero */
+    .post-hero-section {
+        min-height: 55vh;
+        padding: 60px 6%;
+    }
+
+    .overview-list {
+        grid-template-columns: 1fr;
         gap: 12px;
         margin-top: 24px;
     }
- 
-    .hero-icon img {
-        width: 60%;
-        height: auto;
+
+    .overview-list li {
+        font-size: 0.95rem;
     }
- 
+
+    .stat-row {
+        gap: 28px 36px;
+        margin-top: 36px;
+    }
+
+    .stat-icon {
+        width: 22px;
+        height: 22px;
+        margin-bottom: 6px;
+    }
+
+    .stat-number {
+        font-size: 1.6rem;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+    }
+
     /* Feature cards */
     .features-section {
         gap: 40px;
@@ -655,23 +1704,12 @@ button[type="submit"]:hover {
         grid-template-columns: 1fr !important;
         gap: 24px;
         margin-top: 20px;
+        padding: 24px;
     }
  
     .feature-card:nth-child(even) .feature-graphic,
-    .feature-card:nth-child(even) .feature-text,
-    .feature-card:nth-child(2) .feature-text,
-    .feature-card:nth-child(3) .feature-text {
+    .feature-card:nth-child(even) .feature-text {
         order: unset;
-        padding-left: 0;
-    }
- 
-    .feature-card:nth-child(2) .feature-graphic-fh {
-        width: 100%;
-        overflow: hidden;
-    }
- 
-    .feature-graphic-fh img {
-        width: 100%;
     }
  
     .features-list {
