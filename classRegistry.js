@@ -207995,6 +207995,7 @@ const classRegistry = {
   "aa3091": "Turbine",
   "aa3095": "Single-Engine",
   "aa3097": "Turbine",
+  "a3097c": "Turbine",
   "aa309b": "Single-Engine",
   "aa309d": "Single-Engine",
   "aa30a1": "Single-Engine",
