@@ -131619,6 +131619,7 @@ const registrationRegistry = {
   "a54fb3": "N441QA",
   "a54fb5": "N441QC",
   "a54fb8": "N441QF",
+  "a54fc3": "N441QS",
   "a54fcb": "N441R",
   "a54fcc": "N441RA",
   "a54fcf": "N441RD",
