@@ -57668,6 +57668,7 @@ const typeCodeRegistry = {
   'N441PW': 'C441',
   'N441QC': 'HA4T',
   'N441QF': 'C172',
+  'N441QS': 'E55P',
   'N441R': 'C441',
   'N441RA': 'DA40',
   'N441RF': 'PRM1',
