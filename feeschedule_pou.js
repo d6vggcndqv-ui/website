@@ -39,7 +39,7 @@ const FEE_TIERS_POU = {
   'BE10':  { tier: 'Medium Turboprop',   fee: 35 },
   'BE20':  { tier: 'Medium Turboprop',   fee: 35 },
   'BE30':  { tier: 'Medium Turboprop',   fee: 35 },
-  'BE35':  { tier: 'Medium Turboprop',   fee: 35 },
+  'B350':  { tier: 'Medium Turboprop',   fee: 35 },
   'AC90':  { tier: 'Medium Turboprop',   fee: 35 },
   'JS31':  { tier: 'Medium Turboprop',   fee: 35 },
   'B190':  { tier: 'Heavy Turboprop',   fee: 35 },
