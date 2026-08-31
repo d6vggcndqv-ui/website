@@ -301,8 +301,10 @@
                     <span><span class="swatch" style="background:#22c55e"></span>Landing</span>
                     <span><span class="swatch" style="background:#f59e0b"></span>Touch &amp; Go</span>
                 </div>
-                <div style="position:relative;width:100%;height:220px;">
-                    <canvas id="chart-by-day" role="img" aria-label="Stacked bar chart of operations by day">Operations by day.</canvas>
+                <div id="chart-by-day-scroll" style="position:relative;width:100%;height:220px;overflow-x:auto;overflow-y:hidden;">
+                    <div id="chart-by-day-inner" style="position:relative;height:220px;width:100%;">
+                        <canvas id="chart-by-day" role="img" aria-label="Stacked bar chart of operations by day">Operations by day.</canvas>
+                    </div>
                 </div>
                 </div>
             
@@ -637,6 +639,18 @@
                     }
                 }
             });
+            const WINDOW_DAYS = 45;
+            const scrollEl = document.getElementById('chart-by-day-scroll');
+            const innerEl = document.getElementById('chart-by-day-inner');
+            setTimeout(() => {
+                if (numDays > WINDOW_DAYS) {
+                    const outerWidth = scrollEl.clientWidth || scrollEl.getBoundingClientRect().width;
+                    innerEl.style.width = Math.round(outerWidth * numDays / WINDOW_DAYS) + 'px';
+                    scrollEl.scrollLeft = scrollEl.scrollWidth; // default to showing the most recent days
+                } else {
+                    innerEl.style.width = '100%';
+                }
+            }, 0);
             bindZeroDayIconEvents();
         }
     
