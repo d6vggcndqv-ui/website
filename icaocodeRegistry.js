@@ -278,6 +278,7 @@ const typeCodeRegistry = {
   'N39RC': 'C56X',
   'N3BZ': 'C56X',
   'N3JM': 'C56X',
+  'N40ZA': 'F900',
   'N4000K': 'C56X',
   'N400CP': 'C56X',
   'N400LV': 'C56X',
