@@ -454,7 +454,7 @@
         if (category && r.aircraftType !== category) return false;
         if (aircraftCategory && r.category !== aircraftCategory) return false;
         if (aircraftClass && r.class !== aircraftClass) return false;
-        if (registration && !r.registration.toUpperCase().includes(registration)) return false;
+        if (registration && !(r.registration || '').toUpperCase().includes(registration)) return false;
         if (from || to) {
             // compare using timestamp for accuracy
             // NOTE: bare "YYYY-MM-DD" strings parse as UTC midnight, while
