@@ -279376,4 +279376,5 @@ const classRegistry = {
   "ac6ccc": "Single-Engine",
   "ac6ccd": "Turbine",
   "ac6ccf": "Single-Engine",
+  "c036d9": "Single-Engine",
 };
