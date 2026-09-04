@@ -170615,6 +170615,7 @@ const aircraftRegistry = {
   "ada16f": "C-III",
   "ada18f": "A-I",
   "ada191": "A-I",
+  "ada192": "D-II",
   "ada19d": "A-I",
   "ada1a9": "A-I",
   "ada1be": "A-I",
