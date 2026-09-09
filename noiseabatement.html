@@ -204,7 +204,34 @@
         #map {
             height: 480px;
             width: 100%;
+            position: relative;
         }
+
+        /* ── Live HUD overlay ───────────────────────────────────────── */
+        #track-hud {
+            position: absolute;
+            bottom: 14px;
+            left: 14px;
+            z-index: 500;
+            background: rgba(10, 10, 20, 0.72);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #fff;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            line-height: 1.6;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+            min-width: 160px;
+        }
+        #track-hud.visible { opacity: 1; }
+        #track-hud.fade-out { opacity: 0; }
+        .hud-row { display: flex; justify-content: space-between; gap: 16px; }
+        .hud-label { color: rgba(255,255,255,0.55); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+        .hud-value { font-weight: 700; font-variant-numeric: tabular-nums; }
 
         /* ── Stats row ──────────────────────────────────────────────── */
         .stats-row {
@@ -334,6 +361,15 @@
         }
         #btn-export-pdf:hover  { background: #0057ff; color: #fff; }
         #btn-export-pdf:disabled { opacity: 0.5; cursor: wait; }
+
+        /* Each chunk fades in as it's added */
+        .na-chunk-enter {
+            animation: naChunkFadeIn 0.18s ease forwards;
+        }
+        @keyframes naChunkFadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
     </style>
 </head>
 
@@ -443,7 +479,27 @@
                         <div id="map-meta" style="font-size:13px;color:#666;"></div>
                         <button id="btn-export-pdf" onclick="exportPDF()">⬇ Export PDF</button>
                     </div>
-                    <div id="map"></div>
+                    <div style="position:relative;">
+                        <div id="map"></div>
+                        <div id="track-hud">
+                            <div class="hud-row">
+                                <span class="hud-label">Time</span>
+                                <span class="hud-value" id="hud-time">—</span>
+                            </div>
+                            <div class="hud-row">
+                                <span class="hud-label">Altitude</span>
+                                <span class="hud-value" id="hud-alt">—</span>
+                            </div>
+                            <div class="hud-row">
+                                <span class="hud-label">GS</span>
+                                <span class="hud-value" id="hud-gs">—</span>
+                            </div>
+                            <div class="hud-row">
+                                <span class="hud-label">Heading</span>
+                                <span class="hud-value" id="hud-hdg">—</span>
+                            </div>
+                        </div>
+                    </div>
                     <div class="stats-row" id="stats-row" style="display:none;">
                         <div class="stat-cell">
                             <div class="sc-label">Points</div>
@@ -526,7 +582,7 @@
         const AIRPORT_ELEV        = { owd: 49, pou: 165 };   // field elevation MSL (ft)
         // Matches TRACK_RADIUS_KM in each airport's tracking script (e.g. flights_pou.js).
         // OWD value not yet confirmed — using POU's for now until flights_owd.js is checked.
-        const AIRPORT_TRACK_RADIUS_KM = { owd: 8.05, pou: 8.05 };
+        const AIRPORT_TRACK_RADIUS_KM = { owd: 8.05, pou: 11.27 };
         const PATTERN_CEIL_AGL    = 1000;                     // low-alt dot threshold (ft AGL)
 
         // FAA-designated hot spots shown on the map when POU is selected
@@ -587,6 +643,7 @@
                 }
             }
             // Clear any currently displayed track
+            naCancelAnim();
             if (trackLayer) trackLayer.clearLayers();
             document.getElementById('map-title').textContent = 'Select a track';
             document.getElementById('map-meta').textContent  = '';
@@ -670,6 +727,13 @@
                 } else {
                     switchAirport(currentAirportKey);
                 }
+
+                // If a specific track ID was passed in the URL, load the list first
+                // then boot the track — so loadTracks doesn't cancel the animation
+                if (window._deepLinkTrackId) {
+                    if (window.loadTracks) await window.loadTracks();
+                    bootTrack(window._deepLinkTrackId);
+                }
             } catch(e) {
                 console.error('[initUser]', e);
             }
@@ -690,31 +754,78 @@
         // ── Pre-fill from noise inquiry deep link ───────────────────────────
         (function () {
             const params = new URLSearchParams(window.location.search);
-            const date      = params.get('date');
-            const timeFrom  = params.get('time-from');
-            const timeTo    = params.get('time-to');
-            const airport   = params.get('airport');
+            const airport    = params.get('airport');
+            const trackId    = params.get('track');
+
+            // Date/time — support both old (date/time-from/time-to) and new (date-from/date-to) formats
+            const dateFrom   = params.get('date-from') || params.get('date');
+            const dateTo     = params.get('date-to')   || params.get('date');
+            const timeFrom   = params.get('time-from');
+            const timeTo     = params.get('time-to');
+            const cs         = params.get('cs');
+            const exceedance = params.get('exceedance');
 
             // Store airport key so initUser can apply it once the dropdown is built
             if (airport && (airport === 'owd' || airport === 'pou')) {
                 window._deepLinkAirport = airport;
             }
 
-            if (date) {
-                document.getElementById('date-from').value = date;
-                document.getElementById('date-to').value   = date;
+            // Store track ID so initUser can boot straight into it after auth
+            if (trackId) {
+                window._deepLinkTrackId = trackId;
             }
+
+            if (dateFrom) document.getElementById('date-from').value = dateFrom;
+            if (dateTo)   document.getElementById('date-to').value   = dateTo;
             if (timeFrom) document.getElementById('time-from').value = timeFrom;
             if (timeTo)   document.getElementById('time-to').value   = timeTo;
+            if (cs) {
+                const csEl = document.getElementById('filter-cs');
+                if (csEl) csEl.value = cs;
+            }
+            if (exceedance) {
+                const excEl = document.getElementById('filter-exceedance');
+                if (excEl) excEl.value = exceedance;
+            }
 
-            // Auto-load if all three params are present
-            if (date && timeFrom && timeTo) {
-                // Wait for Firestore to initialise via main.js before loading
+            // Auto-load tracks if we have date params.
+            // When a track ID is present, initUser handles load+boot in sequence — skip here.
+            if (dateFrom && !trackId) {
                 window.addEventListener('load', () => {
                     setTimeout(() => window.loadTracks && window.loadTracks(), 500);
                 });
             }
         })();
+
+        // ── Boot directly into a specific track from a deep link ────────────
+        async function bootTrack(trackId) {
+            try {
+                const docSnap = await getDoc(doc(db, currentCollection, trackId));
+                if (!docSnap.exists()) {
+                    console.warn('[bootTrack] Track not found:', trackId);
+                    return;
+                }
+                const trackDoc = { ...docSnap.data(), docId: docSnap.id };
+
+                // Update the map header
+                document.getElementById('map-title').textContent = trackDoc.registration || 'Unknown';
+                document.getElementById('map-meta').textContent  =
+                    (trackDoc.aircraftType && trackDoc.aircraftType !== 'Unknown'
+                        ? trackDoc.aircraftType + ' · ' : '') +
+                    (trackDoc.date || '') + ' ' + (trackDoc.time || '');
+
+                selectedDoc = trackDoc;
+                document.getElementById('btn-export-pdf').style.display = 'inline-block';
+                drawTrack(trackDoc);
+
+                // Scroll so the full map is visible — slight delay lets the map render first
+                setTimeout(() => {
+                    document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 150);
+            } catch (err) {
+                console.error('[bootTrack] Error fetching track:', err);
+            }
+        }
 
         // ── Leaflet map ─────────────────────────────────────────────────────
         let map, trackLayer, fieldMarker, radiusCircle, hotspotLayer;
@@ -759,79 +870,142 @@
         }
 
         // ── Draw a track on the map ─────────────────────────────────────────
+        // ── Animation state ───────────────────────────────────────────────────
+        let naAnimating = false;
+        let naAnimTimeouts = [];
+
+        function naCancelAnim() {
+            naAnimTimeouts.forEach(t => clearTimeout(t));
+            naAnimTimeouts = [];
+            naAnimating = false;
+            const hud = document.getElementById('track-hud');
+            if (hud) { hud.classList.remove('visible', 'fade-out'); }
+        }
+
         function drawTrack(doc) {
+            naCancelAnim();
             trackLayer.clearLayers();
             const pts = doc.track;
             if (!pts || pts.length < 2) return;
 
-            const latlngs = pts.map(p => [p.lat, p.lon]);
+            const latlngs  = pts.map(p => [p.lat, p.lon]);
+            const CHUNKS   = 25;
+            const DELAY_MS = 160;
+            const segCount = pts.length - 1;
 
-            // Draw altitude-coloured segments
-            for (let i = 0; i < pts.length - 1; i++) {
-                const coords = [[pts[i].lat, pts[i].lon], [pts[i+1].lat, pts[i+1].lon]];
-                const p = pts[i];
-                const popupContent = `<b>${doc.registration}</b><br>` +
-                    `Alt: <b>${p.alt.toLocaleString()} ft MSL</b><br>` +
-                    `GS: ${p.gs} kt &nbsp;|&nbsp; Hdg: ${p.trk}°<br>` +
-                    `T+${fmtDur(p.t)}`;
-
-                // Midpoint of this segment — popup always opens here so it sits on the visible line
-                const midLat = (pts[i].lat + pts[i+1].lat) / 2;
-                const midLon = (pts[i].lon + pts[i+1].lon) / 2;
-
-                // Invisible wide underlay — makes the click target much easier to hit
-                const hit = L.polyline(coords, {
-                    color: 'transparent', weight: 20, opacity: 0, lineCap: 'round'
-                });
-                hit.on('click', function(e) {
-                    L.popup({ maxWidth: 200 })
-                        .setLatLng([midLat, midLon])
-                        .setContent(popupContent)
-                        .openOn(map);
-                    L.DomEvent.stopPropagation(e);
-                });
-                trackLayer.addLayer(hit);
-
-                // Visible coloured segment on top
-                const seg = L.polyline(coords,
-                    { color: altColor(pts[i].alt), weight: 3.5, opacity: 0.92, lineCap: 'round', interactive: false }
-                );
-                trackLayer.addLayer(seg);
+            // Split segments into CHUNKS evenly-sized groups
+            const chunkSize = Math.max(1, Math.ceil(segCount / CHUNKS));
+            const chunks = [];
+            for (let start = 0; start < segCount; start += chunkSize) {
+                chunks.push({ from: start, to: Math.min(start + chunkSize, segCount) });
             }
 
-            // Start marker (green)
+            // Fit bounds immediately so the map recentres before drawing starts
+            try { map.fitBounds(L.latLngBounds(latlngs).pad(0.15)); } catch(e) {}
+
+            // Start marker appears immediately
             L.circleMarker([pts[0].lat, pts[0].lon], {
                 radius: 6, color: '#166534', fillColor: '#22c55e',
-                fillOpacity: 1, weight: 2
+                fillOpacity: 1, weight: 2, interactive: false
             }).bindTooltip('Start: ' + doc.time, { permanent: false })
               .addTo(trackLayer);
 
-            // End marker (red)
-            const last = pts[pts.length - 1];
-            L.circleMarker([last.lat, last.lon], {
-                radius: 6, color: '#991b1b', fillColor: '#dc2626',
-                fillOpacity: 1, weight: 2
-            }).bindTooltip('End', { permanent: false })
-              .addTo(trackLayer);
+            // Lock the animation flag while drawing
+            naAnimating = true;
 
-            // Fit bounds
-            try { map.fitBounds(L.latLngBounds(latlngs).pad(0.15)); } catch(e) {}
+            // Helper — format actual wall-clock time for a given point
+            const sessionStart = new Date(doc.start).getTime();
+            function fmtPointTime(pt) {
+                const d = new Date(sessionStart + pt.t * 1000);
+                let h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+                const ap = h >= 12 ? 'PM' : 'AM';
+                h = h % 12 || 12;
+                return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${ap}`;
+            }
 
-            // Stats
-            const alts = pts.map(p => p.alt);
-            const gss  = pts.map(p => p.gs);
-            const dur  = pts[pts.length - 1].t;
-            document.getElementById('st-pts').textContent  = pts.length.toLocaleString();
-            document.getElementById('st-dur').textContent  = fmtDur(dur);
-            document.getElementById('st-min').textContent  = Math.min(...alts).toLocaleString() + ' ft';
-            document.getElementById('st-max').textContent  = Math.max(...alts).toLocaleString() + ' ft';
-            document.getElementById('st-gs').textContent   = Math.max(...gss) + ' kt';
-            document.getElementById('st-sess').textContent = doc.date + ' ' + doc.time;
-            const isBasedAc = currentAirportKey === 'pou' &&
-                typeof BASED_AIRCRAFT_POU !== 'undefined' &&
-                BASED_AIRCRAFT_POU.has(doc.registration);
-            document.getElementById('st-based-cell').style.display = isBasedAc ? 'block' : 'none';
-            document.getElementById('stats-row').style.display = 'grid';
+            const hud = document.getElementById('track-hud');
+            function updateHud(pt) {
+                document.getElementById('hud-time').textContent = fmtPointTime(pt);
+                document.getElementById('hud-alt').textContent  = pt.alt.toLocaleString() + ' ft MSL';
+                document.getElementById('hud-gs').textContent   = pt.gs + ' kt';
+                document.getElementById('hud-hdg').textContent  = pt.trk + '°';
+                hud.classList.remove('fade-out');
+                hud.classList.add('visible');
+            }
+
+            // Draw each chunk after its staggered delay
+            chunks.forEach((chunk, ci) => {
+                const t = setTimeout(() => {
+                    for (let i = chunk.from; i < chunk.to; i++) {
+                        const coords = [[pts[i].lat, pts[i].lon], [pts[i+1].lat, pts[i+1].lon]];
+                        const p      = pts[i];
+                        const midLat = (pts[i].lat + pts[i+1].lat) / 2;
+                        const midLon = (pts[i].lon + pts[i+1].lon) / 2;
+                        const popupContent = `<b>${doc.registration}</b><br>` +
+                            `Alt: <b>${p.alt.toLocaleString()} ft MSL</b><br>` +
+                            `GS: ${p.gs} kt &nbsp;|&nbsp; Hdg: ${p.trk}°<br>` +
+                            `T+${fmtDur(p.t)}`;
+
+                        // Hit area — click is suppressed during animation
+                        const hit = L.polyline(coords, {
+                            color: 'transparent', weight: 20, opacity: 0, lineCap: 'round'
+                        });
+                        hit.on('click', function(e) {
+                            if (naAnimating) return;
+                            L.popup({ maxWidth: 200 })
+                                .setLatLng([midLat, midLon])
+                                .setContent(popupContent)
+                                .openOn(map);
+                            L.DomEvent.stopPropagation(e);
+                        });
+                        trackLayer.addLayer(hit);
+
+                        // Visible coloured segment
+                        trackLayer.addLayer(L.polyline(coords, {
+                            color: altColor(pts[i].alt), weight: 3.5, opacity: 0.92,
+                            lineCap: 'round', interactive: false
+                        }));
+                    }
+                    // Update HUD with the last point of this chunk
+                    updateHud(pts[chunk.to - 1]);
+                }, ci * DELAY_MS);
+                naAnimTimeouts.push(t);
+            });
+
+            // Once all chunks are drawn — end marker, unlock, show stats
+            const doneMs = chunks.length * DELAY_MS + 80;
+            naAnimTimeouts.push(setTimeout(() => {
+                // End marker
+                const last = pts[pts.length - 1];
+                L.circleMarker([last.lat, last.lon], {
+                    radius: 6, color: '#991b1b', fillColor: '#dc2626',
+                    fillOpacity: 1, weight: 2
+                }).bindTooltip('End', { permanent: false })
+                  .addTo(trackLayer);
+
+                // Unlock animation flag
+                naAnimating = false;
+
+                // Fade HUD out
+                hud.classList.remove('visible');
+                hud.classList.add('fade-out');
+
+                // Stats
+                const alts = pts.map(p => p.alt);
+                const gss  = pts.map(p => p.gs);
+                const dur  = pts[pts.length - 1].t;
+                document.getElementById('st-pts').textContent  = pts.length.toLocaleString();
+                document.getElementById('st-dur').textContent  = fmtDur(dur);
+                document.getElementById('st-min').textContent  = Math.min(...alts).toLocaleString() + ' ft';
+                document.getElementById('st-max').textContent  = Math.max(...alts).toLocaleString() + ' ft';
+                document.getElementById('st-gs').textContent   = Math.max(...gss) + ' kt';
+                document.getElementById('st-sess').textContent = doc.date + ' ' + doc.time;
+                const isBasedAc = currentAirportKey === 'pou' &&
+                    typeof BASED_AIRCRAFT_POU !== 'undefined' &&
+                    BASED_AIRCRAFT_POU.has(doc.registration);
+                document.getElementById('st-based-cell').style.display = isBasedAc ? 'block' : 'none';
+                document.getElementById('stats-row').style.display = 'grid';
+            }, doneMs));
         }
 
         // ── Reset filters to defaults ─────────────────────────────────────────
@@ -857,6 +1031,7 @@
             document.getElementById('stats-row').style.display = 'none';
             document.getElementById('st-based-cell').style.display = 'none';
             selectedDoc = null;
+            naCancelAnim();
             if (trackLayer) trackLayer.clearLayers();
         }
 
@@ -920,15 +1095,24 @@
                     </div>`;
 
                 el.addEventListener('click', () => {
-                    document.querySelectorAll('.track-item').forEach(e => e.classList.remove('selected'));
-                    el.classList.add('selected');
-                    document.getElementById('map-title').textContent = doc.registration || 'Unknown';
-                    document.getElementById('map-meta').textContent  =
-                        (doc.aircraftType && doc.aircraftType !== 'Unknown' ? doc.aircraftType + ' · ' : '') +
-                        doc.date + ' ' + doc.time;
-                    selectedDoc = doc;
-                    document.getElementById('btn-export-pdf').style.display = 'inline-block';
-                    drawTrack(doc);
+                    const base  = window.location.href.split('?')[0];
+                    const df    = document.getElementById('date-from').value;
+                    const dt    = document.getElementById('date-to').value;
+                    const tf    = document.getElementById('time-from').value;
+                    const tt    = document.getElementById('time-to').value;
+                    const cs    = document.getElementById('filter-cs').value.trim();
+                    const exc   = document.getElementById('filter-exceedance').value;
+                    const params = new URLSearchParams({
+                        airport: currentAirportKey,
+                        track:   doc.docId,
+                        'date-from': df,
+                        'date-to':   dt,
+                        'time-from': tf,
+                        'time-to':   tt,
+                    });
+                    if (cs)            params.set('cs', cs);
+                    if (exc !== 'all') params.set('exceedance', exc);
+                    window.open(`${base}?${params.toString()}`, '_blank');
                 });
                 listEl.appendChild(el);
             });
@@ -1012,6 +1196,7 @@
                     ? 'Showing 200 most recent (limit reached — narrow the date range for more)'
                     : '';
 
+                naCancelAnim();
                 trackLayer && trackLayer.clearLayers();
                 document.getElementById('map-title').textContent = 'Select a track';
                 document.getElementById('map-meta').textContent  = '';
