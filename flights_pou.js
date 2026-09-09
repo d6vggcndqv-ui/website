@@ -688,35 +688,26 @@ ${linkLines}`;
      - Stationary aircraft parked on the field (on ground, ~0 kt) are not
        recorded, so a based aircraft idling on the ramp doesn't bloat a
        session; the takeoff roll and landing rollout (moving) still are.
-     - Once a day it deletes track docs older than TRACK_RETENTION_DAYS.
  
    Two things to know:
-     - One new import is needed (deleteDoc, used by the prune). It is
-       placed here so your existing import block stays untouched; feel
-       free to move it up next to your other firestore imports.
      - This makes a SECOND fetch of aircraft.json (your detector has its
        own). That keeps the two features fully independent. Merging them
        into one shared fetch would mean editing your existing code, so it
        is intentionally left separate.
    ===================================================================== */
  
-import { deleteDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
- 
 // ---- Config ----
 const TRACK_COLLECTION     = "tracks_pou";
-const TRACK_RADIUS_KM      = 8.05;     // wider than the 3 km detection radius; noise corridors run well past it, ~5 miles
+const TRACK_RADIUS_KM      = 11.27;     // wider than the 3 km detection radius; noise corridors run well past it, ~7 miles
 const FIELD_ELEVATION_FT   = 163;     // POU field elevation (MSL) — confirm against the charted figure
 const TRACK_CEILING_AGL_FT = 4500;   // only keep paths that came at/below this height above the field
 const TRACK_CEILING_MSL_FT = FIELD_ELEVATION_FT + TRACK_CEILING_AGL_FT; // feed reports MSL, so compare against this
 const TRACK_GROUND_MIN_KT  = 3;      // ignore stationary ground samples (parked/idling aircraft)
 const TRACK_TIMEOUT_MS     = 120000; // a visit ends after the aircraft is unseen this long (rides out coverage gaps)
 const TRACK_POLL_MS        = 2000;   // sample cadence (matches the feed)
-const TRACK_RETENTION_DAYS = 30;     // prune anything older than this
-const TRACK_PRUNE_EVERY_MS = 24 * 60 * 60 * 1000; // run the prune at most once a day (also runs once on startup)
  
 // ---- State (separate from the detector's aircraftState) ----
 let trackBuffers = {};      // hex -> { hex, registration, type, startMs, lastSeenMs, points[], bbox }
-let lastTrackPruneMs = 0;
  
 // ---- Resolve AAC-ADG the same way the detector does (read-only reuse of aircraftRegistry) ----
 function resolveTrackType(flight) {
@@ -772,23 +763,6 @@ async function flushTrack(hex) {
     console.log(`Stored track for ${buf.registration} — ${trackPoints.length} pts`);
   } catch (error) {
     console.error("Error storing track:", error);
-  }
-}
- 
-// ---- Delete track docs older than the retention window ----
-async function pruneOldTracks() {
-  try {
-    const cutoff = new Date(Date.now() - TRACK_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const oldQuery = query(collection(db, TRACK_COLLECTION), where("timestamp", "<", cutoff));
-    const snap = await getDocs(oldQuery);
-    let removed = 0;
-    for (const docSnap of snap.docs) {
-      await deleteDoc(docSnap.ref);
-      removed++;
-    }
-    if (removed) console.log(`Pruned ${removed} track(s) older than ${TRACK_RETENTION_DAYS} days`);
-  } catch (error) {
-    console.error("Error pruning tracks:", error);
   }
 }
  
@@ -868,11 +842,6 @@ async function captureTracks() {
     }
     for (const hex of toFlush) await flushTrack(hex);
  
-    // daily retention prune
-    if (nowMs - lastTrackPruneMs > TRACK_PRUNE_EVERY_MS) {
-      lastTrackPruneMs = nowMs;
-      pruneOldTracks();
-    }
   } catch (error) {
     console.error("Error capturing tracks:", error);
   }
