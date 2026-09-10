@@ -1114,6 +1114,17 @@
                     if (exc !== 'all') params.set('exceedance', exc);
                     window.open(`${base}?${params.toString()}`, '_blank');
                 });
+
+                // Prevent camera icon clicks from bubbling up and triggering the track open
+                const cameraSlot = el.querySelector('[data-camera-slot]');
+                if (cameraSlot) {
+                    cameraSlot.addEventListener('click', e => e.stopPropagation());
+                }
+                // Also handle icons injected after render (MutationObserver)
+                new MutationObserver(() => {
+                    const slot = el.querySelector('[data-camera-slot]');
+                    if (slot) slot.addEventListener('click', e => e.stopPropagation());
+                }).observe(el, { childList: true, subtree: true });
                 listEl.appendChild(el);
             });
 
