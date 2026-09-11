@@ -6,6 +6,7 @@
 // Do not edit manually — regenerate from source files when FAA data is updated
 
 const typeCodeRegistry = {
+  'CGPAW': 'C56X',
   'N10000': 'SR22',
   'N10004': 'C182',
   'N10007': 'C210',
