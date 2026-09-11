@@ -13,6 +13,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="main.js"></script>
     <script src="basedaircraft_pou.js"></script>
+    <script src="icaocodeRegistry.js"></script>
+    <script src="feeschedule_pou.js"></script>
+    <script src="mtow_pou.js"></script>
+    <script src="feelogic.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
     <style>
         .page-header-row { position:relative; text-align:center; }
@@ -370,6 +374,62 @@
             from { opacity: 0; }
             to   { opacity: 1; }
         }
+
+        /* ── Event badges (matches flighthistory.html) ─────────────────── */
+        .badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 2px 9px;
+            border-radius: 99px;
+        }
+        .badge-takeoff  { background: #dbeafe; color: #1e40af; }
+        .badge-landing  { background: #dcfce7; color: #166534; }
+        .badge-tng      { background: #fef9c3; color: #854d0e; }
+
+        /* ── Related flights (flights_* events within this track's window) ── */
+        .na-related-wrap {
+            border-top: 1px solid #f0f0f0;
+            padding-top: 4px;
+        }
+        .na-related-heading {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #444;
+            margin: 0;
+            padding: 12px 16px 0;
+        }
+        .na-flight-card {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 28px;
+            padding: 14px 16px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .na-flight-card:last-child { border-bottom: none; }
+        .na-info-block, .na-fee-block { min-width: 200px; font-size: 15px; line-height: 1.8; }
+        .na-fee-block {
+            padding-left: 24px;
+            border-left: 1px solid #e5e5e5;
+        }
+        .na-block-heading {
+            font-size: 12px;
+            font-weight: 600;
+            color: #444;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 8px;
+        }
+        .na-info-row .na-label, .na-fee-row .na-label {
+            color: #888;
+            font-size: 12px;
+            margin-right: 6px;
+        }
+        .na-fee-amount { font-weight: 700; font-size: 20px; color: #111; margin-top: 4px; }
+        .na-fee-review { font-weight: 600; font-size: 15px; color: #991b1b; margin-top: 4px; }
+        .na-no-related { color: #999; font-size: 13px; padding: 14px 16px; }
     </style>
 </head>
 
@@ -539,6 +599,10 @@
                         <span class="al-grp"><span class="al-swatch" style="background:#3b82f6;"></span>&gt; 3.5 k</span>
                         <span style="margin-left:auto;color:#aaa;font-style:italic;">Click any segment for altitude &amp; speed</span>
                     </div>
+                    <div class="na-related-wrap" id="na-related-wrap" style="display:none;">
+                        <h2 class="na-related-heading">Related Flights</h2>
+                        <div id="na-related-list"></div>
+                    </div>
                 </div>
 
             </div>
@@ -569,6 +633,8 @@
 
         // ── Airport config ──────────────────────────────────────────────────
         const AIRPORT_COLLECTIONS = { owd: 'tracks_owd', pou: 'tracks_pou' };
+        // Maps to the flights_* collection (not tracks_*) for the Related Flights lookup.
+        const AIRPORT_FLIGHTS_COLLECTIONS = { owd: 'flights', pou: 'flights_pou' };
         const AIRPORT_LABELS      = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
         // Matches portal.html's AIRPORT_INFO logo convention
         const AIRPORT_LOGOS = { pou: 'pou-logo.jpg' };
@@ -817,6 +883,7 @@
                 selectedDoc = trackDoc;
                 document.getElementById('btn-export-pdf').style.display = 'inline-block';
                 drawTrack(trackDoc);
+                loadRelatedFlights(trackDoc);
 
                 // Scroll so the full map is visible — slight delay lets the map render first
                 setTimeout(() => {
@@ -825,6 +892,77 @@
             } catch (err) {
                 console.error('[bootTrack] Error fetching track:', err);
             }
+        }
+
+        // ── Related flights: flights_* events that fell within this track's window ──
+        // A track can span multiple events (e.g. touch-and-goes, or a takeoff
+        // and landing on the same visit), so this returns a list, not a single row.
+        async function findRelatedFlights(trackDoc) {
+            const flightsCol = AIRPORT_FLIGHTS_COLLECTIONS[currentAirportKey] || 'flights_' + currentAirportKey;
+            try {
+                const q = query(
+                    collection(db, flightsCol),
+                    where('registration', '==', trackDoc.registration),
+                    where('timestamp', '>=', trackDoc.start)
+                );
+                const snap = await getDocs(q);
+                return snap.docs
+                    .map(d => ({ ...d.data(), docId: d.id }))
+                    .filter(r => r.timestamp <= trackDoc.end)
+                    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            } catch (err) {
+                console.error('[findRelatedFlights] error:', err);
+                return [];
+            }
+        }
+
+        function naBadgeClass(event) {
+            if (event === 'Takeoff') return 'badge-takeoff';
+            if (event === 'Landing') return 'badge-landing';
+            return 'badge-tng';
+        }
+
+        async function loadRelatedFlights(trackDoc) {
+            const wrap = document.getElementById('na-related-wrap');
+            const list = document.getElementById('na-related-list');
+            wrap.style.display = 'block';
+            list.innerHTML = '<div class="na-no-related">Looking up related flights…</div>';
+
+            const events = await findRelatedFlights(trackDoc);
+            if (!events.length) {
+                list.innerHTML = '<div class="na-no-related">No related flight events</div>';
+                return;
+            }
+
+            list.innerHTML = events.map(r => {
+                const feeInfo = r.event === 'Landing' ? processRow(r, r.docId) : null;
+                const feeHtml = !feeInfo ? '' : (feeInfo.needsReview
+                    ? `<div class="na-fee-block">
+                           <div class="na-block-heading">Landing Fee</div>
+                           <div class="na-fee-row"><span class="na-label">ICAO Type</span>${feeInfo.icaoCode}</div>
+                           <div class="na-fee-review">Needs Review</div>
+                       </div>`
+                    : `<div class="na-fee-block">
+                           <div class="na-block-heading">Landing Fee</div>
+                           <div class="na-fee-row"><span class="na-label">ICAO Type</span>${feeInfo.icaoCode}</div>
+                           <div class="na-fee-row"><span class="na-label">Fee Tier</span>${feeInfo.tier}</div>
+                           <div class="na-fee-amount">$${feeInfo.fee.toFixed(2)}</div>
+                       </div>`);
+
+                return `
+                    <div class="na-flight-card">
+                        <div class="na-info-block">
+                            <div class="na-block-heading">Flight Info</div>
+                            <div class="na-info-row"><span class="na-label">Event</span><span class="badge ${naBadgeClass(r.event)}">${r.event}</span></div>
+                            <div class="na-info-row"><span class="na-label">Time</span>${r.time || 'n/a'}</div>
+                            <div class="na-info-row"><span class="na-label">Runway</span>${r.runway || 'n/a'}</div>
+                            <div class="na-info-row"><span class="na-label">Aircraft Type</span>${r.aircraftType || 'n/a'}</div>
+                            <div class="na-info-row"><span class="na-label">Category</span>${r.category || 'n/a'}</div>
+                            <div class="na-info-row"><span class="na-label">Class</span>${r.class || 'n/a'}</div>
+                        </div>
+                        ${feeHtml}
+                    </div>`;
+            }).join('');
         }
 
         // ── Leaflet map ─────────────────────────────────────────────────────
@@ -1030,6 +1168,8 @@
             document.getElementById('btn-export-pdf').style.display = 'none';
             document.getElementById('stats-row').style.display = 'none';
             document.getElementById('st-based-cell').style.display = 'none';
+            document.getElementById('na-related-wrap').style.display = 'none';
+            document.getElementById('na-related-list').innerHTML = '';
             selectedDoc = null;
             naCancelAnim();
             if (trackLayer) trackLayer.clearLayers();

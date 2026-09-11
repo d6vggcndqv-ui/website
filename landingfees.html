@@ -10,31 +10,15 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <script src="main.js"></script>
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
     <!-- Static fee data — no Firestore writes, client-side only -->
     <script src="basedaircraft_pou.js"></script>
     <script src="icaocodeRegistry.js"></script>
     <script src="feeschedule_pou.js"></script>
     <script src="mtow_pou.js"></script>
-    <script>
-        // ICAO type codes that should never generate a fee regardless of class field.
-        // Used to filter out piston aircraft incorrectly classified as Turbine
-        // due to FAA data labeling turbocharged pistons as "Turbo-prop".
-        const EXCLUDED_TYPES_POU = new Set([
-            'C182',   // Cessna 182 Skylane (piston)
-            'C18T',   // Cessna T182 Turbo Skylane (turbocharged piston)
-            'P28A',   // Piper Cherokee/Archer (piston)
-            'P28B',   // Piper Warrior (piston)
-            'P28R',   // Piper Arrow (piston — some turbocharged)
-            'P28T',   // Piper Turbo Arrow (turbocharged piston)
-            'P32R',   // Piper Saratoga SP (turbocharged piston)
-            'P32T',   // Piper Turbo Saratoga (turbocharged piston)
-            'C210',   // Cessna 210 Centurion (some turbocharged)
-            'T210',   // Cessna T210 Turbo Centurion (turbocharged piston)
-            'C337',   // Cessna 337 Skymaster (piston twin)
-            'P337',   // Cessna T337 Turbo Skymaster (turbocharged piston)
-        ]);
-    </script>
+    <script src="feelogic.js"></script>
 
     <style>
         .page-header-row { position:relative; text-align:center; margin-bottom:0.25rem; }
@@ -204,6 +188,69 @@
         .forgot-link:hover { text-decoration: underline; }
         #btn-signout { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; }
         #btn-signout:hover { background: #f0f0f0; }
+
+        /* ── Row expansion (track lookup + non-duplicated flight info) ──── */
+        #fee-table tbody tr.lf-row { cursor: pointer; }
+        .lf-expand-row td {
+            padding: 0;
+            background: #fafafa;
+            border-bottom: 1px solid #eee;
+        }
+        .lf-expand-panel {
+            padding: 22px 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 36px;
+            align-items: flex-start;
+            font-size: 13px;
+            color: #444;
+            white-space: normal;
+        }
+        .lf-track-block {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .lf-track-loading,
+        .lf-no-track {
+            color: #999;
+            font-size: 13px;
+        }
+        .lf-track-thumb {
+            width: 260px;
+            height: 170px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e5e5e5;
+        }
+        .lf-track-link {
+            font-size: 12px;
+            color: #0057ff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .lf-track-link:hover { text-decoration: underline; }
+
+        .lf-info-block {
+            font-size: 15px;
+            line-height: 1.8;
+            min-width: 220px;
+            padding-left: 28px;
+            border-left: 1px solid #e5e5e5;
+        }
+        .lf-info-heading {
+            font-size: 13px;
+            font-weight: 600;
+            color: #444;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 10px;
+        }
+        .lf-info-row .lf-info-label {
+            color: #888;
+            font-size: 12px;
+            margin-right: 6px;
+        }
     </style>
 </head>
 
@@ -466,45 +513,17 @@
     }
 
     // ── Fee calculation ────────────────────────────────────────────
-    // processRow returns null for based/exempt aircraft and non-turbine.
-    // Returns a row object for transient turbine landings.
-    function processRow(r, docId) {
-        // Only landings generate fees
-        if (r.event !== 'Landing') return null;
-        // Based aircraft are exempt
-        if (BASED_AIRCRAFT_POU.has(r.registration)) return null;
-
-        // Look up ICAO type code from registration, then get fee from schedule
-        const icaoCode = typeCodeRegistry[r.registration] || null;
-        // Exclude piston aircraft misclassified as Turbine due to FAA data quirks
-        if (icaoCode && EXCLUDED_TYPES_POU.has(icaoCode)) return null;
-
-        // Determine if turbine: use class field if present, otherwise fall back
-        // to checking whether the ICAO type code resolves to a fee tier.
-        // This handles pre-classRegistry records where class was not yet logged.
-        const isTurbineByClass = r.class === 'Turbine';
-        const isTurbineByIcao  = icaoCode ? !!getFeeForAircraftType(icaoCode) : false;
-        if (!isTurbineByClass && !isTurbineByIcao) return null;
-        const feeInfo  = icaoCode ? getFeeForAircraftType(icaoCode) : null;
-
-        return {
-            docId:        docId,
-            date:         r.date,
-            time:         r.time,
-            registration: r.registration,
-            icaoCode:     icaoCode || 'Unknown',
-            tier:         feeInfo ? feeInfo.tier : null,
-            fee:          feeInfo ? feeInfo.fee  : null,
-            needsReview:  !feeInfo,
-            timestamp:    r.timestamp,
-        };
-    }
+    // processRow, FEE_TIER_OPTIONS, and TIER_FEES now live in feelogic.js
+    // (shared with flighthistory.html and noiseabatement.html) and are
+    // available here as plain globals since feelogic.js loads in <head>.
 
     // ── State ──────────────────────────────────────────────────────
     const PAGE_SIZE = 50;
     let allRows      = [];   // all processed fee rows for the loaded period
     let filteredRows = [];
     let currentPage  = 1;
+    // Tracks which row (by docId) currently has its detail panel open.
+    let expandedDocId = null;
 
     const tbody     = document.getElementById('fee-tbody');
     const metaEl    = document.getElementById('fee-meta');
@@ -513,27 +532,7 @@
     const btnNext   = document.getElementById('btn-next');
 
     // ── Inline fee tier assignment (session only — no Firestore write) ──
-    const FEE_TIER_OPTIONS = [
-        'Light Turboprop',
-        'Medium Turboprop',
-        'Heavy Turboprop',
-        'Very Light Jet',
-        'Light Jet',
-        'Medium Jet',
-        'Heavy Jet',
-        'Super Heavy Jet',
-    ];
-
-    const TIER_FEES = {
-        'Light Turboprop':  35,
-        'Medium Turboprop': 35,
-        'Heavy Turboprop':  35,
-        'Very Light Jet':   35,
-        'Light Jet':        40,
-        'Medium Jet':       60,
-        'Heavy Jet':        80,
-        'Super Heavy Jet':  80,
-    };
+    // FEE_TIER_OPTIONS and TIER_FEES now live in feelogic.js.
 
     // Called when manager clicks "Assign" on a review row
     window._showAssign = function(docId) {
@@ -582,7 +581,7 @@
         tbody.innerHTML = pageRows.length === 0
             ? '<tr><td colspan="6" style="color:#999;padding:2rem 14px;">No results found.</td></tr>'
             : pageRows.map(r => `
-                <tr>
+                <tr class="lf-row" data-lf-row="${r.docId}" onclick="window._lfToggleRow('${r.docId}', event)">
                     <td>${r.date}</td>
                     <td>${r.time}</td>
                     <td>${r.registration} <a href="https://registry.faa.gov/aircraftinquiry/Search/NNumberResult?nNumberTxt=${r.registration.replace('N', '')}" target="_blank" title="FAA Registry" style="text-decoration:none;font-size:11px;color:#0057ff;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg></a><span data-camera-slot="${r.docId}"></span></td>
@@ -603,7 +602,12 @@
                                <button onclick="window._saveTier('${r.docId}')" style="font-family:'DM Sans',sans-serif;font-size:12px;padding:3px 10px;border:none;border-radius:6px;background:#0057ff;color:#fff;cursor:pointer;">Save</button>
                            </span>`
                         : '<span class="fee-amount">$' + r.fee.toFixed(2) + '</span>'}</td>
-                </tr>`).join('');
+                </tr>${expandedDocId === r.docId ? `
+                <tr class="lf-expand-row" data-lf-expand="${r.docId}">
+                    <td colspan="7">
+                        <div class="lf-expand-panel" id="lf-panel-${r.docId}">Loading…</div>
+                    </td>
+                </tr>` : ''}`).join('');
 
         pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
         btnPrev.disabled = currentPage <= 1;
@@ -611,6 +615,124 @@
         metaEl.textContent = `Showing ${filteredRows.length} result${filteredRows.length !== 1 ? 's' : ''}`;
 
         attachCameraIcons(pageRows);
+
+        // If a row is expanded and present on this page, populate its panel.
+        if (expandedDocId) {
+            const expandedRow = pageRows.find(r => r.docId === expandedDocId);
+            if (expandedRow) loadExpansionDetails(expandedRow);
+        }
+    }
+
+    // ── Row expansion: matching flight track + non-duplicated flight info ──
+    window._lfToggleRow = function(docId, evt) {
+        if (evt && evt.target.closest('a, button, select, [data-camera-slot] *')) return;
+        expandedDocId = (expandedDocId === docId) ? null : docId;
+        renderPage();
+    };
+
+    // Strict match: same registration, and the landing's timestamp falls
+    // within the track's start/end window. KPOU only — no airport selector
+    // on this page, so the tracks collection is always tracks_pou.
+    async function findMatchingTrack(row) {
+        try {
+            const q = query(
+                collection(db, 'tracks_pou'),
+                where('registration', '==', row.registration),
+                where('start', '<=', row.timestamp)
+            );
+            const snap = await getDocs(q);
+            const candidates = snap.docs
+                .map(d => ({ ...d.data(), docId: d.id }))
+                .filter(t => t.end >= row.timestamp);
+            candidates.sort((a, b) => new Date(b.start) - new Date(a.start));
+            return candidates[0] || null;
+        } catch (err) {
+            console.error('[findMatchingTrack] error:', err);
+            return null;
+        }
+    }
+
+    function lfAltColor(ft) {
+        if (ft < 500)  return '#dc2626';
+        if (ft < 1000) return '#f59e0b';
+        if (ft < 2000) return '#84cc16';
+        if (ft < 3500) return '#22c55e';
+        return '#3b82f6';
+    }
+
+    function renderTrackThumb(mapId, track) {
+        const el = document.getElementById(mapId);
+        if (!el) return;
+        const thumbMap = L.map(mapId, {
+            zoomControl: false, attributionControl: false,
+            dragging: false, scrollWheelZoom: false,
+            doubleClickZoom: false, boxZoom: false,
+            keyboard: false, tap: false
+        });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(thumbMap);
+
+        const pts = track.track || [];
+        for (let i = 0; i < pts.length - 1; i++) {
+            L.polyline(
+                [[pts[i].lat, pts[i].lon], [pts[i + 1].lat, pts[i + 1].lon]],
+                { color: lfAltColor(pts[i].alt), weight: 3, opacity: 0.9 }
+            ).addTo(thumbMap);
+        }
+        if (pts.length) {
+            L.circleMarker([pts[0].lat, pts[0].lon], {
+                radius: 5, color: '#166534', fillColor: '#22c55e', fillOpacity: 1, weight: 2
+            }).addTo(thumbMap);
+            const last = pts[pts.length - 1];
+            L.circleMarker([last.lat, last.lon], {
+                radius: 5, color: '#991b1b', fillColor: '#dc2626', fillOpacity: 1, weight: 2
+            }).addTo(thumbMap);
+        }
+        if (track.bbox) {
+            thumbMap.fitBounds(
+                [[track.bbox.minLat, track.bbox.minLon], [track.bbox.maxLat, track.bbox.maxLon]],
+                { padding: [12, 12] }
+            );
+        }
+    }
+
+    async function loadExpansionDetails(row) {
+        const panel = document.getElementById(`lf-panel-${row.docId}`);
+        if (!panel) return;
+
+        // Flight info — only fields not already shown in the main row
+        // (Date, Time, Registration, ICAO Type, Weight, Fee Tier, Fee).
+        const infoHtml = `
+            <div class="lf-info-block">
+                <div class="lf-info-heading">Flight Info</div>
+                <div class="lf-info-row"><span class="lf-info-label">Runway</span>${row.runway || 'n/a'}</div>
+                <div class="lf-info-row"><span class="lf-info-label">Aircraft Type</span>${row.aircraftType || 'n/a'}</div>
+                <div class="lf-info-row"><span class="lf-info-label">Category</span>${row.category || 'n/a'}</div>
+                <div class="lf-info-row"><span class="lf-info-label">Class</span>${row.class || 'n/a'}</div>
+            </div>`;
+
+        // Track block always renders first so the map sits in the same
+        // leftmost position as it does on Flight History.
+        panel.innerHTML = `
+            <div class="lf-track-block" id="lf-track-${row.docId}">
+                <div class="lf-track-loading">Looking up flight track…</div>
+            </div>
+            ${infoHtml}`;
+
+        const track = await findMatchingTrack(row);
+        const trackEl = document.getElementById(`lf-track-${row.docId}`);
+        if (!trackEl) return;
+
+        if (!track) {
+            trackEl.innerHTML = `<div class="lf-no-track">No matching track</div>`;
+            return;
+        }
+
+        const mapId = `lf-map-${row.docId}`;
+        trackEl.innerHTML = `
+            <div class="lf-track-thumb" id="${mapId}"></div>
+            <a class="lf-track-link" target="_blank" rel="noopener"
+               href="noiseabatement.html?airport=pou&track=${track.docId}">View full track →</a>`;
+        renderTrackThumb(mapId, track);
     }
 
     function updateSummary(rows) {
@@ -664,7 +786,16 @@
                 if (from && data.timestamp < from) { skippedDate++; return; }
                 if (to   && data.timestamp > to)   { skippedDate++; return; }
                 const row = processRow(data, d.id);
-                if (row) allRows.push(row);
+                if (row) {
+                    // Carry over fields not included in processRow's return value,
+                    // needed for the row-expansion "Flight Info" panel. Attached
+                    // here only — feelogic.js itself is untouched.
+                    row.runway       = data.runway;
+                    row.aircraftType = data.aircraftType;
+                    row.category     = data.category;
+                    row.class        = data.class;
+                    allRows.push(row);
+                }
                 else skippedProcess++;
             });
             console.log(`[LandingFees] Skipped by date: ${skippedDate}, skipped by processRow: ${skippedProcess}, kept: ${allRows.length}`);
