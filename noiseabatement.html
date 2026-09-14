@@ -490,6 +490,26 @@
 
             <!-- Controls -->
             <div class="viewer-controls">
+                <label style="flex-direction:row;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                    <input type="checkbox" id="date-enabled" checked onchange="
+                        const on = this.checked;
+                        document.getElementById('date-from').disabled = !on;
+                        document.getElementById('date-to').disabled   = !on;
+                        document.getElementById('time-from').disabled = !on;
+                        document.getElementById('time-to').disabled   = !on;
+                        if (!on) {
+                            document.getElementById('date-from').value = '';
+                            document.getElementById('date-to').value   = '';
+                        } else {
+                            const fmt = d => d.toISOString().slice(0,10);
+                            document.getElementById('date-from').value = fmt(new Date());
+                            document.getElementById('date-to').value   = fmt(new Date());
+                            document.getElementById('time-from').value = '00:00';
+                            document.getElementById('time-to').value   = '23:59';
+                        }
+                    ">
+                    Date Range
+                </label>
                 <label>From Date
                     <input type="date" id="date-from" style="font-family:'DM Sans',sans-serif;font-size:14px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#111;">
                 </label>
@@ -503,7 +523,7 @@
                     <input type="time" id="time-to">
                 </label>
                 <label>Registration (optional)
-                    <input type="text" id="filter-cs" placeholder="e.g. N16002" style="width:130px;">
+                    <input type="text" id="filter-cs" placeholder="e.g. N1602" style="width:130px;">
                 </label>
                 <label>Exceedance
                     <select id="filter-exceedance" onchange="renderList()">
@@ -614,7 +634,7 @@
         import { initializeApp }         from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut }
                                          from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
-        import { getFirestore, collection, doc, getDoc, query, where, orderBy, limit, getDocs }
+        import { getFirestore, collection, doc, getDoc, query, where, orderBy, getDocs }
                                          from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -809,11 +829,12 @@
             if (user) { initUser(user); } else { showAuth(); }
         });
 
-        // ── Date defaults (today and 7 days ago) ────────────────────────────
+        // ── Date defaults (today) ────────────────────────────────────────────
         const today = new Date();
         const week  = new Date(today); week.setDate(today.getDate() - 6);
         const fmt   = d => d.toISOString().slice(0, 10);
-        // Date inputs left empty — user selects range manually
+        document.getElementById('date-from').value = fmt(today);
+        document.getElementById('date-to').value   = fmt(today);
         document.getElementById('time-from').value = '00:00';
         document.getElementById('time-to').value   = '23:59';
 
@@ -966,7 +987,7 @@
         }
 
         // ── Leaflet map ─────────────────────────────────────────────────────
-        let map, trackLayer, fieldMarker, radiusCircle, hotspotLayer;
+        let map, trackLayer, fieldMarker, radiusCircle, hotspotLayer, hoverLayer;
 
         function initMap() {
             if (map) return;
@@ -1018,6 +1039,26 @@
             naAnimating = false;
             const hud = document.getElementById('track-hud');
             if (hud) { hud.classList.remove('visible', 'fade-out'); }
+        }
+
+        // ── Hover preview — draws instantly on the existing map view ─────────
+        let hoverDebounce = null;
+
+        function drawHoverTrack(pts) {
+            clearHoverTrack();
+            if (!pts || pts.length < 2) return;
+            hoverLayer = L.layerGroup().addTo(map);
+            for (let i = 0; i < pts.length - 1; i++) {
+                L.polyline(
+                    [[pts[i].lat, pts[i].lon], [pts[i+1].lat, pts[i+1].lon]],
+                    { color: altColor(pts[i].alt), weight: 3, opacity: 0.75,
+                      lineCap: 'round', interactive: false }
+                ).addTo(hoverLayer);
+            }
+        }
+
+        function clearHoverTrack() {
+            if (hoverLayer) { map.removeLayer(hoverLayer); hoverLayer = null; }
         }
 
         function drawTrack(doc) {
@@ -1148,8 +1189,13 @@
 
         // ── Reset filters to defaults ─────────────────────────────────────────
         window.resetFilters = function resetFilters() {
-            document.getElementById('date-from').value = '';
-            document.getElementById('date-to').value   = '';
+            document.getElementById('date-enabled').checked = true;
+            document.getElementById('date-from').disabled   = false;
+            document.getElementById('date-to').disabled     = false;
+            document.getElementById('time-from').disabled   = false;
+            document.getElementById('time-to').disabled     = false;
+            document.getElementById('date-from').value = fmt(new Date());
+            document.getElementById('date-to').value   = fmt(new Date());
             document.getElementById('time-from').value = '00:00';
             document.getElementById('time-to').value   = '23:59';
             document.getElementById('filter-cs').value = '';
@@ -1186,9 +1232,10 @@
             const filterMode = document.getElementById('filter-exceedance')
                 ? document.getElementById('filter-exceedance').value
                 : 'all';
-            const visibleTracks = filterMode === 'exceedance'
-                ? tracks.filter(doc => doc.minAltMSL != null && doc.minAltMSL < patternCeilMSL())
-                : tracks;
+            const csFilter = document.getElementById('filter-cs').value.trim().toUpperCase();
+            const visibleTracks = tracks
+                .filter(doc => filterMode !== 'exceedance' || (doc.minAltMSL != null && doc.minAltMSL < patternCeilMSL()))
+                .filter(doc => !csFilter || (doc.registration || '').toUpperCase().includes(csFilter));
 
             countEl.textContent = visibleTracks.length ? `${visibleTracks.length} track${visibleTracks.length !== 1 ? 's' : ''}` : '';
 
@@ -1265,8 +1312,24 @@
                     const slot = el.querySelector('[data-camera-slot]');
                     if (slot) slot.addEventListener('click', e => e.stopPropagation());
                 }).observe(el, { childList: true, subtree: true });
+
+                // Hover preview — draw track on map instantly, debounced at 150ms
+                el.addEventListener('mouseenter', () => {
+                    clearTimeout(hoverDebounce);
+                    hoverDebounce = setTimeout(() => drawHoverTrack(doc.track), 150);
+                });
+                el.addEventListener('mouseleave', () => {
+                    clearTimeout(hoverDebounce);
+                });
+
                 listEl.appendChild(el);
             });
+
+            // Clear hover preview when mouse leaves the list entirely
+            listEl.onmouseleave = () => {
+                clearTimeout(hoverDebounce);
+                clearHoverTrack();
+            };
 
             if (currentCollection === 'tracks_pou') {
                 attachTrackCameraIcons(visibleTracks);
@@ -1310,13 +1373,15 @@
 
         // ── Load from Firestore ─────────────────────────────────────────────
         window.loadTracks = async function() {
-            const fromVal = document.getElementById('date-from').value;
-            const toVal   = document.getElementById('date-to').value;
+            const dateEnabled = document.getElementById('date-enabled').checked;
+            const fromVal = dateEnabled ? document.getElementById('date-from').value : '';
+            const toVal   = dateEnabled ? document.getElementById('date-to').value   : '';
             const csVal   = document.getElementById('filter-cs').value.trim().toUpperCase();
             const statusEl = document.getElementById('load-status');
 
-            if (!fromVal || !toVal) {
-                statusEl.textContent = 'Please set both dates.';
+            // Require at least a registration fragment if no dates are set
+            if (!fromVal && !toVal && !csVal) {
+                statusEl.textContent = 'Enter a date range or a registration to search.';
                 return;
             }
 
@@ -1326,16 +1391,21 @@
             try {
                 const timeFrom = document.getElementById('time-from').value || '00:00';
                 const timeTo   = document.getElementById('time-to').value   || '23:59';
-                const fromISO = new Date(fromVal + 'T' + timeFrom + ':00').toISOString();
-                const toISO   = new Date(toVal   + 'T' + timeTo   + ':59').toISOString();
 
                 const constraints = [
-                    where('timestamp', '>=', fromISO),
-                    where('timestamp', '<=', toISO),
-                    orderBy('timestamp', 'desc'),
-                    limit(200)
+                    orderBy('timestamp', 'desc')
                 ];
-                if (csVal) constraints.unshift(where('registration', '==', csVal));
+
+                // Only add timestamp bounds when dates are provided
+                if (fromVal) {
+                    const fromISO = new Date(fromVal + 'T' + timeFrom + ':00').toISOString();
+                    constraints.unshift(where('timestamp', '>=', fromISO));
+                }
+                if (toVal) {
+                    const toISO = new Date(toVal + 'T' + timeTo + ':59').toISOString();
+                    constraints.unshift(where('timestamp', '<=', toISO));
+                }
+                // Registration filtering is done client-side in renderList (substring match)
 
                 const snap = await getDocs(query(collection(db, currentCollection), ...constraints));
                 tracks = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
@@ -1343,9 +1413,7 @@
                 // Sort by timestamp desc (already ordered but ensure it)
                 tracks.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-                statusEl.textContent = tracks.length === 200
-                    ? 'Showing 200 most recent (limit reached — narrow the date range for more)'
-                    : '';
+                statusEl.textContent = '';
 
                 naCancelAnim();
                 trackLayer && trackLayer.clearLayers();
