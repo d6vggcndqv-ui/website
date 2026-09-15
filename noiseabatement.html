@@ -1047,6 +1047,8 @@
         function drawHoverTrack(pts) {
             clearHoverTrack();
             if (!pts || pts.length < 2) return;
+            // Hide the main track layer so the preview shows over a clean map
+            if (trackLayer) map.removeLayer(trackLayer);
             hoverLayer = L.layerGroup().addTo(map);
             for (let i = 0; i < pts.length - 1; i++) {
                 L.polyline(
@@ -1059,6 +1061,8 @@
 
         function clearHoverTrack() {
             if (hoverLayer) { map.removeLayer(hoverLayer); hoverLayer = null; }
+            // Restore the main track layer if it exists
+            if (trackLayer && !map.hasLayer(trackLayer)) trackLayer.addTo(map);
         }
 
         function drawTrack(doc) {
