@@ -531,6 +531,13 @@
                         <option value="exceedance">Exceedance Only</option>
                     </select>
                 </label>
+                <label id="filter-operation-label">OWD Operation
+                    <select id="filter-operation" onchange="renderList()">
+                        <option value="all"></option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                    </select>
+                </label>
                 <button class="primary" id="btn-load" onclick="loadTracks()">Load Tracks</button>
                 <button id="btn-reset" onclick="resetFilters()">Reset</button>
                 <span id="load-status" style="font-size:13px;color:#666;align-self:center;"></span>
@@ -669,6 +676,7 @@
         // Matches TRACK_RADIUS_KM in each airport's tracking script (e.g. flights_pou.js).
         // OWD value not yet confirmed — using POU's for now until flights_owd.js is checked.
         const AIRPORT_TRACK_RADIUS_KM = { owd: 8.05, pou: 11.27 };
+        const AIRPORT_OPERATION_LABELS = { owd: 'OWD Operation', pou: 'HVRA Operation' };
         const PATTERN_CEIL_AGL    = 1000;                     // low-alt dot threshold (ft AGL)
 
         // FAA-designated hot spots shown on the map when POU is selected
@@ -739,6 +747,9 @@
             document.getElementById('track-list').innerHTML =
                 '<div class="empty-state">Load a date and time range to see captured tracks.</div>';
             document.getElementById('track-count').textContent = '';
+            // Update operation filter label for the new airport
+            const opLabel = document.getElementById('filter-operation-label');
+            if (opLabel) opLabel.firstChild.textContent = AIRPORT_OPERATION_LABELS[key] || 'Operation';
         }
 
         // ── Auth wiring ─────────────────────────────────────────────────────
@@ -873,6 +884,11 @@
             if (exceedance) {
                 const excEl = document.getElementById('filter-exceedance');
                 if (excEl) excEl.value = exceedance;
+            }
+            const operation = params.get('operation');
+            if (operation) {
+                const opEl = document.getElementById('filter-operation');
+                if (opEl) opEl.value = operation;
             }
 
             // Auto-load tracks if we have date params.
@@ -1204,6 +1220,7 @@
             document.getElementById('time-to').value   = '23:59';
             document.getElementById('filter-cs').value = '';
             document.getElementById('filter-exceedance').value = 'all';
+            document.getElementById('filter-operation').value = 'all';
 
             tracks = [];
             renderList();
@@ -1237,9 +1254,16 @@
                 ? document.getElementById('filter-exceedance').value
                 : 'all';
             const csFilter = document.getElementById('filter-cs').value.trim().toUpperCase();
+            const opFilter = document.getElementById('filter-operation')
+                ? document.getElementById('filter-operation').value
+                : 'all';
             const visibleTracks = tracks
                 .filter(doc => filterMode !== 'exceedance' || (doc.minAltMSL != null && doc.minAltMSL < patternCeilMSL()))
-                .filter(doc => !csFilter || (doc.registration || '').toUpperCase().includes(csFilter));
+                .filter(doc => !csFilter || (doc.registration || '').toUpperCase().includes(csFilter))
+                .filter(doc => {
+                    if (opFilter === 'all') return true;
+                    return opFilter === 'yes' ? doc.hasRelatedFlight === true : doc.hasRelatedFlight !== true;
+                });
 
             countEl.textContent = visibleTracks.length ? `${visibleTracks.length} track${visibleTracks.length !== 1 ? 's' : ''}` : '';
 
@@ -1303,6 +1327,8 @@
                     });
                     if (cs)            params.set('cs', cs);
                     if (exc !== 'all') params.set('exceedance', exc);
+                    const op = document.getElementById('filter-operation').value;
+                    if (op !== 'all')  params.set('operation', op);
                     window.open(`${base}?${params.toString()}`, '_blank');
                 });
 
@@ -1412,7 +1438,15 @@
                 // Registration filtering is done client-side in renderList (substring match)
 
                 const snap = await getDocs(query(collection(db, currentCollection), ...constraints));
-                tracks = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
+                const rawTracks = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
+
+                // Tag each track with hasRelatedFlight using the same time-overlap logic
+                // as the detail view — runs all queries in parallel
+                const tagged = await Promise.all(rawTracks.map(async trackDoc => {
+                    const events = await findRelatedFlights(trackDoc);
+                    return { ...trackDoc, hasRelatedFlight: events.length > 0 };
+                }));
+                tracks = tagged;
 
                 // Sort by timestamp desc (already ordered but ensure it)
                 tracks.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
