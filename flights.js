@@ -23,10 +23,11 @@ const HELICOPTER_DISTANCE_KM = 1;
 const COOLDOWN_MS = 60000;
 
 const RUNWAYS = [
-  { name: "17/35", lat1: 42.1937493, lon1: -71.1777631, lat2: 42.1839344, lon2: -71.1717076 },
-  { name: "10/28", lat1: 42.1921429, lon1: -71.1784215, lat2: 42.1923323, lon2: -71.1638716 }
+  { names: ["17", "35"], lat1: 42.1937493, lon1: -71.1777631, lat2: 42.1839344, lon2: -71.1717076 },
+  { names: ["10", "28"], lat1: 42.1921429, lon1: -71.1784215, lat2: 42.1923323, lon2: -71.1638716 }
 ];
 const RUNWAY_CORRIDOR_KM = 0.15;
+const LOW_SPEED_THRESHOLD_KTS = 10; // RUNWAY END LOGIC: below this, heading is unreliable
 
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -38,7 +39,23 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function isOnRunway(lat, lon) {
+// RUNWAY END LOGIC (ported from flights_pou.js)
+function getBearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function angleDiff(a, b) {
+  const diff = Math.abs(a - b) % 360;
+  return diff > 180 ? 360 - diff : diff;
+}
+
+function isOnRunway(lat, lon, track) {
   for (const rwy of RUNWAYS) {
     const dx = rwy.lat2 - rwy.lat1;
     const dy = rwy.lon2 - rwy.lon1;
@@ -46,7 +63,16 @@ function isOnRunway(lat, lon) {
     const closestLat = rwy.lat1 + t * dx;
     const closestLon = rwy.lon1 + t * dy;
     const dist = getDistance(lat, lon, closestLat, closestLon);
-    if (dist <= RUNWAY_CORRIDOR_KM) return rwy.name;
+    if (dist <= RUNWAY_CORRIDOR_KM) {
+      if (typeof track === "number") {
+        const bearingForward = getBearing(rwy.lat1, rwy.lon1, rwy.lat2, rwy.lon2);
+        const bearingReverse = (bearingForward + 180) % 360;
+        const diffForward = angleDiff(track, bearingForward);
+        const diffReverse = angleDiff(track, bearingReverse);
+        return diffForward <= diffReverse ? rwy.names[0] : rwy.names[1];
+      }
+      return t < 0.5 ? rwy.names[0] : rwy.names[1];
+    }
   }
   return null;
 }
@@ -142,7 +168,9 @@ async function fetchAndDetect() {
         minGsOnRunway: null,
         gsAccelCount: 0,
         didDecelerateOnRunway: false,
-        consecutiveDecelsOnRunway: 0
+        consecutiveDecelsOnRunway: 0,
+        wasOnRunway: false,       // RUNWAY END LOGIC
+        runwayEntryTrack: null    // RUNWAY END LOGIC
       };
 
       const currentAlt = flight.alt_baro;
@@ -205,8 +233,21 @@ async function fetchAndDetect() {
       }
 
       // --- track descending on runway ---
-      const currentRunway = isOnRunway(flight.lat, flight.lon);
+      // RUNWAY END LOGIC (ported from flights_pou.js)
+      const positionOnRunway = isOnRunway(flight.lat, flight.lon);
+      if (positionOnRunway && !state.wasOnRunway) {
+        state.runwayEntryTrack = typeof flight.track === "number" ? flight.track : null;
+      }
+      state.wasOnRunway = !!positionOnRunway;
+
+      const trackForRunway = (currentGs < LOW_SPEED_THRESHOLD_KTS && typeof state.runwayEntryTrack === "number")
+        ? state.runwayEntryTrack
+        : flight.track;
+
+      const currentRunway = isOnRunway(flight.lat, flight.lon, trackForRunway);
       if (currentRunway) state.lastRunway = currentRunway;
+
+      if (!positionOnRunway) state.runwayEntryTrack = null;
 
       if (!isHelicopter && currentRunway &&
           !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
