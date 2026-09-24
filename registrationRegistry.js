@@ -95817,6 +95817,7 @@ const registrationRegistry = {
   "a3c163": "N341DU",
   "a3c169": "N341E",
   "a3c16a": "N341EA",
+  "a3c16c": "N341EC",
   "a3c16e": "N341EE",
   "a3c170": "N341EG",
   "a3c180": "N341EY",
