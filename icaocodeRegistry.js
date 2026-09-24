@@ -74600,7 +74600,7 @@ const typeCodeRegistry = {
   'N55VC': 'LJ55',
   'N55VE': 'BE35',
   'N55VH': 'C525',
-  'N55VL': 'GLF5',
+  'N55VL': 'AA5',
   'N55VS': 'BE33',
   'N55VT': 'BE35',
   'N55VV': 'LJ60',
