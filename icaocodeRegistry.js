@@ -76556,6 +76556,7 @@ const typeCodeRegistry = {
   'N577CF': 'FA7X',
   'N577CS': 'HA4T',
   'N577CT': 'C182',
+  'TWY40': 'GL5T',
   'N577D': 'BE10',
   'N577DG': 'SR22',
   'N577DH': 'SR22',
