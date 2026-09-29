@@ -1907,4 +1907,14 @@ button[type="submit"]:hover {
     .dot-card { padding: 24px 20px; }
     .dot-map { height: 300px; }
 }
+
+/* DOT statement — sentence-style text instead of a heading */
+.dot-statement {
+    font-size: clamp(1.15rem, 1.8vw, 1.5rem);
+    font-weight: 500;
+    line-height: 1.5;
+    color: #0f172a;
+    max-width: 760px;
+    margin: 0 auto;
+}
 /* ══ /NEW: DOT Partnership section ════════════════════════════════════ */
