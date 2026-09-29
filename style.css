@@ -1738,3 +1738,173 @@ button[type="submit"]:hover {
         top: 4px;
     }
 }
+
+/* ══ NEW: DOT Partnership section ═════════════════════════════════════ */
+.dot-section {
+    text-align: center;
+    padding: 72px 8% 80px;
+    margin-top: 10px;
+    background:
+        radial-gradient(ellipse 70% 80% at 50% 30%, rgba(0, 87, 255, 0.12) 0%, rgba(0, 87, 255, 0.04) 55%, rgba(0, 87, 255, 0) 100%),
+        #fff; /* opaque so the fixed features video can't show through */
+}
+
+.dot-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 56px;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.dot-header-text {
+    text-align: center;
+}
+
+.dot-logo-slot {
+    flex-shrink: 0;
+    width: 160px;
+    height: 80px;
+    margin: 0;
+    border: 2px dashed #c7d0da;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9aa1ac;
+}
+
+.dot-logo {
+    display: block;
+    flex-shrink: 0;
+    height: 110px;
+    width: auto;
+    margin: 0;
+}
+
+.dot-section h2 {
+    font-size: clamp(1.8rem, 3vw, 2.4rem);
+    font-weight: 700;
+    line-height: 1.2;
+    max-width: 720px;
+    margin: 0;
+}
+
+.dot-sub {
+    font-size: 1.05rem;
+    color: #555;
+    margin: 12px 0 0;
+}
+
+.dot-cards {
+    display: grid;
+    grid-template-columns: minmax(200px, 0.55fr) 2.45fr;
+    align-items: start; /* airport-types card hugs its content instead of stretching to the map card's height */
+    gap: 24px;
+    max-width: 1100px;
+    margin: 48px auto 0;
+}
+
+.dot-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 28px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.55) 100%);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid rgba(0, 87, 255, 0.14);
+    box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    border-radius: 20px;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.dot-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 36px rgba(0, 87, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.dot-card-label {
+    margin-top: 0;
+    margin-bottom: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #0057ff;
+}
+
+.dot-chips {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    padding: 0;
+    margin: 22px 0 0;
+}
+
+.dot-chips li {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #0057ff;
+    background: rgba(0, 87, 255, 0.08);
+    border: 1px solid rgba(0, 87, 255, 0.22);
+    border-radius: 999px;
+    padding: 6px 16px;
+}
+
+.dot-map {
+    width: 100%;
+    height: 460px;
+    margin-top: 18px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 87, 255, 0.14);
+    background: #f4f6fb;
+    isolation: isolate; /* keeps Leaflet's internal z-indexes from escaping this box */
+}
+
+/* Leaflet's own stylesheet loads after this one and sets a gray container background, so match its specificity */
+.dot-map.leaflet-container {
+    background: #f4f6fb;
+}
+
+.dot-pin {
+    filter: drop-shadow(0 3px 4px rgba(15, 23, 42, 0.3));
+}
+
+/* Desktop: heading centered on the page, logo pinned to the right edge of the header row */
+.dot-header {
+    position: relative;
+    max-width: 1100px; /* same width as the cards below, so the heading centers on the page */
+}
+.dot-header .dot-logo-slot,
+.dot-header .dot-logo {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+.dot-section h2 {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+@media (max-width: 768px) {
+    .dot-section { padding: 48px 6% 56px; }
+    .dot-header .dot-logo-slot,
+    .dot-header .dot-logo { position: static; transform: none; }
+    .dot-header { flex-direction: column-reverse; gap: 20px; text-align: center; } /* logo above the heading on mobile */
+    .dot-header-text { text-align: center; }
+    .dot-cards { grid-template-columns: 1fr; margin-top: 32px; }
+    .dot-card { padding: 24px 20px; }
+    .dot-map { height: 300px; }
+}
+/* ══ /NEW: DOT Partnership section ════════════════════════════════════ */

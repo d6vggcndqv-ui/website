@@ -74,6 +74,45 @@
 
         </div>
 
+                       <!-- ══ NEW: DOT Partnership section ══════════════════════════════ -->
+        <section class="dot-section" id="dot-partnership">
+
+            <div class="dot-header">
+                <div class="dot-header-text">
+                    <h2>Under Contract with the U.S. Department of Transportation</h2>
+                    <p class="dot-sub">Trusted by airports of every size, nationwide.</p>
+                </div>
+
+                <img class="dot-logo" src="DOT-logo.png" alt="U.S. Department of Transportation">
+            </div>
+
+            <div class="dot-cards">
+
+                <div class="dot-card">
+                    <span class="dot-card-label">Airport Types</span>
+                    <ul class="dot-chips">
+                        <li>Municipal</li>
+                        <li>Regional</li>
+                        <li>International</li>
+                    </ul>
+                </div>
+
+                <div class="dot-card">
+                    <span class="dot-card-label">States</span>
+                    <div class="dot-map" id="dotMap"></div>
+                    <ul class="dot-chips">
+                        <li>Florida</li>
+                        <li>Maine</li>
+                        <li>Massachusetts</li>
+                        <li>New Mexico</li>
+                        <li>New York</li>
+                    </ul>
+                </div>
+
+            </div>
+        </section>
+        <!-- ══ /NEW: DOT Partnership section ═════════════════════════════ -->
+
         <div class="post-hero-section" id="overview">
 
             <video class="overview-video" src="overview.mp4" poster="overview-poster.jpg" muted playsinline autoplay loop preload="auto"></video>
@@ -1294,6 +1333,82 @@
             cards.forEach((card) => observer.observe(card));
         });
     </script>
+
+    <!-- ══ NEW: DOT Partnership map ═════════════════════════════════════ -->
+    <script src="us-states.js"></script>
+    <script>
+        window.addEventListener("load", () => {
+            const dotMapEl = document.getElementById("dotMap");
+            if (!dotMapEl || !window.L) return;
+
+            const dotMap = L.map("dotMap", {
+                zoomControl: false,
+                dragging: false,
+                scrollWheelZoom: false,
+                doubleClickZoom: false,
+                boxZoom: false,
+                keyboard: false,
+                touchZoom: false,
+                zoomSnap: 0, // lets fitBounds pick an exact zoom instead of snapping to a whole level
+                attributionControl: false, // no tile provider, so nothing to attribute
+            });
+
+            // State outlines drawn from us-states.js (no tile provider needed).
+            // The states we work in are tinted blue; all others are light gray with white borders.
+            const dotWorkStates = ["Florida", "Maine", "Massachusetts", "New Mexico", "New York"];
+
+            if (window.DOT_US_STATES) {
+                // Two separate layers: gray states first, then the blue states added on top of them.
+                // Each layer is added after the last, so the blue outlines are always drawn over
+                // the gray states' white borders wherever they share an edge.
+                L.geoJSON(window.DOT_US_STATES, {
+                    interactive: false,
+                    filter: (feature) => !dotWorkStates.includes(feature.properties.name),
+                    style: { fillColor: "#dfe4ee", fillOpacity: 1, color: "#ffffff", weight: 1.2 },
+                }).addTo(dotMap);
+
+                L.geoJSON(window.DOT_US_STATES, {
+                    interactive: false,
+                    filter: (feature) => dotWorkStates.includes(feature.properties.name),
+                    style: { fillColor: "#0057ff", fillOpacity: 0.22, color: "#0057ff", weight: 1.5 },
+                }).addTo(dotMap);
+            }
+
+            const dotPinSvg = `
+                <svg class="dot-pin" width="24" height="30" viewBox="0 0 24 30" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 29S22 18.5 22 11A10 10 0 0 0 2 11c0 7.5 10 18 10 18Z" fill="#0057ff" stroke="#fff" stroke-width="1.5"/>
+                    <circle cx="12" cy="11" r="3.5" fill="#fff"/>
+                </svg>`;
+
+            const dotPinIcon = L.divIcon({
+                html: dotPinSvg,
+                className: "",
+                iconSize: [24, 30],
+                iconAnchor: [12, 30], // tip of the pin sits on the coordinate
+            });
+
+            const dotStates = [
+                { name: "Florida",       latlng: [28.1, -81.7] },
+                { name: "Maine",         latlng: [45.2, -69.2] },
+                { name: "Massachusetts", latlng: [42.3, -71.8] },
+                { name: "New Mexico",    latlng: [34.4, -106.1] },
+                { name: "New York",      latlng: [42.9, -75.6] },
+            ];
+
+            dotStates.forEach((s) => {
+                L.marker(s.latlng, { icon: dotPinIcon, interactive: false, keyboard: false, title: s.name }).addTo(dotMap);
+            });
+
+            const fitUS = () => {
+                dotMap.invalidateSize();
+                dotMap.fitBounds([[24.5, -125], [49.5, -66.5]], { padding: [10, 10], animate: false });
+            };
+
+            setTimeout(fitUS, 80);
+            window.addEventListener("resize", fitUS);
+        });
+    </script>
+    <!-- ══ /NEW: DOT Partnership map ════════════════════════════════════ -->
 
 </body>
 </html>
