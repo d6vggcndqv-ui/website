@@ -710,6 +710,7 @@ const TRACK_CEILING_AGL_FT = 4500;   // only keep paths that came at/below this 
 const TRACK_CEILING_MSL_FT = FIELD_ELEVATION_FT + TRACK_CEILING_AGL_FT; // feed reports MSL, so compare against this
 const TRACK_GROUND_MIN_KT  = 3;      // ignore stationary ground samples (parked/idling aircraft)
 const TRACK_TIMEOUT_MS     = 120000; // a visit ends after the aircraft is unseen this long (rides out coverage gaps)
+const TRACK_STATIONARY_MAX_MS = 10 * 60 * 1000; // [STATIONARY FIX] stopped on the ground longer than this = parked, close the visit
 const TRACK_POLL_MS        = 2000;   // sample cadence (matches the feed)
 const TRACK_RETENTION_DAYS = 30;     // prune anything older than this
 const TRACK_PRUNE_EVERY_MS = 24 * 60 * 60 * 1000; // run the prune at most once a day (also runs once on startup)
@@ -753,6 +754,8 @@ async function flushTrack(hex) {
   const trackPoints = buf.points.map(p => ({
     lat: p[0], lon: p[1], alt: p[2], gs: p[3], trk: p[4], t: p[5]
   }));
+  // [ALT_GEOM] attach raw GNSS altitude as "ag" (ft, WGS84 ellipsoid) on points that have it; omitted otherwise
+  buf.points.forEach((p, i) => { if (typeof p[6] === "number") trackPoints[i].ag = p[6]; });
  
   try {
     await addDoc(collection(db, TRACK_COLLECTION), {
@@ -834,6 +837,7 @@ async function captureTracks() {
           if (resolved) buf.registration = resolved;
         }
         buf.lastSeenMs = nowMs;
+        buf.stationarySinceMs = null; // [STATIONARY FIX] moving again, clear the stop timer
  
         // dedupe consecutive identical positions (parked/slow), then append
         const rlat = +flight.lat.toFixed(5);
@@ -847,6 +851,8 @@ async function captureTracks() {
             Math.round(flight.track || 0),
             Math.round((nowMs - buf.startMs) / 1000)   // seconds since visit start
           ]);
+          // [ALT_GEOM] raw GNSS altitude (ft above the WGS84 ellipsoid, NOT MSL), only when the aircraft reports it
+          if (!onGround && typeof flight.alt_geom === "number") buf.points[buf.points.length - 1][6] = Math.round(flight.alt_geom);
           buf.bbox.minLat = Math.min(buf.bbox.minLat, flight.lat);
           buf.bbox.maxLat = Math.max(buf.bbox.maxLat, flight.lat);
           buf.bbox.minLon = Math.min(buf.bbox.minLon, flight.lon);
@@ -856,8 +862,19 @@ async function captureTracks() {
         // airborne but above the ceiling and a visit is already open:
         // keep it alive so a brief climb-out doesn't split one visit into two
         buf.lastSeenMs = nowMs;
+      } else if (buf && onGround) {
+        // [STATIONARY FIX] stopped on the ground with a visit open (run-up / hold short):
+        // keep the visit alive without adding points, up to TRACK_STATIONARY_MAX_MS.
+        // Past that it's parked: set lastSeenMs back to when it stopped so the
+        // visit-end sweep below closes it now, with an accurate end time.
+        if (!buf.stationarySinceMs) buf.stationarySinceMs = nowMs;
+        if (nowMs - buf.stationarySinceMs <= TRACK_STATIONARY_MAX_MS) {
+          buf.lastSeenMs = nowMs;
+        } else {
+          buf.lastSeenMs = buf.stationarySinceMs;
+        }
       }
-      // (in range, below ceiling, stationary on ground) and (above ceiling, no open visit) are intentionally ignored
+      // (stationary on ground, no open visit) and (above ceiling, no open visit) are intentionally ignored
     });
  
     // visit-end sweep: flush any buffer not seen within the timeout
