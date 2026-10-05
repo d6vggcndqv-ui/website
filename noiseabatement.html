@@ -430,6 +430,24 @@
         .na-fee-amount { font-weight: 700; font-size: 20px; color: #111; margin-top: 4px; }
         .na-fee-review { font-weight: 600; font-size: 15px; color: #991b1b; margin-top: 4px; }
         .na-no-related { color: #999; font-size: 13px; padding: 14px 16px; }
+
+        /* ── [VIEW IN 3D] link from the selected track to the 3D Airspace page ── */
+        .na-3d-body { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px 16px; }
+        .na-3d-link {
+            display: inline-block;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border: 1px solid #0057ff;
+            border-radius: 6px;
+            background: #fff;
+            color: #0057ff;
+            text-decoration: none;
+            transition: background 0.15s, color 0.15s;
+        }
+        .na-3d-link:hover { background: #0057ff; color: #fff; }
+        .na-3d-note { color: #999; font-size: 13px; }
     </style>
 </head>
 
@@ -440,13 +458,14 @@
                 <img src="logo.png" alt="Logo">
             </a>
         </div>
-        <!-- PORTAL NAV — keep identical across portal.html, dashboard.html, flighthistory.html, landingfees.html, noiseabatement.html -->
+        <!-- PORTAL NAV — keep identical across portal.html, dashboard.html, flighthistory.html, landingfees.html, noiseabatement.html, 3Dairspace.html -->
         <ul class="nav-links">
             <li><a href="portal.html">Home</a></li>
             <li><a href="dashboard.html">Dashboard</a></li>
             <li><a href="flighthistory.html">Flight History</a></li>
             <li><a href="landingfees.html">Landing Fees</a></li>
             <li><a href="noiseabatement.html">Noise Abatement</a></li>
+            <li><a href="3Dairspace.html">3D Airspace</a></li>
         </ul>
         <a class="nav-btn-secondary" href="#" onclick="if(window._authSignOut){window._authSignOut();} window.location.href='index.html'; return false;">Logout</a>
     </nav>
@@ -629,6 +648,14 @@
                     <div class="na-related-wrap" id="na-related-wrap" style="display:none;">
                         <h2 class="na-related-heading">Related Flights</h2>
                         <div id="na-related-list"></div>
+                    </div>
+                    <!-- [VIEW IN 3D] shown when a track is open; the link is filled in by show3dLink() -->
+                    <div class="na-related-wrap" id="na-3d-wrap" style="display:none;">
+                        <h2 class="na-related-heading">View in 3D</h2>
+                        <div class="na-3d-body">
+                            <a id="na-3d-link" class="na-3d-link" href="#" target="_blank" rel="noopener">Open this track in 3D Airspace</a>
+                            <span class="na-3d-note">Opens in a new tab at the start of this track</span>
+                        </div>
                     </div>
                 </div>
 
@@ -921,6 +948,7 @@
                 document.getElementById('btn-export-pdf').style.display = 'inline-block';
                 drawTrack(trackDoc);
                 loadRelatedFlights(trackDoc);
+                show3dLink(trackDoc);   // [VIEW IN 3D]
 
                 // Scroll so the full map is visible — slight delay lets the map render first
                 setTimeout(() => {
@@ -1000,6 +1028,16 @@
                         ${feeHtml}
                     </div>`;
             }).join('');
+        }
+
+        // ── [VIEW IN 3D] link the open track to the 3D Airspace page ────────
+        // 3Dairspace.html?airport=<code>&track=<track document id> opens that page in
+        // History with this track selected, at the start of the track.
+        const AIRSPACE_3D_PAGE = '3Dairspace.html';
+        function show3dLink(trackDoc) {
+            const params = new URLSearchParams({ airport: currentAirportKey, track: trackDoc.docId });
+            document.getElementById('na-3d-link').href = `${AIRSPACE_3D_PAGE}?${params.toString()}`;
+            document.getElementById('na-3d-wrap').style.display = 'block';
         }
 
         // ── Leaflet map ─────────────────────────────────────────────────────
@@ -1237,6 +1275,7 @@
             document.getElementById('st-based-cell').style.display = 'none';
             document.getElementById('na-related-wrap').style.display = 'none';
             document.getElementById('na-related-list').innerHTML = '';
+            document.getElementById('na-3d-wrap').style.display = 'none';   // [VIEW IN 3D]
             selectedDoc = null;
             naCancelAnim();
             if (trackLayer) trackLayer.clearLayers();

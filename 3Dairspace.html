@@ -1,0 +1,2179 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Airspace</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+
+    <!-- CesiumJS (open source, Apache 2.0) loaded from the jsDelivr CDN. Version is pinned on purpose:
+         to upgrade, change 1.145.0 in BOTH lines below. No Cesium ion account or token is used. -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css">
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js"></script>
+    <!-- [AIRCRAFT ICONS] your FAA type-code registry (same file landingfees.html uses); loads without blocking the page -->
+    <script defer src="icaocodeRegistry.js"></script>
+
+    <style>
+        /* ── Auth gate (same pattern as portal.html / dashboard.html) ─────── */
+        #auth-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
+        #auth-screen h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+        #auth-form { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
+        #auth-form input { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; outline: none; }
+        #auth-form input:focus { border-color: #0057ff; }
+        #auth-form button { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px; background: #0057ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+        #auth-form button:hover { background: #0040cc; }
+        #auth-error { font-size: 13px; color: #dc2626; text-align: center; min-height: 18px; }
+        #airport-selector { display: none; align-items: center; gap: 10px; font-size: 14px; }
+        #airport-selector select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+
+        /* ── 3D view ───────────────────────────────────────────────────────── */
+        .a3d-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1400px; margin: 16px auto 12px; padding: 0 24px; }
+        .a3d-header h1 { margin: 0; font-size: 1.4rem; text-align: left; }
+        #a3d-wrap { position: relative; max-width: 1400px; margin: 0 auto 24px; padding: 0 24px; }
+        #cesiumContainer { width: 100%; height: calc(100vh - 140px); min-height: 480px; border-radius: 10px; overflow: hidden; }
+        #a3d-status { position: absolute; top: 12px; left: 36px; padding: 6px 12px; border-radius: 999px; background: rgba(0, 0, 0, 0.6); color: #fff; font: 500 13px 'DM Sans', sans-serif; pointer-events: none; }
+        #a3d-status.a3d-error { background: rgba(185, 28, 28, 0.85); }
+        #a3d-legend { position: absolute; bottom: 36px; left: 36px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; background: rgba(0, 0, 0, 0.6); color: #fff; font: 500 12px 'DM Sans', sans-serif; pointer-events: none; }
+        #a3d-legend .swatch { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+        /* [RECENT PATHS] header controls */
+        .a3d-controls { display: flex; align-items: center; gap: 20px; }
+        /* [TRACK FOCUS] track picker */
+        #track-selector { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+        #track-selector select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; min-width: 170px; }
+        /* [COMPACT INFO] smaller aircraft info panel (Cesium's default is 40% of the view) */
+        .cesium-viewer .cesium-infoBox { width: 240px; max-width: 240px; top: 48px; }
+        .cesium-viewer .cesium-infoBox-title { font: 600 13px 'DM Sans', sans-serif; height: 16px; padding: 5px 28px 5px 28px; }
+        /* [VIEW BUTTONS] on-screen camera controls along the bottom of the view */
+        #a3d-legend { top: 50px; bottom: auto; }   /* altitude legend moves under the status pill to make room */
+        #a3d-viewbar { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 8px 18px; width: max-content; max-width: calc(100% - 110px); box-sizing: border-box; padding: 10px 14px 8px; border-radius: 12px; background: rgba(0, 0, 0, 0.62); color: #fff; font: 500 12px 'DM Sans', sans-serif; user-select: none; -webkit-user-select: none; }
+        .vb-group { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .vb-row { display: flex; gap: 5px; }
+        .vb-btn { display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; margin: 0; padding: 0; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 8px; background: rgba(255, 255, 255, 0.14); color: #fff; font: 600 13px 'DM Sans', sans-serif; line-height: 1; cursor: pointer; touch-action: none; }
+        .vb-btn.vb-wide { width: auto; min-width: 46px; padding: 0 12px; }
+        .vb-btn:hover { background: rgba(255, 255, 255, 0.3); }
+        .vb-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        .vb-btn.vb-on { background: #0057ff; border-color: #0057ff; }
+        .vb-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .vb-btn svg { width: 24px; height: 24px; pointer-events: none; }
+        .vb-label { font-size: 12px; letter-spacing: 0.02em; opacity: 0.9; }
+        #vb-stop { display: none; background: #fff; border-color: #fff; color: #111; }
+        #vb-stop:hover { background: #e6e6e6; }
+        /* [HISTORY] Live / History switch, search row, and replay timeline */
+        #mode-switch { display: inline-flex; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
+        .mode-btn { margin: 0; padding: 6px 14px; border: none; background: #fff; color: #333; font: 500 14px 'DM Sans', sans-serif; cursor: pointer; }
+        .mode-btn + .mode-btn { border-left: 1px solid #ccc; }
+        .mode-btn.mode-on { background: #0057ff; color: #fff; }
+        #a3d-history { display: none; flex-wrap: wrap; align-items: center; gap: 10px 14px; max-width: 1400px; margin: 0 auto 12px; padding: 0 24px; font-size: 14px; }
+        #a3d-history label { display: flex; align-items: center; gap: 6px; }
+        #a3d-history input, #a3d-history select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+        #hist-tail { width: 96px; text-transform: uppercase; }
+        .hist-btn { margin: 0; padding: 7px 14px; border: 1px solid #0057ff; border-radius: 6px; background: #0057ff; color: #fff; font: 500 14px 'DM Sans', sans-serif; cursor: pointer; }
+        .hist-btn:hover { background: #0040cc; }
+        .hist-btn.hist-btn-2 { background: #fff; color: #0057ff; }
+        .hist-btn.hist-btn-2:hover { background: #eef3ff; }
+        .hist-or { color: #777; }
+        #hist-note { color: #777; font-size: 12.5px; }
+        #main-content.hist-on #cesiumContainer { height: calc(100vh - 196px); }
+        #main-content.hist-on #a3d-viewbar { max-width: min(calc(100% - 110px), 900px); }
+        #hist-timeline { display: none; order: -1; flex: 0 0 100%; box-sizing: border-box; align-items: center; gap: 8px; padding-bottom: 9px; border-bottom: 1px solid rgba(255, 255, 255, 0.22); }
+        #hist-timeline .vb-btn { height: 36px; }
+        #tl-slider { flex: 1 1 140px; min-width: 110px; margin: 0 2px; accent-color: #4d8dff; cursor: pointer; }
+        #tl-time { min-width: 88px; text-align: center; font: 600 13px 'DM Sans', sans-serif; font-variant-numeric: tabular-nums; }
+        #tl-speed { height: 36px; padding: 0 6px; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 8px; background: rgba(255, 255, 255, 0.14); color: #fff; font: 600 13px 'DM Sans', sans-serif; cursor: pointer; }
+        #tl-speed option { color: #111; }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-logo">
+            <a href="https://www.fl-technologies.com" target="_blank">
+                <img src="logo.png" alt="Logo">
+            </a>
+        </div>
+        <!-- PORTAL NAV — keep identical across portal.html, dashboard.html, flighthistory.html, landingfees.html, noiseabatement.html, 3Dairspace.html -->
+        <ul class="nav-links">
+            <li><a href="portal.html">Home</a></li>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="flighthistory.html">Flight History</a></li>
+            <li><a href="landingfees.html">Landing Fees</a></li>
+            <li><a href="noiseabatement.html">Noise Abatement</a></li>
+            <li><a href="3Dairspace.html">3D Airspace</a></li>
+        </ul>
+        <a class="nav-btn-secondary" href="#" onclick="if(window._authSignOut){window._authSignOut();} window.location.href='index.html'; return false;">Logout</a>
+    </nav>
+    
+    <main>
+
+        <!-- Auth screen -->
+        <div id="auth-screen">
+            <h2>Sign-In</h2>
+            <form id="auth-form" onsubmit="return false;">
+                <input type="email" id="auth-email" placeholder="Email" required autocomplete="email">
+                <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
+                <button type="button" id="auth-submit" onclick="window._authSignIn()">Sign-In</button>
+                <div id="auth-error"></div>
+            </form>
+        </div>
+
+        <!-- Main content (hidden until authenticated) -->
+        <div id="main-content" style="display:none;">
+            <div class="a3d-header">
+                <h1 id="a3d-title">3D Airspace</h1>
+                <div class="a3d-controls">
+                    <!-- [HISTORY] Live / History switch -->
+                    <div id="mode-switch" role="group" aria-label="Live or history">
+                        <button type="button" id="mode-live" class="mode-btn mode-on">Live</button>
+                        <button type="button" id="mode-history" class="mode-btn">History</button>
+                    </div>
+                    <!-- [TRACK FOCUS] show one aircraft's track -->
+                    <div id="track-selector">
+                        <span>Track:</span>
+                        <select id="track-select"><option value="">All aircraft</option></select>
+                    </div>
+                    <div id="airport-selector">
+                        <span>Airport:</span>
+                        <select id="airport-select"></select>
+                    </div>
+                </div>
+            </div>
+            <!-- [HISTORY] search row, shown only in History -->
+            <div id="a3d-history">
+                <label>Date <input type="date" id="hist-date"></label>
+                <label>Start time <input type="time" id="hist-time"></label>
+                <label>Length
+                    <select id="hist-window">
+                        <option value="30">30 minutes</option>
+                        <option value="60" selected>1 hour</option>
+                        <option value="120">2 hours</option>
+                        <option value="240">4 hours</option>
+                    </select>
+                </label>
+                <button type="button" id="hist-load" class="hist-btn">Show flights</button>
+                <span class="hist-or">or</span>
+                <label>Tail number <input type="text" id="hist-tail" placeholder="N12345" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false"></label>
+                <button type="button" id="hist-find" class="hist-btn hist-btn-2">Find on this date</button>
+                <span id="hist-note">Airport local time</span>
+            </div>
+            <div id="a3d-wrap">
+                <div id="cesiumContainer"></div>
+                <div id="a3d-status">Connecting…</div>
+                <div id="a3d-legend"></div>
+                <!-- [VIEW BUTTONS] filled in by initViewButtons() -->
+                <div id="a3d-viewbar" role="group" aria-label="View controls"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+            authDomain: "owd-data.firebaseapp.com",
+            projectId: "owd-data",
+            storageBucket: "owd-data.firebasestorage.app",
+            messagingSenderId: "912110224300",
+            appId: "1:912110224300:web:ba2b8073871ec023817009",
+            measurementId: "G-PHD4THC11M"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // ════════════════════════════════════════════════════════════════
+        // PER-AIRPORT CONFIG — adding an airport is a new entry here only.
+        //   fieldElevFt : charted field elevation (ft MSL)
+        //   geoidFt     : geoid height (ft) at the field = ellipsoid minus MSL.
+        //                 APPROXIMATE — confirm with the NGS GEOID calculator.
+        //   radiusKm / ceilingAglFt : same capture rules as the track logger.
+        // ════════════════════════════════════════════════════════════════
+        const AIRCRAFT_FEED = 'https://map.fl-technologies-data.com/tar1090/data/aircraft.json';
+        const AIRPORT_3D = {
+            pou: {
+                name: 'POU — Hudson Valley Regional',
+                lat: 41.626598, lon: -73.884201,
+                fieldElevFt: 163, geoidFt: -104,
+                radiusKm: 11.27, ceilingAglFt: 4500,
+                feedUrl: AIRCRAFT_FEED
+            },
+            owd: {
+                name: 'OWD — Norwood Memorial',
+                lat: 42.1905, lon: -71.1729,          // confirm against charted ARP
+                fieldElevFt: 49, geoidFt: -92,        // confirm both
+                radiusKm: 11.27, ceilingAglFt: 4500,
+                feedUrl: AIRCRAFT_FEED
+            }
+        };
+
+        // ── Display settings ────────────────────────────────────────────
+        const POLL_MS = 2000;           // matches the feed cadence
+        const DISPLAY_DELAY_S = 4;      // render slightly behind real time so motion can be interpolated
+        const TRAIL_SECONDS = 900;      // trail length (15 min)
+        const GAP_BREAK_S = 20;         // don't connect trail points across a gap longer than this
+        const STALE_POS_S = 15;         // ignore positions older than this
+        const REMOVE_AFTER_S = 60;      // drop an aircraft (and its trail) after this long unseen
+        const GROUND_LIFT_M = 1.5;      // keep ground trails just above the surface so they don't flicker
+        const FT = 0.3048;
+
+        // Same altitude bands and colors as the noise abatement map (ft MSL)
+        const ALT_BANDS = [
+            { max: 500,      color: '#e53935', label: '< 500' },
+            { max: 1000,     color: '#f59e0b', label: '500 – 1k' },
+            { max: 2000,     color: '#a3d65c', label: '1k – 2k' },
+            { max: 3500,     color: '#43a047', label: '2k – 3.5k' },
+            { max: Infinity, color: '#3b6fe0', label: '> 3.5k' }
+        ];
+        const BAND_COLORS = ALT_BANDS.map(b => Cesium.Color.fromCssColorString(b.color));
+
+        const USGS_IMAGERY = 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}';
+
+        const PLANE_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+            '<path d="M16 2 L18.2 12 L29 17.5 L29 20 L18.2 17.2 L17.4 25.2 L21 27.8 L21 29.8 L16 28.4 L11 29.8 L11 27.8 L14.6 25.2 L13.8 17.2 L3 20 L3 17.5 L13.8 12 Z" ' +
+            'fill="#ffffff" stroke="#1a1a1a" stroke-width="1.4" stroke-linejoin="round"/></svg>'
+        );
+
+        // ── State ───────────────────────────────────────────────────────
+        let viewer = null;
+        let cfg = null;
+        let tracks = {};                // hex -> track
+        let pollTimer = null;
+        let pollGen = 0;
+
+        // ── Helpers ─────────────────────────────────────────────────────
+        function distanceKm(lat1, lon1, lat2, lon2) {
+            const R = 6371, toRad = d => d * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        function bandIndex(mslFt) {
+            for (let i = 0; i < ALT_BANDS.length; i++) if (mslFt < ALT_BANDS[i].max) return i;
+            return ALT_BANDS.length - 1;
+        }
+
+        // Altitudes for one aircraft report.
+        //   alt_geom is GNSS height above the WGS84 ellipsoid (preferred).
+        //   alt_baro is pressure altitude — used as MSL when alt_geom is missing.
+        // [TERRAIN] With real terrain, aircraft are placed at their true height above the
+        // WGS84 ellipsoid (haeFt), which is what Cesium uses. Aircraft on the ground are
+        // placed at field elevation.
+        function altitudes(ac, c) {
+            if (ac.alt_baro === 'ground') {
+                return { onGround: true, mslFt: c.fieldElevFt, haeFt: c.fieldElevFt + c.geoidFt, source: 'ground' };
+            }
+            let haeFt, source;
+            if (typeof ac.alt_geom === 'number') { haeFt = ac.alt_geom; source = 'GNSS'; }
+            else if (typeof ac.alt_baro === 'number') { haeFt = ac.alt_baro + c.geoidFt; source = 'baro'; }
+            else return null;
+            const mslFt = haeFt - c.geoidFt;
+            return { onGround: false, mslFt, haeFt, source };
+        }
+
+        // [TERRAIN] Free elevation from AWS Terrain Tiles (Tilezen "terrarium" PNGs; built
+        // from USGS 3DEP in the US). Heights are decoded from pixel colors, then shifted
+        // from sea level to the ellipsoid with the airport's geoid offset.
+        const TERRAIN_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+        const TERRAIN_MAX_Z = 15;       // highest zoom the dataset provides; finer tiles are sampled from it
+        const TERRAIN_GRID = 65;        // height samples per side of each terrain tile
+        const TERRAIN_CACHE_MAX = 400;  // decoded source tiles kept in memory
+        const terrainCache = new Map(); // "z/x/y" -> Promise<{ size, h } | null>
+
+        function loadTerrarium(z, x, y) {
+            const key = `${z}/${x}/${y}`;
+            if (terrainCache.has(key)) return terrainCache.get(key);
+            const p = (async () => {
+                try {
+                    const url = TERRAIN_URL.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+                    const res = await fetch(url);
+                    if (!res.ok) return null;
+                    // keep raw pixel values: no color-space or alpha adjustments
+                    const bmp = await createImageBitmap(await res.blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+                    const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    ctx.drawImage(bmp, 0, 0);
+                    const px = ctx.getImageData(0, 0, bmp.width, bmp.height).data;
+                    const n = bmp.width * bmp.height;
+                    const h = new Float32Array(n);
+                    for (let i = 0; i < n; i++) h[i] = px[i * 4] * 256 + px[i * 4 + 1] + px[i * 4 + 2] / 256 - 32768;   // meters
+                    return { size: bmp.width, h };
+                } catch (err) {
+                    return null;
+                }
+            })();
+            terrainCache.set(key, p);
+            if (terrainCache.size > TERRAIN_CACHE_MAX) terrainCache.delete(terrainCache.keys().next().value);
+            return p;
+        }
+
+        async function terrainHeights(x, y, level) {
+            // Use the tile itself up to zoom 15; above that (or if a tile is missing), sample from an ancestor.
+            let z = Math.min(level, TERRAIN_MAX_Z), tile = null, sx = x, sy = y;
+            for (; z >= 0 && level - z <= 8; z--) {
+                sx = x >> (level - z);
+                sy = y >> (level - z);
+                tile = await loadTerrarium(z, sx, sy);
+                if (tile) break;
+            }
+            const G = TERRAIN_GRID;
+            const out = new Float32Array(G * G);
+            const geoidM = (cfg ? cfg.geoidFt : 0) * FT;
+            if (!tile) { out.fill(geoidM); return out; }
+            const span = 1 << (level - z);
+            const ox = (x - sx * span) / span, oy = (y - sy * span) / span, sc = 1 / span;
+            const S = tile.size, H = tile.h;
+            for (let r = 0; r < G; r++) {
+                let fy = (oy + (r / (G - 1)) * sc) * S - 0.5;
+                fy = Math.min(Math.max(fy, 0), S - 1);
+                const y0 = Math.floor(fy), y1 = Math.min(y0 + 1, S - 1), ty = fy - y0;
+                for (let col = 0; col < G; col++) {
+                    let fx = (ox + (col / (G - 1)) * sc) * S - 0.5;
+                    fx = Math.min(Math.max(fx, 0), S - 1);
+                    const x0 = Math.floor(fx), x1 = Math.min(x0 + 1, S - 1), tx = fx - x0;
+                    const top = H[y0 * S + x0] * (1 - tx) + H[y0 * S + x1] * tx;
+                    const bot = H[y1 * S + x0] * (1 - tx) + H[y1 * S + x1] * tx;
+                    out[r * G + col] = top * (1 - ty) + bot * ty + geoidM;
+                }
+            }
+            return out;
+        }
+
+        function setStatus(text, isError = false) {
+            const el = document.getElementById('a3d-status');
+            el.textContent = text;
+            el.classList.toggle('a3d-error', isError);
+        }
+
+        function renderLegend() {
+            document.getElementById('a3d-legend').innerHTML = '<span>Alt (ft MSL):</span>' +
+                ALT_BANDS.map(b => `<span><span class="swatch" style="background:${b.color}"></span>${b.label}</span>`).join('');
+        }
+
+        // ── Viewer ──────────────────────────────────────────────────────
+        function initViewer() {
+            if (viewer) return;
+            viewer = new Cesium.Viewer('cesiumContainer', {
+                baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+                    url: USGS_IMAGERY,
+                    maximumLevel: 16,
+                    credit: new Cesium.Credit('Imagery: USDA, USGS The National Map')
+                })),
+                // [TERRAIN] real elevation instead of the flat surface
+                terrainProvider: new Cesium.CustomHeightmapTerrainProvider({
+                    width: TERRAIN_GRID,
+                    height: TERRAIN_GRID,
+                    tilingScheme: new Cesium.WebMercatorTilingScheme(),
+                    callback: terrainHeights,
+                    credit: 'Terrain: Tilezen terrain tiles (USGS 3DEP and others) via AWS Open Data'
+                }),
+                baseLayerPicker: false,   // avoids Cesium ion imagery
+                geocoder: false,          // avoids Cesium ion search
+                timeline: false,
+                animation: false,
+                sceneModePicker: false,
+                homeButton: true,
+                fullscreenButton: true,
+                navigationHelpButton: true,
+                navigationInstructionsInitiallyVisible: false,
+                infoBox: true,
+                selectionIndicator: true
+            });
+            viewer.scene.screenSpaceCameraController.minimumZoomDistance = 100;
+            viewer.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK_MULTIPLIER;
+            viewer.clock.multiplier = 1;
+            viewer.clock.shouldAnimate = true;
+            // Home button returns to the airport instead of the whole globe
+            viewer.homeButton.viewModel.command.beforeExecute.addEventListener(e => {
+                e.cancel = true;
+                if (typeof setFocus === 'function') setFocus(null);   // [TRACK FOCUS] home also returns to all aircraft
+                if (cfg) frameAirport(cfg);
+            });
+            // [COMPACT INFO] the panel's rows live in an iframe, so its styles are added there
+            const frame = viewer.infoBox.frame;
+            const compactInfoStyle = () => {
+                const d = frame.contentDocument;
+                if (!d || !d.head || d.getElementById('a3d-compact')) return;
+                const st = d.createElement('style');
+                st.id = 'a3d-compact';
+                st.textContent =
+                    '.cesium-infoBox-description { font-family: "DM Sans", sans-serif; font-size: 12px; padding: 4px 6px; }' +
+                    '.cesium-infoBox-defaultTable th, .cesium-infoBox-defaultTable td { padding: 2px 6px; font-size: 12px; line-height: 1.35; }' +
+                    '.cesium-infoBox-defaultTable th { text-align: left; white-space: nowrap; color: #b8c4c4; }';
+                d.head.appendChild(st);
+            };
+            frame.addEventListener('load', compactInfoStyle);
+            compactInfoStyle();
+            // [3D MODELS] light the models from the camera so they look the same day or night
+            const headlamp = new Cesium.DirectionalLight({ direction: Cesium.Cartesian3.clone(viewer.camera.directionWC) });
+            viewer.scene.light = headlamp;
+            viewer.scene.preRender.addEventListener(() => Cesium.Cartesian3.clone(viewer.camera.directionWC, headlamp.direction));
+        }
+
+        function frameAirport(c) {
+            const center = Cesium.Cartesian3.fromDegrees(c.lon, c.lat, (c.fieldElevFt + c.geoidFt) * FT);   // [TERRAIN] look at the field's real height
+            viewer.camera.lookAt(center, new Cesium.HeadingPitchRange(Cesium.Math.toRadians(20), Cesium.Math.toRadians(-28), 14000));
+            viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);   // release the camera so it can be moved freely
+        }
+
+        // Keep the display clock DISPLAY_DELAY_S behind the receiver's clock
+        function syncClock(feedNowSec) {
+            const target = Cesium.JulianDate.fromDate(new Date((feedNowSec - DISPLAY_DELAY_S) * 1000));
+            if (Math.abs(Cesium.JulianDate.secondsDifference(viewer.clock.currentTime, target)) > 1.5) {
+                viewer.clock.currentTime = target;
+            }
+        }
+
+        // ── Tracks ──────────────────────────────────────────────────────
+        function createTrack(hex) {
+            const samples = new Cesium.SampledPositionProperty();
+            samples.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+            samples.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+            const tr = { hex, samples, segs: [], last: null, lastSeenWall: Date.now() };
+
+            tr.entity = viewer.entities.add({
+                position: samples,
+                billboard: {
+                    image: PLANE_ICON,
+                    width: 26,
+                    height: 26,
+                    alignedAxis: Cesium.Cartesian3.ZERO,   // [HEADING FIX] set to the direction of travel once the track is known
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                },
+                label: {
+                    text: '',
+                    font: '600 12px "DM Sans", sans-serif',
+                    fillColor: Cesium.Color.WHITE,
+                    showBackground: true,
+                    backgroundColor: new Cesium.Color(0, 0, 0, 0.55),
+                    pixelOffset: new Cesium.Cartesian2(0, -30),
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                }
+            });
+
+            // Thin dashed line from the aircraft straight down to the ground
+            tr.drop = viewer.entities.add({
+                polyline: {
+                    positions: new Cesium.CallbackProperty(time => {
+                        const p = samples.getValue(time);
+                        if (!p) return [];
+                        const c = Cesium.Cartographic.fromCartesian(p);
+                        if (!c) return [];
+                        // [TERRAIN] drop to the terrain surface below the aircraft (field elevation until terrain loads)
+                        let groundM = viewer.scene.globe.getHeight(c);
+                        if (groundM === undefined) groundM = (cfg.fieldElevFt + cfg.geoidFt) * FT;
+                        if (c.height - groundM < 3) return [];
+                        return [p, Cesium.Cartesian3.fromRadians(c.longitude, c.latitude, groundM)];
+                    }, false),
+                    width: 1,
+                    material: new Cesium.PolylineDashMaterialProperty({ color: Cesium.Color.WHITE.withAlpha(0.6), dashLength: 8 })
+                }
+            });
+            tr.entity._a3dHex = hex;   // [TRACK FOCUS] lets a click on the icon, trail or drop line find its aircraft
+            tr.drop._a3dHex = hex;     // [TRACK FOCUS]
+            tr.entity.viewFrom = new Cesium.Cartesian3(0, -2500, 1200);   // [TRACK FOCUS] follow-camera offset: 2.5 km south, 1.2 km up
+            // [3D MODELS] 3D model instead of the flat icon, with orientation sampled over time
+            tr.orient = new Cesium.SampledProperty(Cesium.Quaternion);
+            tr.orient.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+            tr.orient.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+            tr.entity.orientation = tr.orient;
+            tr.entity.model = new Cesium.ModelGraphics({
+                uri: MODEL_URLS.generic,
+                minimumPixelSize: Math.round(ICON_SHAPES.generic.size * MODEL_PIXEL_SCALE),
+                silhouetteColor: Cesium.Color.fromCssColorString('#0b1626'),   // [HIGH VIS] dark outline
+                silhouetteSize: 2                                              // [HIGH VIS]
+            });
+            tr.entity.billboard.show = false;
+            return tr;
+        }
+
+        // Trail points visible at `time`; the newest segment extends to the aircraft's
+        // interpolated position so the trail never runs ahead of or behind the icon.
+        function segPositions(tr, seg, time) {
+            const nowSec = Cesium.JulianDate.toDate(time).getTime() / 1000;
+            const out = [];
+            for (const p of seg.pts) {
+                if (p.sec <= nowSec) out.push(p.pos);
+                else break;
+            }
+            if (seg === tr.segs[tr.segs.length - 1] && out.length) {
+                const head = tr.samples.getValue(time);
+                if (head) out.push(head);
+            }
+            return out;
+        }
+
+        // Trails are split into segments by altitude band so each can carry its band color.
+        function addPoint(tr, sec, pos, band) {
+            tr.samples.addSample(Cesium.JulianDate.fromDate(new Date(sec * 1000)), pos);
+            const pt = { sec, pos };
+            let seg = tr.segs[tr.segs.length - 1];
+            const gap = tr.last && (sec - tr.last.sec) > GAP_BREAK_S;
+            if (!seg || gap || seg.band !== band) {
+                const newSeg = { band, pts: [] };
+                if (seg && !gap) newSeg.pts.push(seg.pts[seg.pts.length - 1]);   // share the boundary point so the trail stays continuous
+                newSeg.entity = viewer.entities.add({
+                    polyline: {
+                        positions: new Cesium.CallbackProperty(time => segPositions(tr, newSeg, time), false),
+                        width: 3,
+                        material: BAND_COLORS[band]
+                    }
+                });
+                newSeg.entity._a3dHex = tr.hex;                          // [TRACK FOCUS]
+                newSeg.entity.show = !focusHex || focusHex === tr.hex;   // [TRACK FOCUS] hide other trails while one is selected
+                tr.segs.push(newSeg);
+                seg = newSeg;
+            }
+            seg.pts.push(pt);
+            tr.last = pt;
+        }
+
+        function trimTrack(tr, cutoffSec) {
+            while (tr.segs.length > 1 && tr.segs[0].pts[tr.segs[0].pts.length - 1].sec < cutoffSec) {
+                viewer.entities.remove(tr.segs[0].entity);
+                tr.segs.shift();
+            }
+            const first = tr.segs[0];
+            if (first) while (first.pts.length > 2 && first.pts[1].sec < cutoffSec) first.pts.shift();
+            const old = Cesium.JulianDate.fromDate(new Date((cutoffSec - 60) * 1000));
+            tr.samples.removeSamples(new Cesium.TimeInterval({ start: Cesium.JulianDate.fromDate(new Date(0)), stop: old }));
+            if (tr.orient) tr.orient.removeSamples(new Cesium.TimeInterval({ start: Cesium.JulianDate.fromDate(new Date(0)), stop: old }));   // [3D MODELS]
+        }
+
+        function removeTrack(tr) {
+            if (focusHex === tr.hex) setFocus(null);   // [TRACK FOCUS] selected aircraft left: back to all
+            viewer.entities.remove(tr.entity);
+            viewer.entities.remove(tr.drop);
+            for (const s of tr.segs) viewer.entities.remove(s.entity);
+            delete tracks[tr.hex];
+        }
+
+        function clearTracks() {
+            for (const hex in tracks) removeTrack(tracks[hex]);
+            tracks = {};
+        }
+
+        function updateInfo(tr, ac, alt) {
+            const reg = ac.r || (ac.flight || '').trim() || ac.hex.toUpperCase();
+            const altText = alt.onGround ? 'GND' : `${Math.round(alt.mslFt).toLocaleString()} ft`;
+            setAttitude(tr, ac);   // [3D MODELS] heading (ground: true heading first), pitch, bank
+            tr.entity.label.text = `${reg}\n${altText}`;
+            tr.entity.name = reg;
+            enrichAircraft(ac);   // [AIRCRAFT ICONS] registration + type for the info panel, icon class
+            applyIcon(tr, ac);    // [AIRCRAFT ICONS]
+            const rows = [
+                ['Registration', ac.r || '—'],
+                ['Callsign', (ac.flight || '').trim() || '—'],
+                ['ICAO hex', ac.hex.toUpperCase()],
+                ['Type', ac.t || '—'],
+                ['Altitude (MSL)', alt.onGround ? 'On ground' : `${Math.round(alt.mslFt).toLocaleString()} ft`],
+                ['Height above field', alt.onGround ? '0 ft' : `${Math.round(alt.mslFt - cfg.fieldElevFt).toLocaleString()} ft`],
+                ['Altitude source', alt.source],
+                ['Ground speed', typeof ac.gs === 'number' ? `${Math.round(ac.gs)} kt` : '—'],
+                ['Track', typeof ac.track === 'number' ? `${Math.round(ac.track)}°` : '—']
+            ];
+            tr.entity.description = '<table class="cesium-infoBox-defaultTable"><tbody>' +
+                rows.filter(([, v]) => v !== '—')   // [COMPACT INFO] skip rows with no data
+                    .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('') + '</tbody></table>';
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // [TRACK FOCUS] Show one aircraft's track at a time.
+        //  • Pick from the Track list, or click an aircraft / its trail in the view.
+        //  • Other aircraft stay visible, but only the selected trail is drawn.
+        //  • The camera follows the selected aircraft (it can still be rotated/zoomed).
+        //  • "All aircraft", clicking empty space, or the home button returns to all.
+        // ════════════════════════════════════════════════════════════════
+        let focusHex = null;
+        let settingFocus = false;   // ignore selection events caused by setFocus itself
+        let trackListKey = '';
+
+        function setFocus(hex) {
+            if (hex && !tracks[hex]) hex = null;
+            focusHex = hex;
+            for (const h in tracks) {
+                const show = !focusHex || focusHex === h;
+                for (const s of tracks[h].segs) s.entity.show = show;
+            }
+            settingFocus = true;
+            try {
+                const ent = hex ? tracks[hex].entity : undefined;
+                viewer.trackedEntity = ent;
+                if (viewer.selectedEntity !== ent) viewer.selectedEntity = ent;
+            } finally {
+                settingFocus = false;
+            }
+            document.getElementById('track-select').value = hex || '';
+        }
+
+        // Keep the Track list in sync with the aircraft in view (rebuilt only when that set changes)
+        function refreshTrackList() {
+            const sel = document.getElementById('track-select');
+            const items = Object.values(tracks)
+                .map(tr => [tr.hex, tr.entity.name || tr.hex.toUpperCase()])
+                .sort((a, b) => a[1].localeCompare(b[1]));
+            const key = items.map(i => i.join(':')).join('|');
+            if (key === trackListKey) return;
+            trackListKey = key;
+            sel.innerHTML = '';
+            const all = document.createElement('option');
+            all.value = '';
+            all.textContent = `All aircraft (${items.length})`;
+            sel.appendChild(all);
+            for (const [hex, name] of items) {
+                const o = document.createElement('option');
+                o.value = hex;
+                o.textContent = name;
+                sel.appendChild(o);
+            }
+            sel.value = focusHex || '';
+        }
+
+        function initTrackFocus() {
+            const sel = document.getElementById('track-select');
+            sel.addEventListener('change', () => setFocus(sel.value || null));
+            viewer.selectedEntityChanged.addEventListener(ent => {
+                if (settingFocus) return;
+                setFocus((ent && ent._a3dHex) || null);   // clicking empty space (or closing the info panel) returns to all
+            });
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // [RECENT PATHS] History from tar1090's rolling snapshots ("chunks").
+        //  • Gap fill (always on): [GAP FIX] if live updates stop for more than
+        //    GAP_BREAK_S for any reason (tab in the background, browser throttling,
+        //    laptop asleep, network drop), trails are rebuilt from history, just
+        //    like a reload. The selected track, if any, is kept.
+        //  • Recent paths (always on): when an airport loads, trails start with the
+        //    last TRAIL_SECONDS of history for aircraft currently in view.
+        // The history has pressure altitude only; each aircraft's live GNSS-vs-baro
+        // difference is applied when known so backfilled trails meet live ones cleanly.
+        // ════════════════════════════════════════════════════════════════
+        const HISTORY_BASE = 'https://map.fl-technologies-data.com/tar1090/chunks/';
+        const HISTORY_MAX_CHUNKS = 8;   // most chunk files to load for one backfill
+        let backfillCount = 0;          // live polling waits while history is being added
+        let lastFeedNow = null;         // receiver time (s) of the last live update
+        let lastFeedWall = 0;           // browser time (ms) of the last live update
+        let hiddenAtSec = null;         // receiver time when the tab was hidden
+        const geomOffsets = {};         // hex -> alt_geom minus alt_baro (ft), learned from the live feed
+        let skipGapCheck = false;       // [GAP FIX] first live update after a rebuild isn't treated as a gap
+
+        function estimateFeedNow() {
+            return lastFeedNow != null ? lastFeedNow + (Date.now() - lastFeedWall) / 1000 : Date.now() / 1000;
+        }
+
+        // Chunk files are gzipped JSON; handles both auto-decompressed and raw gzip responses.
+        async function fetchJsonMaybeGzip(url) {
+            const res = await fetch(url, { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+            const buf = new Uint8Array(await res.arrayBuffer());
+            if (buf[0] === 0x1f && buf[1] === 0x8b) {
+                const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+                return JSON.parse(await new Response(stream).text());
+            }
+            return JSON.parse(new TextDecoder().decode(buf));
+        }
+
+        // Snapshots [{ now, aircraft: [[hex, alt_baro, gs, track, lat, lon, seen_pos, ...], ...] }]
+        // reaching back to fromSec, oldest first.
+        async function loadHistory(fromSec) {
+            const index = await fetchJsonMaybeGzip(`${HISTORY_BASE}chunks.json?_=${Date.now()}`);
+            const names = index.chunks || [];
+            const stamp = n => Number((n.match(/(\d{10,})/) || [0, 0])[1]);
+            const current = names.filter(n => n.startsWith('current'));
+            const olderAsListed = names.filter(n => !n.startsWith('current'));
+            // newest first: by the timestamp in the file name, or reversed listing order if names carry none
+            const older = olderAsListed.every(n => stamp(n) > 0)
+                ? olderAsListed.slice().sort((a, b) => stamp(b) - stamp(a))
+                : olderAsListed.slice().reverse();
+            const snaps = [];
+            const take = f => { for (const s of (f && f.files) || []) snaps.push(s); };
+            for (const n of current) take(await fetchJsonMaybeGzip(`${HISTORY_BASE}${n}?_=${Date.now()}`));
+            for (const n of older.slice(0, HISTORY_MAX_CHUNKS)) {
+                const f = await fetchJsonMaybeGzip(`${HISTORY_BASE}${n}`);
+                take(f);
+                const times = ((f && f.files) || []).map(s => s.now);
+                if (times.length && Math.min(...times) <= fromSec) break;
+            }
+            return snaps.sort((a, b) => a.now - b.now);
+        }
+
+        function historyAltitudes(hex, altBaro) {
+            if (altBaro === 'ground') return { onGround: true, mslFt: cfg.fieldElevFt, haeFt: cfg.fieldElevFt + cfg.geoidFt };
+            if (typeof altBaro !== 'number') return null;
+            const haeFt = (hex in geomOffsets) ? altBaro + geomOffsets[hex] : altBaro + cfg.geoidFt;
+            return { onGround: false, mslFt: haeFt - cfg.geoidFt, haeFt };
+        }
+
+        // rebuild = true: replace all trails with history (on airport load).
+        // rebuild = false: append history after each trail's last point (gap fill).
+        async function backfill(fromSec, rebuild) {
+            if (!cfg) return;
+            const gen = pollGen;
+            backfillCount++;
+            setStatus(rebuild ? 'Loading recent paths…' : 'Filling in while you were away…');
+            try {
+                const snaps = await loadHistory(fromSec);
+                if (gen !== pollGen || !snaps.length) return;   // airport switched, or no history
+
+                // "In view" = a fresh position inside the radius in the newest snapshot
+                const newest = snaps[snaps.length - 1];
+                const inView = new Set();
+                for (const a of newest.aircraft || []) {
+                    const [hex, , , , lat, lon, seenPos] = a;
+                    if (lat == null || lon == null) continue;
+                    if (typeof seenPos === 'number' && seenPos > STALE_POS_S) continue;
+                    if (distanceKm(cfg.lat, cfg.lon, lat, lon) <= cfg.radiusKm) inView.add(hex);
+                }
+
+                const hist = {};
+                for (const s of snaps) {
+                    if (s.now < fromSec) continue;
+                    for (const a of s.aircraft || []) {
+                        const [hex, altBaro, gs, track, lat, lon, seenPos] = a;   // [3D MODELS] gs added
+                        if (!inView.has(hex) || lat == null || lon == null) continue;
+                        if (typeof seenPos === 'number' && seenPos > STALE_POS_S) continue;
+                        if (distanceKm(cfg.lat, cfg.lon, lat, lon) > cfg.radiusKm) continue;
+                        const alt = historyAltitudes(hex, altBaro);
+                        if (!alt) continue;
+                        (hist[hex] ||= []).push({ sec: s.now - (seenPos || 0), lat, lon, alt, track, gs });   // [3D MODELS] gs added
+                    }
+                }
+
+                if (rebuild) clearTracks();
+                const wallNow = Date.now();
+                for (const hex in hist) {
+                    const pts = hist[hex].sort((a, b) => a.sec - b.sec);
+                    let tr = tracks[hex];
+                    if (!tr) {
+                        // same rule as live: only follow aircraft that were at/below the ceiling
+                        if (!pts.some(p => p.alt.onGround || (p.alt.mslFt - cfg.fieldElevFt) <= cfg.ceilingAglFt)) continue;
+                        tr = tracks[hex] = createTrack(hex);
+                        tr.entity.label.text = hex.toUpperCase();   // registration fills in on the next live update
+                    }
+                    tr.lastSeenWall = wallNow;
+                    for (const p of pts) {
+                        if (tr.last && p.sec <= tr.last.sec) continue;   // only add points newer than the trail
+                        const heightM = p.alt.haeFt * FT + (p.alt.onGround ? GROUND_LIFT_M : 0);
+                        addPoint(tr, p.sec, Cesium.Cartesian3.fromDegrees(p.lon, p.lat, heightM), bandIndex(p.alt.mslFt));
+                        setAttitude(tr, { alt_baro: p.alt.onGround ? 'ground' : 0, gs: p.gs, track: p.track, lat: p.lat, lon: p.lon });   // [3D MODELS]
+                    }
+                }
+            } catch (err) {
+                console.warn('[3D] recent-path history unavailable:', err);
+            } finally {
+                backfillCount--;
+                skipGapCheck = true;   // [GAP FIX]
+            }
+        }
+
+        // [GAP FIX] Rebuild trails from history after a gap, keeping the selected track
+        async function refillAfterGap() {
+            const keep = focusHex;
+            await backfill(estimateFeedNow() - TRAIL_SECONDS, true);
+            if (keep && tracks[keep]) setFocus(keep);
+        }
+
+        function initRecentPaths() {
+            // [GAP FIX] Gaps are now detected from the live feed in poll(), so no tab-visibility
+            // handling is needed here.
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // [AIRCRAFT ICONS] Icon shape by aircraft type (original silhouettes in the
+        // style of tar1090's markers).
+        //  1. US aircraft: N-number worked out from the transponder address (FAA's
+        //     fixed mapping), then the ICAO type code from your FAA registry
+        //     (icaocodeRegistry.js, the same file landing fees uses).
+        //  2. Otherwise the callsign is tried in the registry (covers foreign
+        //     registrations flying under their registration).
+        //  3. Otherwise the ADS-B emitter category the aircraft broadcasts.
+        //  New type codes added to the registry later fall back to step 3 until
+        //  they are listed in ICON_TYPE_CODES below.
+        // ════════════════════════════════════════════════════════════════
+        const NN_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ', NN_ALL = NN_LETTERS + '0123456789';
+        const NN_SUF = 1 + NN_LETTERS.length * (1 + NN_LETTERS.length);
+        const NN_B4 = 1 + NN_LETTERS.length + 10, NN_B3 = 10 * NN_B4 + NN_SUF, NN_B2 = 10 * NN_B3 + NN_SUF, NN_B1 = 10 * NN_B2 + NN_SUF;
+        function nnSuffix(o) {
+            if (!o) return '';
+            const c0 = NN_LETTERS[Math.floor((o - 1) / (NN_LETTERS.length + 1))], r = (o - 1) % (NN_LETTERS.length + 1);
+            return r ? c0 + NN_LETTERS[r - 1] : c0;
+        }
+        // US ICAO address (A00001–ADF7C7) -> N-number, e.g. a075ae -> N129FR; null if not a US address
+        function hexToNNumber(hex) {
+            let i = parseInt(hex, 16) - 0xA00001;
+            if (!(i >= 0 && i < 9 * NN_B1)) return null;
+            let out = 'N' + (Math.floor(i / NN_B1) + 1);
+            i %= NN_B1;
+            for (const B of [NN_B2, NN_B3]) {
+                if (i < NN_SUF) return out + nnSuffix(i);
+                i -= NN_SUF;
+                out += Math.floor(i / B);
+                i %= B;
+            }
+            if (i < NN_SUF) return out + nnSuffix(i);
+            i -= NN_SUF;
+            out += Math.floor(i / NN_B4);
+            i %= NN_B4;
+            return i ? out + NN_ALL[i - 1] : out;
+        }
+
+        // Every type code in the registry, by icon (checked: all 272 codes, each listed once)
+        const ICON_TYPE_CODES = {
+            single_piston: 'C172 C182 C150 SR22 BE35 BE36 C210 C180 C206 C177 C170 CH7A C140 RV12 C152 C185 SR20 PA12 BE33 ERCO DA40 C175 BE23 C120 L8 PA11 PA18 C195 AA5 PA24 BE24 C188 FDCT LNC4 PA22 PA16 PA20 LA4 CRUZ A5 TB20 C207 C162 BE19 AA1 G164 DHC2 L5 PA25 EVOT T210 C240 P28A T34P P51 NAVI M20T BE77 TAYB M5 T28',
+            twin_piston:   'C310 BE58 PA30 BE55 C340 C414 C421 BE95 DA42 AC50 BE60 C402 C320 C335 C404 BE76 PA23 PA31 PA34 P68 BE50 BE65 BE70 BE80 BE18 AC56 AC68 AC6L GA7 C303 DC3 DC3S DC6',
+            turboprop:     'P46T PC12 C208 TBM7 TBM9 AT8T AT3T AT6T AT5T K100 KODI PC6 PC9 PC7 T6 EPIC LNP4 B36T',
+            twin_turboprop:'BE20 BE9L BE30 BE10 BE9T B350 MU2 C441 C425 SW4 SW3 B190 PAY1 PAY2 PAY3 PAY4 BE99 P180 AC90 JS31 JS41 SF34 SB20 D228 D328 DHC6 DHC7 DH8A DH8B DH8C DH8D AT43 AT44 AT45 AT72 AT73 AT76 E120 SH33 SH36 C160 CN35 F406 SC7 A400 AN12 P3',
+            bizjet:        'C525 C25C C560 C56X C680 C68A C550 C551 C501 C510 C650 C700 C750 E55P E50P E545 E550 HA4T SF50 EA50 PRM1 LJ23 LJ24 LJ25 LJ28 LJ31 LJ35 LJ36 LJ45 LJ55 LJ60 LJ75 CL30 CL35 CL60 GLF2 GLF3 GLF4 GLF5 GLF6 GL5T GL7T G150 G280 GALX ASTR WW24 FA10 FA20 FA50 FA7X FA6X F2TH F900 BE40 MU30 H25A H25B H25C PC24 E135 E145 J328',
+            airliner:      'B712 B733 B734 B735 B736 B737 B738 B739 B752 B753 A320 A321 E170 E290 MD82 MD83 MD87 MD88 BA11 B722 P8',
+            widebody:      'B762 B763 B772 B77W B778 B779 A306 A332 A333 A339 A359 MD11 DC10',
+            airliner4:     'B742 B744 B748 A343 A346 B703 DC87 IL76 C17 B461 B462',
+            fighter:       'F22 T38 HAWK A10 B2'
+        };
+        const CODE_TO_ICON = {};
+        for (const [cls, list] of Object.entries(ICON_TYPE_CODES)) for (const code of list.split(/\s+/)) CODE_TO_ICON[code] = cls;
+
+        // ADS-B emitter category fallback
+        const CATEGORY_TO_ICON = {
+            A1: 'single_piston', A2: 'bizjet', A3: 'airliner', A4: 'airliner', A5: 'widebody', A6: 'fighter',
+            A7: 'helicopter', B1: 'glider', B2: 'balloon', B4: 'single_piston', B6: 'generic',
+            C1: 'vehicle', C2: 'vehicle', C3: 'vehicle'
+        };
+        const CATEGORY_LABEL = {
+            A1: 'Light aircraft', A2: 'Small aircraft', A3: 'Large aircraft', A4: 'Large aircraft', A5: 'Heavy aircraft',
+            A6: 'High-performance aircraft', A7: 'Rotorcraft', B1: 'Glider', B2: 'Balloon', B4: 'Ultralight', B6: 'Drone',
+            C1: 'Emergency vehicle', C2: 'Service vehicle', C3: 'Ground obstruction'
+        };
+
+        const ICON_FILL = '#ffffff', ICON_STROKE = '#1a1a1a';
+        // Right half of an outline, nose to tail (x measured from the centerline), mirrored into a full shape
+        function mirrorPath(half) {
+            const right = half.map(([x, y]) => [32 + x, y]);
+            const left = half.slice().reverse().map(([x, y]) => [32 - x, y]);
+            return 'M' + [...right, ...left].map(p => p.join(' ')).join(' L') + ' Z';
+        }
+        function iconUri(body) {
+            return 'data:image/svg+xml;utf8,' + encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+                `<g fill="${ICON_FILL}" stroke="${ICON_STROKE}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">${body}</g></svg>`);
+        }
+        const pair = (f) => f(1) + f(-1);   // draw a part on both sides: f(side) with side = 1 (right) or -1 (left)
+        const ICON_SHAPES = {
+            single_piston: {
+                size: 28, label: 'Single piston',
+                body: `<path d="${mirrorPath([[0,8],[2.5,9],[3,13],[3,22],[29,22],[29,28],[3,29],[2,50],[11,50],[11,55],[1.5,56],[0,57]])}"/>` +
+                      `<rect x="24" y="4.5" width="16" height="2.6" rx="1.2"/>`
+            },
+            twin_piston: {
+                size: 30, label: 'Twin piston',
+                body: `<path d="${mirrorPath([[0,8],[2.5,9],[3,14],[3,24],[29,24],[29,30],[3,31],[2,50],[12,50],[12,55],[1.5,56],[0,57]])}"/>` +
+                      pair(s => `<rect x="${32 + s * 11 - 3}" y="15" width="6" height="19" rx="3"/><rect x="${32 + s * 11 - 7}" y="11.5" width="14" height="2.6" rx="1.2"/>`)
+            },
+            turboprop: {
+                size: 30, label: 'Single turboprop',
+                body: `<path d="${mirrorPath([[0,7],[2.5,8],[3.5,13],[3.5,24],[30,27],[30,31],[3.5,32],[2,52],[12,53],[12,57],[1.5,57],[0,58]])}"/>` +
+                      `<path d="M25 2.5 L39 7.5 M25 7.5 L39 2.5" fill="none" stroke-width="2.6"/>`
+            },
+            twin_turboprop: {
+                size: 32, label: 'Twin turboprop',
+                body: `<path d="${mirrorPath([[0,8],[2.5,9],[3.5,14],[3.5,25],[30,28],[30,32],[3.5,33],[2,52],[12,53],[12,57],[1.5,57],[0,58]])}"/>` +
+                      pair(s => { const x = 32 + s * 11; return `<rect x="${x - 3}" y="12" width="6" height="23" rx="3"/><path d="M${x - 7} 8 L${x + 7} 12 M${x - 7} 12 L${x + 7} 8" fill="none" stroke-width="2.4"/>`; })
+            },
+            bizjet: {
+                size: 32, label: 'Business jet',
+                body: `<path d="${mirrorPath([[0,5],[3,8],[4,16],[4,28],[26,40],[26,43],[4,38],[3.5,50],[12,56],[12,59],[1.5,58],[0,59]])}"/>` +
+                      pair(s => `<rect x="${32 + s * 7.5 - 3}" y="39" width="6" height="12" rx="3"/>`)
+            },
+            airliner: {
+                size: 36, label: 'Airliner',
+                body: `<path d="${mirrorPath([[0,4],[3,6],[4,12],[4,24],[29,38],[29,41],[4,34],[3.5,50],[13,56],[13,59],[1.5,58],[0,60]])}"/>` +
+                      pair(s => `<rect x="${32 + s * 12 - 2.75}" y="23" width="5.5" height="11" rx="2.75"/>`)
+            },
+            widebody: { size: 44, label: 'Widebody airliner', bodyFrom: 'airliner' },
+            airliner4: {
+                size: 44, label: 'Four-engine jet',
+                body: `<path d="${mirrorPath([[0,4],[3,6],[4,12],[4,24],[29,38],[29,41],[4,34],[3.5,50],[13,56],[13,59],[1.5,58],[0,60]])}"/>` +
+                      pair(s => `<rect x="${32 + s * 9 - 2.5}" y="21.5" width="5" height="10" rx="2.5"/><rect x="${32 + s * 18 - 2.5}" y="26.5" width="5" height="10" rx="2.5"/>`)
+            },
+            fighter: {
+                size: 30, label: 'Military jet',
+                body: `<path d="${mirrorPath([[0,3],[2.5,8],[4,18],[5,28],[24,44],[24,47],[6,46],[6,52],[13,58],[13,60],[3,59],[0,60]])}"/>`
+            },
+            helicopter: {
+                size: 32, label: 'Helicopter',
+                body: `<circle cx="32" cy="26" r="22" fill="rgba(255,255,255,0.22)" stroke-width="1.4"/>` +
+                      `<path d="M16 10 L48 42 M48 10 L16 42" fill="none" stroke-width="2"/>` +
+                      `<rect x="30.5" y="34" width="3" height="22" rx="1.5"/><rect x="26" y="53.5" width="12" height="3" rx="1.5"/>` +
+                      `<ellipse cx="32" cy="27" rx="7.5" ry="11.5"/>`
+            },
+            glider: {
+                size: 34, label: 'Glider',
+                body: `<path d="${mirrorPath([[0,14],[2,15],[2.5,22],[31,24],[31,27],[2.5,28],[1.5,52],[9,52],[9,55],[1,55],[0,56]])}"/>`
+            },
+            balloon: {
+                size: 22, label: 'Balloon',
+                body: `<circle cx="32" cy="30" r="21"/><rect x="28" y="52" width="8" height="8" rx="1.5"/>`
+            },
+            vehicle: {
+                size: 14, label: 'Ground vehicle',
+                body: `<rect x="18" y="10" width="28" height="44" rx="6"/><path d="M22 22 L42 22" fill="none"/>`
+            },
+            generic: { size: 26, label: 'Unknown type', uri: PLANE_ICON }
+        };
+        ICON_SHAPES.widebody.body = ICON_SHAPES.airliner.body;
+        for (const s of Object.values(ICON_SHAPES)) if (!s.uri) s.uri = iconUri(s.body);
+
+        // Bigger aircraft within a class
+        const ICON_SIZE_OVERRIDE = { A400: 40, AN12: 38, P3: 36, C160: 36, DHC7: 34, DH8D: 34, AT72: 34, AT73: 34, AT76: 34, DC3: 34, DC3S: 34, DC6: 38 };
+
+        const aircraftInfoCache = {};   // hex -> { nnum, code, cls } from the registry (category added per update)
+        function registryLookup(hex, callsign) {
+            const key = `${hex}|${callsign}`;
+            if (key in aircraftInfoCache) return aircraftInfoCache[key];
+            const reg = (typeof typeCodeRegistry !== 'undefined') ? typeCodeRegistry : null;
+            const nnum = hexToNNumber(hex);
+            let code = null;
+            if (reg) code = (nnum && reg[nnum]) || (callsign && reg[callsign]) || null;
+            return (aircraftInfoCache[key] = { nnum, code });
+        }
+
+        // Adds registration, type and icon class to a live aircraft report
+        function enrichAircraft(ac) {
+            const callsign = (ac.flight || '').trim();
+            const { nnum, code } = registryLookup(ac.hex, callsign);
+            const isVehicle = /^C/.test(ac.category || '');   // ground vehicles aren't registered aircraft
+            if (!ac.r && nnum && !isVehicle) ac.r = nnum;
+            let cls = code && CODE_TO_ICON[code];
+            if (cls) {
+                ac.t = ac.t || `${code} · ${ICON_SHAPES[cls].label}`;
+            } else if (CATEGORY_TO_ICON[ac.category]) {
+                cls = CATEGORY_TO_ICON[ac.category];
+                ac.t = ac.t || (code ? `${code} · ` : '') + `${CATEGORY_LABEL[ac.category]} (ADS-B category)`;
+            } else {
+                cls = 'generic';
+                if (code) ac.t = ac.t || code;
+            }
+            ac._icon = { cls, size: (code && ICON_SIZE_OVERRIDE[code]) || ICON_SHAPES[cls].size };
+        }
+
+        function applyIcon(tr, ac) {
+            const ic = ac._icon;
+            if (!ic) return;
+            // [3D MODELS] aircraft on the ground sit on the terrain surface
+            const ref = ac.alt_baro === 'ground' ? Cesium.HeightReference.CLAMP_TO_GROUND : Cesium.HeightReference.NONE;
+            if (tr.heightRef !== ref) { tr.heightRef = ref; tr.entity.model.heightReference = ref; }
+            const key = `${ic.cls}:${ic.size}`;
+            if (tr.iconKey === key) return;
+            tr.iconKey = key;
+            tr.entity.billboard.image = ICON_SHAPES[ic.cls].uri;
+            tr.entity.billboard.width = ic.size;
+            tr.entity.billboard.height = ic.size;
+            tr.entity.model.uri = MODEL_URLS[ic.cls];                                       // [3D MODELS]
+            tr.entity.model.minimumPixelSize = Math.round(ic.size * MODEL_PIXEL_SCALE);     // [3D MODELS]
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // [3D MODELS] Simple low-poly 3D aircraft, one per icon class, generated here
+        // (original shapes, nothing to host). Built in glTF axes: nose +Z, up +Y,
+        // sideways X; origin at the bottom centre so models sit on the ground.
+        // Sizes are real-world metres; minimumPixelSize keeps them visible when far away.
+        // ════════════════════════════════════════════════════════════════
+        const MODEL_COLORS = {
+            body:   [1.0, 0.78, 0.05, 1],          // [HIGH VIS] high-visibility yellow (was white), stands out on concrete and terrain
+            accent: [0.17, 0.17, 0.17, 1],
+            disc:   [0.12, 0.12, 0.12, 0.35]   // propeller / rotor discs (see-through)
+        };
+
+        function meshParts() { return { body: [], accent: [], disc: [] }; }
+        function tri(a, p, q, r) { a.push(p, q, r); }
+        function quad(a, p, q, r, s) { tri(a, p, q, r); tri(a, p, r, s); }
+
+        // Tube along Z through rings {z, w (half-width), h (half-height), y (centre), x (sideways offset)}
+        function loftZ(a, rings, sides = 8) {
+            const pts = rings.map(r => {
+                const ring = [];
+                for (let k = 0; k < sides; k++) {
+                    const t = (k + 0.5) / sides * Math.PI * 2;
+                    ring.push([(r.x || 0) + r.w * Math.cos(t), r.y + r.h * Math.sin(t), r.z]);
+                }
+                return ring;
+            });
+            for (let i = 0; i < pts.length - 1; i++)
+                for (let k = 0; k < sides; k++) {
+                    const k2 = (k + 1) % sides;
+                    quad(a, pts[i][k], pts[i][k2], pts[i + 1][k2], pts[i + 1][k]);
+                }
+            for (const [ring, r] of [[pts[0], rings[0]], [pts[pts.length - 1], rings[rings.length - 1]]]) {
+                const c = [r.x || 0, r.y, r.z];
+                for (let k = 0; k < sides; k++) tri(a, c, ring[k], ring[(k + 1) % sides]);
+            }
+        }
+
+        // Tube along Y (for the balloon envelope): rings {y, r}
+        function loftY(a, rings, sides = 16) {
+            const pts = rings.map(r => {
+                const ring = [];
+                for (let k = 0; k < sides; k++) { const t = k / sides * Math.PI * 2; ring.push([r.r * Math.cos(t), r.y, r.r * Math.sin(t)]); }
+                return ring;
+            });
+            for (let i = 0; i < pts.length - 1; i++)
+                for (let k = 0; k < sides; k++) { const k2 = (k + 1) % sides; quad(a, pts[i][k], pts[i][k2], pts[i + 1][k2], pts[i + 1][k]); }
+        }
+
+        // Flat plate: polygon (u, v) extruded ±t/2 along w; map(u, v, w) -> [x, y, z]
+        function slab(a, poly, t, map) {
+            const top = poly.map(([u, v]) => map(u, v, t / 2)), bot = poly.map(([u, v]) => map(u, v, -t / 2));
+            for (let i = 1; i < poly.length - 1; i++) { tri(a, top[0], top[i], top[i + 1]); tri(a, bot[0], bot[i + 1], bot[i]); }
+            for (let i = 0; i < poly.length; i++) { const j = (i + 1) % poly.length; quad(a, top[i], top[j], bot[j], bot[i]); }
+        }
+
+        function box(a, cx, cy, cz, sx, sy, sz) {
+            slab(a, [[cx - sx / 2, cz - sz / 2], [cx + sx / 2, cz - sz / 2], [cx + sx / 2, cz + sz / 2], [cx - sx / 2, cz + sz / 2]], sy, (u, v, w) => [u, cy + w, v]);
+        }
+
+        // Thin disc facing along an axis ('z' = propeller, 'y' = main rotor, 'x' = tail rotor)
+        function disc(a, c, axis, r, t = 0.04, sides = 20) {
+            const poly = [];
+            for (let k = 0; k < sides; k++) { const q = k / sides * Math.PI * 2; poly.push([r * Math.cos(q), r * Math.sin(q)]); }
+            const maps = {
+                z: (u, v, w) => [c[0] + u, c[1] + v, c[2] + w],
+                y: (u, v, w) => [c[0] + u, c[1] + w, c[2] + v],
+                x: (u, v, w) => [c[0] + w, c[1] + v, c[2] + u]
+            };
+            slab(a, poly, t, maps[axis]);
+        }
+
+        // Pair of wings / tailplanes. w = {span, root, tip, sweep (deg), z (root leading edge), y, t, x0 (root offset)}
+        function wingPair(a, w) {
+            const x0 = w.x0 || 0, xt = w.span / 2, back = (xt - x0) * Math.tan((w.sweep || 0) * Math.PI / 180);
+            const poly = [[x0, w.z], [xt, w.z - back], [xt, w.z - back - w.tip], [x0, w.z - w.root]];
+            for (const s of [1, -1]) slab(a, poly.map(([u, v]) => [s * u, v]), w.t, (u, v, d) => [u, w.y + d, v]);
+        }
+
+        // Vertical fin. f = {h, root, tip, sweep (deg), z (root leading edge), y (root), t, x}
+        function fin(a, f) {
+            const back = f.h * Math.tan((f.sweep || 0) * Math.PI / 180);
+            const poly = [[f.z, f.y], [f.z - f.root, f.y], [f.z - back - f.tip, f.y + f.h], [f.z - back, f.y + f.h]];
+            slab(a, poly, f.t, (u, v, d) => [(f.x || 0) + d, v, u]);
+        }
+
+        // Fuselage outline as fractions: [z (1 = nose, -1 = tail), width, height, centre shift]
+        const FUSE_PROP = [[1, 0.3, 0.4, -0.15], [0.86, 0.85, 0.85, 0], [0.55, 1, 1, 0], [0.15, 1, 1, 0.05], [-0.35, 0.55, 0.65, 0.2], [-0.82, 0.22, 0.32, 0.4], [-1, 0.1, 0.22, 0.45]];
+        const FUSE_JET  = [[1, 0.12, 0.15, -0.25], [0.92, 0.55, 0.6, -0.08], [0.78, 0.95, 0.95, 0], [0.5, 1, 1, 0], [-0.45, 1, 1, 0], [-0.8, 0.55, 0.65, 0.18], [-1, 0.14, 0.28, 0.42]];
+
+        function fuselage(a, len, fw, fh, yc, prof) {
+            loftZ(a, prof.map(([z, w, h, dy]) => ({ z: z * len / 2, w: w * fw / 2, h: h * fh / 2, y: yc + dy * fh / 2 })));
+        }
+        // Engine nacelle / pod centred at (x, y) from z1 (front) to z2 (back)
+        function nacelle(a, x, y, z1, z2, r) {
+            const L = z1 - z2;
+            loftZ(a, [{ z: z1, w: r * 0.7, h: r * 0.7, y, x }, { z: z1 - L * 0.15, w: r, h: r, y, x }, { z: z2 + L * 0.2, w: r, h: r, y, x }, { z: z2, w: r * 0.55, h: r * 0.55, y, x }]);
+        }
+
+        function buildModel(cls) {
+            const m = meshParts(), B = m.body;
+            const tail = (len, yc, fh, o) => {   // tailplane + fin; o = {span, root, tip, sweep, fin: {h, root, tip, sweep}, tTail}
+                const finZ = -len / 2 + o.fin.root * 1.05, finY = yc + fh * 0.15;
+                fin(B, { h: o.fin.h, root: o.fin.root, tip: o.fin.tip, sweep: o.fin.sweep, z: finZ, y: finY, t: Math.max(0.1, o.fin.h * 0.06) });
+                const backTop = o.fin.h * Math.tan(o.fin.sweep * Math.PI / 180);
+                const hz = o.tTail ? finZ - backTop : -len / 2 + o.root * 1.1, hy = o.tTail ? finY + o.fin.h : yc + fh * 0.1;
+                wingPair(B, { span: o.span, root: o.tTail ? o.fin.tip * 1.05 : o.root, tip: o.tip, sweep: o.sweep, z: hz, y: hy, t: Math.max(0.08, o.span * 0.02) });
+            };
+            switch (cls) {
+                case 'single_piston': {   // high wing, nose propeller (~C172)
+                    const len = 8.3, fw = 1.1, fh = 1.45, yc = 1.35;
+                    fuselage(B, len, fw, fh, yc, FUSE_PROP);
+                    wingPair(B, { span: 11, root: 1.6, tip: 1.2, z: 1.3, y: yc + fh / 2 + 0.08, t: 0.16 });
+                    tail(len, yc, fh, { span: 3.4, root: 1.1, tip: 0.75, sweep: 4, fin: { h: 1.45, root: 1.6, tip: 0.8, sweep: 35 } });
+                    box(m.accent, 0, yc - 0.1, len / 2 + 0.06, 0.25, 0.25, 0.12);
+                    disc(m.disc, [0, yc - 0.1, len / 2 + 0.12], 'z', 0.95);
+                    break;
+                }
+                case 'twin_piston': {     // low wing, two wing engines (~Baron)
+                    const len = 9.1, fw = 1.2, fh = 1.35, yc = 1.4, wy = yc - fh * 0.35;
+                    fuselage(B, len, fw, fh, yc, FUSE_PROP);
+                    wingPair(B, { span: 11.5, root: 1.9, tip: 1.1, sweep: 2, z: 1.2, y: wy, t: 0.2 });
+                    for (const s of [1, -1]) { nacelle(B, s * 2.3, wy + 0.15, 2.4, -0.9, 0.42); disc(m.disc, [s * 2.3, wy + 0.15, 2.48], 'z', 0.98); }
+                    tail(len, yc, fh, { span: 4, root: 1.1, tip: 0.8, sweep: 4, fin: { h: 1.5, root: 1.7, tip: 0.8, sweep: 35 } });
+                    break;
+                }
+                case 'turboprop': {       // single turboprop, T-tail, long nose (~PC-12)
+                    const len = 14.4, fw = 1.55, fh = 1.75, yc = 1.6, wy = yc - fh * 0.35;
+                    fuselage(B, len, fw, fh, yc, [[1, 0.35, 0.4, -0.1], [0.82, 0.8, 0.8, 0], [0.55, 1, 1, 0], [0.05, 1, 1, 0.05], [-0.45, 0.55, 0.65, 0.2], [-0.85, 0.22, 0.32, 0.4], [-1, 0.1, 0.22, 0.45]]);
+                    wingPair(B, { span: 16.3, root: 2.5, tip: 1.2, sweep: 3, z: 0.9, y: wy, t: 0.22 });
+                    tail(len, yc, fh, { span: 5.2, root: 1.3, tip: 0.8, sweep: 12, tTail: true, fin: { h: 2.3, root: 2.2, tip: 1.3, sweep: 32 } });
+                    box(m.accent, 0, yc - 0.1, len / 2 + 0.06, 0.3, 0.3, 0.14);
+                    disc(m.disc, [0, yc - 0.1, len / 2 + 0.14], 'z', 1.3);
+                    break;
+                }
+                case 'twin_turboprop': {  // two long nacelles, T-tail (~King Air)
+                    const len = 14.2, fw = 1.45, fh = 1.6, yc = 1.6, wy = yc - fh * 0.35;
+                    fuselage(B, len, fw, fh, yc, [[1, 0.25, 0.3, -0.2], [0.85, 0.75, 0.75, -0.05], [0.6, 1, 1, 0], [0.05, 1, 1, 0.05], [-0.45, 0.55, 0.65, 0.2], [-0.85, 0.22, 0.32, 0.4], [-1, 0.1, 0.22, 0.45]]);
+                    wingPair(B, { span: 17.6, root: 2.4, tip: 1.0, sweep: 3, z: 1.3, y: wy, t: 0.22 });
+                    for (const s of [1, -1]) { nacelle(B, s * 2.6, wy + 0.2, 3.3, -1.6, 0.5); disc(m.disc, [s * 2.6, wy + 0.2, 3.38], 'z', 1.25); }
+                    tail(len, yc, fh, { span: 5.6, root: 1.4, tip: 0.8, sweep: 12, tTail: true, fin: { h: 2.4, root: 2.3, tip: 1.3, sweep: 34 } });
+                    break;
+                }
+                case 'generic':
+                case 'bizjet': {          // swept wing, rear engines, T-tail (~Citation)
+                    const len = 15.6, fw = 1.65, fh = 1.75, yc = 1.5, wy = yc - fh * 0.38;
+                    fuselage(B, len, fw, fh, yc, FUSE_JET);
+                    wingPair(B, { span: 16.3, root: 2.8, tip: 1.0, sweep: 14, z: 0.9, y: wy, t: 0.24 });
+                    for (const s of [1, -1]) nacelle(B, s * 1.45, yc + 0.35, -2.7, -5.6, 0.55);
+                    tail(len, yc, fh, { span: 6, root: 1.6, tip: 0.8, sweep: 28, tTail: true, fin: { h: 2.6, root: 2.6, tip: 1.4, sweep: 40 } });
+                    break;
+                }
+                case 'airliner':
+                case 'widebody':
+                case 'airliner4': {
+                    const P = {
+                        airliner:  { len: 39.5, fw: 3.8, fh: 4.0, yc: 3.0, span: 35.8, root: 7.5, tip: 1.6, sweep: 25, z: 4.5, eng: [5.2], er: 1.0, el: 4.2, ht: 14.4, fin: 7.5 },
+                        widebody:  { len: 63.7, fw: 6.2, fh: 6.2, yc: 4.6, span: 60.9, root: 13, tip: 2.6, sweep: 31, z: 8, eng: [9.7], er: 1.7, el: 7, ht: 21.5, fin: 11 },
+                        airliner4: { len: 70.6, fw: 6.5, fh: 7.0, yc: 5.0, span: 64.4, root: 14, tip: 4, sweep: 37, z: 9, eng: [12, 21], er: 1.4, el: 6.2, ht: 22, fin: 12 }
+                    }[cls];
+                    const wy = P.yc - P.fh * 0.3;
+                    fuselage(B, P.len, P.fw, P.fh, P.yc, FUSE_JET);
+                    wingPair(B, { span: P.span, root: P.root, tip: P.tip, sweep: P.sweep, z: P.z, y: wy, t: P.fh * 0.12 });
+                    for (const x of P.eng) for (const s of [1, -1]) {
+                        const leZ = P.z - (x - 0) * Math.tan(P.sweep * Math.PI / 180);
+                        nacelle(B, s * x, wy - P.er * 1.05, leZ + P.el * 0.75, leZ - P.el * 0.25, P.er);
+                    }
+                    tail(P.len, P.yc, P.fh, { span: P.ht, root: P.ht * 0.3, tip: P.ht * 0.1, sweep: P.sweep + 5, fin: { h: P.fin, root: P.fin * 0.85, tip: P.fin * 0.3, sweep: 38 } });
+                    break;
+                }
+                case 'fighter': {
+                    const len = 15.5, fw = 1.5, fh = 1.5, yc = 1.6;
+                    fuselage(B, len, fw, fh, yc, FUSE_JET);
+                    wingPair(B, { span: 11, root: 7, tip: 1.4, sweep: 42, z: 2.5, y: yc, t: 0.2 });
+                    wingPair(B, { span: 6.5, root: 2.6, tip: 0.9, sweep: 40, z: -4.6, y: yc, t: 0.12 });
+                    for (const s of [1, -1]) fin(B, { h: 3, root: 3, tip: 1, sweep: 40, z: -3.8, y: yc + 0.3, t: 0.12, x: s * 1.1 });
+                    break;
+                }
+                case 'helicopter': {
+                    const yc = 1.5;
+                    loftZ(B, [{ z: 2.2, w: 0.25, h: 0.35, y: yc - 0.1 }, { z: 1.7, w: 0.75, h: 0.8, y: yc }, { z: 0.6, w: 0.85, h: 0.95, y: yc + 0.05 },
+                              { z: -0.9, w: 0.75, h: 0.85, y: yc + 0.1 }, { z: -1.6, w: 0.3, h: 0.35, y: yc + 0.35 }, { z: -7.2, w: 0.15, h: 0.18, y: yc + 0.55 }]);
+                    fin(B, { h: 1.2, root: 0.8, tip: 0.5, sweep: 30, z: -6.5, y: yc + 0.5, t: 0.08 });
+                    box(m.accent, 0, yc + 1.15, -0.1, 0.18, 0.5, 0.18);                       // mast
+                    box(m.accent, 0, yc + 1.4, -0.1, 0.32, 0.06, 10.6);                       // main blades
+                    box(m.accent, 0, yc + 1.4, -0.1, 10.6, 0.06, 0.32);
+                    disc(m.disc, [0, yc + 1.38, -0.1], 'y', 5.3);
+                    disc(m.disc, [0.3, yc + 0.6, -7.1], 'x', 0.85);                          // tail rotor
+                    for (const s of [1, -1]) { box(m.accent, s * 0.9, 0.08, 0.1, 0.1, 0.1, 3.4); box(m.accent, s * 0.7, 0.35, 0.1, 0.08, 0.5, 0.08); }
+                    break;
+                }
+                case 'glider': {
+                    const len = 7.5, fw = 0.7, fh = 0.9, yc = 0.75;
+                    fuselage(B, len, fw, fh, yc, [[1, 0.3, 0.4, -0.1], [0.75, 1, 1, 0], [0.35, 0.95, 1, 0.05], [-0.1, 0.45, 0.5, 0.15], [-0.85, 0.2, 0.25, 0.3], [-1, 0.12, 0.2, 0.35]]);
+                    wingPair(B, { span: 18, root: 1.0, tip: 0.45, sweep: 1, z: 0.9, y: yc + fh * 0.3, t: 0.12 });
+                    tail(len, yc, fh, { span: 2.8, root: 0.7, tip: 0.45, sweep: 6, tTail: true, fin: { h: 1.2, root: 1.0, tip: 0.6, sweep: 25 } });
+                    break;
+                }
+                case 'balloon': {
+                    loftY(B, [{ y: 3.5, r: 0.8 }, { y: 6, r: 4.5 }, { y: 9, r: 7 }, { y: 13, r: 8 }, { y: 17, r: 7.2 }, { y: 20, r: 4.6 }, { y: 21.6, r: 0.6 }]);
+                    box(m.accent, 0, 0.6, 0, 1.4, 1.2, 1.4);
+                    break;
+                }
+                case 'vehicle': {
+                    box(B, 0, 0.9, 0, 2.0, 1.5, 5.0);
+                    box(m.accent, 0, 1.75, 0.4, 1.6, 0.18, 0.4);                              // light bar
+                    break;
+                }
+            }
+            return m;
+        }
+
+        // Pack mesh parts into a glTF 2.0 model (flat shading) and return a blob URL for it
+        function meshToGltfUrl(m) {
+            const prims = [], views = [], accessors = [], chunks = [];
+            let offset = 0;
+            const materials = Object.values(MODEL_COLORS).map(c => ({
+                pbrMetallicRoughness: { baseColorFactor: c, metallicFactor: 0, roughnessFactor: 0.75 },
+                doubleSided: true, alphaMode: c[3] < 1 ? 'BLEND' : 'OPAQUE'
+            }));
+            Object.keys(MODEL_COLORS).forEach((key, mi) => {
+                const v = m[key];
+                if (!v.length) return;
+                const n = v.length, pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+                const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+                for (let i = 0; i < n; i += 3) {
+                    const [a, b, c] = [v[i], v[i + 1], v[i + 2]];
+                    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+                    let nx = u[1] * w[2] - u[2] * w[1], ny = u[2] * w[0] - u[0] * w[2], nz = u[0] * w[1] - u[1] * w[0];
+                    const l = Math.hypot(nx, ny, nz);
+                    if (l > 1e-9) { nx /= l; ny /= l; nz /= l; } else { nx = 0; ny = 1; nz = 0; }
+                    for (let k = 0; k < 3; k++) {
+                        const p = v[i + k], j = (i + k) * 3;
+                        pos[j] = p[0]; pos[j + 1] = p[1]; pos[j + 2] = p[2];
+                        nor[j] = nx; nor[j + 1] = ny; nor[j + 2] = nz;
+                        for (let d = 0; d < 3; d++) { mn[d] = Math.min(mn[d], p[d]); mx[d] = Math.max(mx[d], p[d]); }
+                    }
+                }
+                for (const [arr, isPos] of [[pos, true], [nor, false]]) {
+                    views.push({ buffer: 0, byteOffset: offset, byteLength: arr.byteLength, target: 34962 });
+                    accessors.push(Object.assign({ bufferView: views.length - 1, componentType: 5126, count: n, type: 'VEC3' }, isPos ? { min: mn, max: mx } : {}));
+                    chunks.push(new Uint8Array(arr.buffer));
+                    offset += arr.byteLength;
+                }
+                prims.push({ attributes: { POSITION: accessors.length - 2, NORMAL: accessors.length - 1 }, material: mi });
+            });
+            const bytes = new Uint8Array(offset);
+            let o = 0;
+            for (const c of chunks) { bytes.set(c, o); o += c.length; }
+            let bin = '';
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            const gltf = {
+                asset: { version: '2.0', generator: 'FlightLevel 3D airspace' },
+                scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }], meshes: [{ primitives: prims }],
+                materials, accessors, bufferViews: views,
+                buffers: [{ byteLength: offset, uri: 'data:application/octet-stream;base64,' + btoa(bin) }]
+            };
+            return URL.createObjectURL(new Blob([JSON.stringify(gltf)], { type: 'model/gltf+json' }));
+        }
+
+        const MODEL_URLS = {};
+        for (const cls of Object.keys(ICON_SHAPES)) MODEL_URLS[cls] = meshToGltfUrl(buildModel(cls));
+        const MODEL_PIXEL_SCALE = 1.6;    // model minimum on-screen size = icon size × this (raise for bigger aircraft when zoomed out)
+
+        // Heading to draw, in degrees true. On the ground, true_heading first (the track can be
+        // stale while stopped); in the air, track first. Falls back to the direction of movement,
+        // then to the last known heading.
+        const num = v => (typeof v === 'number' && isFinite(v)) ? v : null;
+        function headingFor(tr, ac) {
+            const onGround = ac.alt_baro === 'ground', gs = num(ac.gs) || 0;
+            let h = onGround
+                ? (num(ac.true_heading) ?? (gs >= 2 ? num(ac.track) : null) ?? num(ac.calc_track))
+                : (num(ac.track) ?? num(ac.true_heading) ?? num(ac.calc_track));
+            if (h == null && ac.lat != null && ac.lon != null) {   // from movement since the last reference point
+                const ref = tr.moveRef;
+                if (!ref) tr.moveRef = { lat: ac.lat, lon: ac.lon };
+                else if (distanceKm(ref.lat, ref.lon, ac.lat, ac.lon) > 0.008) {
+                    const p1 = ref.lat * Math.PI / 180, p2 = ac.lat * Math.PI / 180, dl = (ac.lon - ref.lon) * Math.PI / 180;
+                    h = (Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) * 180 / Math.PI + 360) % 360;
+                    tr.moveRef = { lat: ac.lat, lon: ac.lon };
+                }
+            } else if (ac.lat != null) {
+                tr.moveRef = { lat: ac.lat, lon: ac.lon };
+            }
+            if (h == null) h = tr.lastHeading ?? null;
+            if (h != null) tr.lastHeading = h;
+            return h;
+        }
+
+        // Orientation (heading, pitch from climb rate, bank where reported), sampled over time so
+        // turns are smooth, like position.
+        function setAttitude(tr, ac) {
+            if (!tr.last || ac.lat == null || ac.lon == null) return;
+            const hdg = headingFor(tr, ac);
+            if (hdg == null) return;
+            const airborne = ac.alt_baro !== 'ground', gs = num(ac.gs) || 0;
+            const vr = num(ac.geom_rate) ?? num(ac.baro_rate);
+            const pitch = (airborne && vr != null && gs > 30) ? Math.max(-12, Math.min(12, Math.atan2(vr * 0.00508, gs * 0.5144) * 180 / Math.PI)) : 0;
+            const roll = airborne ? Math.max(-45, Math.min(45, num(ac.roll) ?? 0)) : 0;
+
+            const enu = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(ac.lon, ac.lat));
+            const col = i => Cesium.Matrix4.getColumn(enu, i, new Cesium.Cartesian4());
+            const E = col(0), N = col(1), U3 = col(2);
+            const v3 = (c4) => new Cesium.Cartesian3(c4.x, c4.y, c4.z);
+            const e = v3(E), n = v3(N), u = v3(U3);
+            const lin = (a, ka, b, kb) => Cesium.Cartesian3.add(Cesium.Cartesian3.multiplyByScalar(a, ka, new Cesium.Cartesian3()), Cesium.Cartesian3.multiplyByScalar(b, kb, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+            const t = hdg * Math.PI / 180, p = pitch * Math.PI / 180, r = roll * Math.PI / 180;
+            const F = lin(e, Math.sin(t), n, Math.cos(t));
+            const L = Cesium.Cartesian3.cross(u, F, new Cesium.Cartesian3());
+            const Fp = lin(F, Math.cos(p), u, Math.sin(p)), Up = lin(F, -Math.sin(p), u, Math.cos(p));
+            const Ur = lin(Up, Math.cos(r), L, -Math.sin(r)), Lr = lin(L, Math.cos(r), Up, Math.sin(r));
+            const m3 = new Cesium.Matrix3();
+            Cesium.Matrix3.setColumn(m3, 0, Fp, m3);
+            Cesium.Matrix3.setColumn(m3, 1, Lr, m3);
+            Cesium.Matrix3.setColumn(m3, 2, Ur, m3);
+            tr.orient.addSample(Cesium.JulianDate.fromDate(new Date(tr.last.sec * 1000)), Cesium.Quaternion.fromRotationMatrix(m3));
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // [VIEW BUTTONS] Large on-screen buttons for moving the view, for people who
+        // don't want to learn the mouse controls. Press and hold to keep moving; a
+        // quick click gives a small step. The mouse and trackpad controls are unchanged.
+        //  • Move: slides the view (not available while following an aircraft).
+        //  • Rotate / View angle / Zoom: pivot on the middle of the view, or on the
+        //    aircraft while one is being followed.
+        //  • Reset: back to the airport, showing all aircraft.
+        //  • Stop following: shown only while an aircraft is selected.
+        // ════════════════════════════════════════════════════════════════
+        const VIEW_MOVE_PER_S = 0.5;        // slide speed, as a fraction of the distance to the middle of the view
+        const VIEW_TURN_DEG_PER_S = 45;
+        const VIEW_TILT_DEG_PER_S = 30;
+        const VIEW_ZOOM_PER_S = 0.9;        // zoom speed (distance changes by about e^this per second)
+        const VIEW_MIN_ELEV_DEG = 5, VIEW_MAX_ELEV_DEG = 89;   // lowest (side-on) and highest (overhead) view angles
+        const VIEW_MIN_RANGE_M = 120, VIEW_MAX_RANGE_M = 90000;
+        const VIEW_TAP_MS = 220;            // a quick click moves as if held this long
+        const VIEW_MAX_STEP_S = 0.25;       // most movement applied in one frame (keeps slow computers smooth)
+
+        const VB_SVG = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+        const VB_ROTATE = '<path d="M5 12a7 7 0 1 0 2.2-5.1"/><path d="M4.5 3.5v4.4h4.4"/>';
+        const VIEW_BUTTONS = [
+            { label: 'Move', id: 'move', buttons: [
+                ['moveLeft',    'Move left',    VB_SVG('<path d="M19 12H5M11 6l-6 6 6 6"/>')],
+                ['moveForward', 'Move forward', VB_SVG('<path d="M12 19V5M6 11l6-6 6 6"/>')],
+                ['moveBack',    'Move back',    VB_SVG('<path d="M12 5v14M6 13l6 6 6-6"/>')],
+                ['moveRight',   'Move right',   VB_SVG('<path d="M5 12h14M13 6l6 6-6 6"/>')] ] },
+            { label: 'Rotate', buttons: [
+                ['turnCcw', 'Rotate the view counterclockwise', VB_SVG(VB_ROTATE)],
+                ['turnCw',  'Rotate the view clockwise',        VB_SVG(`<g transform="translate(24 0) scale(-1 1)">${VB_ROTATE}</g>`)] ] },
+            { label: 'View angle', buttons: [
+                ['tiltHigher', 'Look from higher up (more overhead)', 'Higher', true],
+                ['tiltLower',  'Look from lower down (more side-on)', 'Lower', true] ] },
+            { label: 'Zoom', buttons: [
+                ['zoomIn',  'Zoom in',  VB_SVG('<path d="M12 5v14M5 12h14"/>')],
+                ['zoomOut', 'Zoom out', VB_SVG('<path d="M5 12h14"/>')] ] },
+            { label: 'Reset', buttons: [
+                ['reset', 'Back to the airport, showing all aircraft', VB_SVG('<path d="M4 11.5l8-7 8 7"/><path d="M6.5 9.5V19h11V9.5"/>')] ] }
+        ];
+
+        let viewAction = null, viewHeld = false, viewStartMs = 0, viewReleaseMs = 0, viewAppliedMs = 0, viewPivot = null, viewBtnEl = null;
+        let viewBarFocus;   // which aircraft the bar is currently showing as followed
+
+        // Ground point in the middle of the view
+        function viewCenterPoint() {
+            const cam = viewer.camera, canvas = viewer.canvas;
+            const mid = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2);
+            const ray = cam.getPickRay(mid);
+            let p = ray ? viewer.scene.globe.pick(ray, viewer.scene) : undefined;
+            if (!p) p = cam.pickEllipsoid(mid);
+            if (!p || Cesium.Cartesian3.distance(p, cam.positionWC) > VIEW_MAX_RANGE_M) {
+                // looking at the horizon or sky: use a point ahead of the camera instead
+                const ahead = Math.max(500, cam.positionCartographic.height * 2);
+                p = Cesium.Cartesian3.add(cam.positionWC, Cesium.Cartesian3.multiplyByScalar(cam.directionWC, ahead, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+            }
+            return p;
+        }
+
+        function applyViewAction(action, dt) {
+            const C3 = Cesium.Cartesian3, cam = viewer.camera;
+            const followed = viewer.trackedEntity;
+            const followedPos = followed && followed.position && followed.position.getValue(viewer.clock.currentTime);
+
+            if (action.startsWith('move')) {
+                if (followed) return;
+                const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(cam.positionWC, new C3());
+                const flat = (v) => C3.subtract(v, C3.multiplyByScalar(up, C3.dot(v, up), new C3()), new C3());
+                let fwd = flat(cam.directionWC);
+                if (C3.magnitude(fwd) < 0.05) fwd = flat(cam.upWC);   // looking straight down: "forward" is the top of the screen
+                C3.normalize(fwd, fwd);
+                const right = C3.cross(fwd, up, new C3());
+                const range = Math.min(C3.distance(cam.positionWC, viewCenterPoint()), VIEW_MAX_RANGE_M);
+                const step = Math.max(range, 200) * VIEW_MOVE_PER_S * dt;
+                const dir = { moveForward: fwd, moveBack: C3.negate(fwd, new C3()), moveRight: right, moveLeft: C3.negate(right, new C3()) }[action];
+                cam.move(dir, step);
+                return;
+            }
+
+            const pivot = followedPos || viewPivot || (viewPivot = viewCenterPoint());
+
+            if (action.startsWith('zoom')) {
+                const range = followed ? C3.magnitude(cam.position) : C3.distance(cam.positionWC, pivot);
+                const k = Math.exp((action === 'zoomIn' ? -1 : 1) * VIEW_ZOOM_PER_S * dt);
+                const target = Math.min(VIEW_MAX_RANGE_M, Math.max(VIEW_MIN_RANGE_M, range * k));
+                if (followed) {
+                    C3.multiplyByScalar(cam.position, target / range, cam.position);   // closer to / further from the aircraft
+                } else {
+                    const toPivot = C3.normalize(C3.subtract(pivot, cam.positionWC, new C3()), new C3());
+                    let step = range - target;
+                    if (step > 0) {
+                        // stop at the same minimum height above the ground that the mouse zoom has
+                        const carto = cam.positionCartographic;
+                        const above = carto.height - (viewer.scene.globe.getHeight(carto) || 0);
+                        const floor = viewer.scene.screenSpaceCameraController.minimumZoomDistance + 2;
+                        const drop = -C3.dot(toPivot, Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(cam.positionWC, new C3()));   // height lost per metre moved
+                        if (drop > 1e-3) step = Math.min(step, Math.max(0, (above - floor) / drop));
+                    }
+                    cam.move(toPivot, step);
+                }
+                return;
+            }
+
+            // Rotate / view angle: orbit around the pivot. While following, the camera is already in
+            // the aircraft's frame; otherwise work in a frame centred on the pivot, then release it.
+            if (!followed) cam.lookAtTransform(Cesium.Transforms.eastNorthUpToFixedFrame(pivot));
+            const upW = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(pivot, new C3());
+            const up = C3.normalize(Cesium.Matrix4.multiplyByPointAsVector(cam.inverseTransform, upW, new C3()), new C3());
+            if (action === 'turnCcw' || action === 'turnCw') {
+                cam.rotate(up, (action === 'turnCcw' ? 1 : -1) * Cesium.Math.toRadians(VIEW_TURN_DEG_PER_S) * dt);
+            } else {
+                const fromPivot = C3.normalize(cam.position, new C3());
+                const elev = Math.asin(Math.max(-1, Math.min(1, C3.dot(fromPivot, up))));
+                const want = elev + (action === 'tiltHigher' ? 1 : -1) * Cesium.Math.toRadians(VIEW_TILT_DEG_PER_S) * dt;
+                const target = Math.min(Cesium.Math.toRadians(VIEW_MAX_ELEV_DEG), Math.max(Cesium.Math.toRadians(VIEW_MIN_ELEV_DEG), want));
+                if ((action === 'tiltHigher') === (target > elev)) cam.rotate(cam.right, target - elev);
+            }
+            if (!followed) cam.lookAtTransform(Cesium.Matrix4.IDENTITY);
+        }
+
+        function initViewButtons() {
+            const bar = document.getElementById('a3d-viewbar');
+            bar.innerHTML = '<button type="button" id="vb-stop" class="vb-btn vb-wide" title="Stop following this aircraft and show all aircraft">Stop following</button>' +
+                VIEW_BUTTONS.map(g =>
+                    `<div class="vb-group"${g.id ? ` id="vb-${g.id}"` : ''}><div class="vb-row">` +
+                    g.buttons.map(([act, tip, inner, wide]) =>
+                        `<button type="button" class="vb-btn${wide ? ' vb-wide' : ''}" data-act="${act}" title="${tip}" aria-label="${tip}">${inner}</button>`).join('') +
+                    `</div><div class="vb-label">${g.label}</div></div>`).join('');
+
+            const start = (btn) => {
+                if (btn.disabled) return;
+                stop();
+                viewAction = btn.dataset.act;
+                viewHeld = true;
+                viewStartMs = viewAppliedMs = performance.now();
+                viewPivot = null;
+                viewBtnEl = btn;
+                btn.classList.add('vb-on');
+            };
+            const stop = () => {
+                if (viewHeld) viewReleaseMs = performance.now();
+                viewHeld = false;
+                if (viewBtnEl) viewBtnEl.classList.remove('vb-on');
+                viewBtnEl = null;
+            };
+            const isPressKey = (e) => e.key === 'Enter' || e.key === ' ';
+
+            bar.querySelectorAll('[data-act]').forEach(btn => {
+                if (btn.dataset.act === 'reset') {
+                    btn.addEventListener('click', () => viewer.homeButton.viewModel.command());
+                    return;
+                }
+                btn.addEventListener('pointerdown', e => {
+                    if (e.button !== undefined && e.button !== 0) return;
+                    e.preventDefault();
+                    try { btn.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+                    start(btn);
+                });
+                for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture', 'blur']) btn.addEventListener(ev, stop);
+                btn.addEventListener('keydown', e => { if (isPressKey(e)) { e.preventDefault(); if (!e.repeat) start(btn); } });
+                btn.addEventListener('keyup', e => { if (isPressKey(e)) stop(); });
+                btn.addEventListener('contextmenu', e => e.preventDefault());
+            });
+            window.addEventListener('blur', stop);
+            // show "Stop following" and switch off Move while an aircraft is followed
+            const syncBar = () => {
+                if (focusHex === viewBarFocus) return;
+                viewBarFocus = focusHex;
+                document.getElementById('vb-stop').style.display = focusHex ? 'flex' : 'none';
+                bar.querySelectorAll('#vb-move .vb-btn').forEach(b => {
+                    b.disabled = !!focusHex;
+                    b.title = focusHex ? 'Not available while following an aircraft. Press "Stop following" first.' : b.getAttribute('aria-label');
+                });
+                if (focusHex && viewAction && viewAction.startsWith('move')) { stop(); viewAction = null; }
+            };
+            document.getElementById('vb-stop').addEventListener('click', () => { setFocus(null); syncBar(); });
+            document.getElementById('track-select').addEventListener('change', syncBar);
+
+            // Movement is based on how long the button was held (at least VIEW_TAP_MS), not on
+            // how many frames were drawn, so it behaves the same on fast and slow computers.
+            viewer.scene.preRender.addEventListener(() => {
+                syncBar();
+                if (!viewAction) return;
+                const now = performance.now();
+                const endMs = viewHeld ? now : Math.max(viewReleaseMs, viewStartMs + VIEW_TAP_MS);
+                const upTo = Math.min(now, endMs);
+                const dt = Math.min(VIEW_MAX_STEP_S, (upTo - viewAppliedMs) / 1000);
+                viewAppliedMs = upTo;
+                const action = viewAction;
+                if (!viewHeld && now >= endMs) viewAction = null;
+                if (dt > 0) applyViewAction(action, dt);
+            });
+        }
+
+        // ── Feed polling ────────────────────────────────────────────────
+        async function poll() {
+            if (document.visibilityState === 'hidden') return;   // don't fetch while the tab is in the background
+            if (backfillCount > 0) return;   // [RECENT PATHS] wait while history is being added
+            const gen = pollGen;
+            let data;
+            try {
+                const res = await fetch(`${cfg.feedUrl}?_=${Date.now()}`, { cache: 'no-store' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                data = await res.json();
+            } catch (err) {
+                console.error('[3D] feed error:', err);
+                setStatus('Live feed unavailable — retrying', true);
+                return;
+            }
+            if (gen !== pollGen) return;   // airport switched while this request was in flight
+
+            // [GAP FIX] live updates stopped for a while: rebuild trails from history instead
+            if (lastFeedNow != null && !skipGapCheck && data.now - lastFeedNow > GAP_BREAK_S) {
+                lastFeedNow = data.now;
+                lastFeedWall = Date.now();
+                refillAfterGap();
+                return;
+            }
+            skipGapCheck = false;
+
+            syncClock(data.now);
+            lastFeedNow = data.now;   // [RECENT PATHS]
+            lastFeedWall = Date.now();   // [RECENT PATHS]
+            const wallNow = Date.now();
+
+            for (const ac of data.aircraft || []) {
+                if (!ac.hex || ac.lat == null || ac.lon == null) continue;
+                if (typeof ac.seen_pos === 'number' && ac.seen_pos > STALE_POS_S) continue;
+                if (distanceKm(cfg.lat, cfg.lon, ac.lat, ac.lon) > cfg.radiusKm) continue;
+                const alt = altitudes(ac, cfg);
+                if (!alt) continue;
+                if (typeof ac.alt_geom === 'number' && typeof ac.alt_baro === 'number') geomOffsets[ac.hex] = ac.alt_geom - ac.alt_baro;   // [RECENT PATHS]
+
+                let tr = tracks[ac.hex];
+                if (!tr) {
+                    // Like the track logger: only start following aircraft at/below the ceiling;
+                    // once followed, keep following through a climb-out.
+                    if (!alt.onGround && (alt.mslFt - cfg.fieldElevFt) > cfg.ceilingAglFt) continue;
+                    tr = tracks[ac.hex] = createTrack(ac.hex);
+                }
+                tr.lastSeenWall = wallNow;
+
+                const sec = data.now - (ac.seen_pos || 0);   // actual position time from the receiver
+                if (!tr.last || sec > tr.last.sec) {
+                    const heightM = alt.haeFt * FT + (alt.onGround ? GROUND_LIFT_M : 0);   // [TERRAIN] true height
+                    addPoint(tr, sec, Cesium.Cartesian3.fromDegrees(ac.lon, ac.lat, heightM), bandIndex(alt.mslFt));
+                }
+                updateInfo(tr, ac, alt);
+            }
+
+            const cutoff = data.now - TRAIL_SECONDS;
+            for (const hex in tracks) {
+                const tr = tracks[hex];
+                if (wallNow - tr.lastSeenWall > REMOVE_AFTER_S * 1000) removeTrack(tr);
+                else trimTrack(tr, cutoff);
+            }
+
+            const n = Object.keys(tracks).length;
+            setStatus(`Live · ${n} aircraft`);
+            refreshTrackList();   // [TRACK FOCUS]
+        }
+
+        async function pollLoop() {
+            await poll();
+            pollTimer = setTimeout(pollLoop, POLL_MS);
+        }
+
+        function startAirport(code) {
+            const c = AIRPORT_3D[code];
+            if (!c) { setStatus('3D view is not configured for this airport yet.', true); return; }
+            cfg = c;
+            pollGen++;
+            clearTimeout(pollTimer);
+            clearTracks();
+            document.getElementById('a3d-title').textContent = `3D Airspace — ${c.name}`;
+            setStatus('Connecting…');
+            frameAirport(c);
+            backfill(estimateFeedNow() - TRAIL_SECONDS, true);   // [RECENT PATHS] start with recent history
+            pollLoop();
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // [HISTORY] Recorded flights from the track logger (tracks_pou / tracks_owd).
+        //  • The Live / History switch in the header turns this on. Live updates wait
+        //    while History is showing and restart when you switch back.
+        //  • "Show flights" loads every recorded visit that overlaps the chosen date,
+        //    start time and length. "Find on this date" loads one tail number's
+        //    visits for the whole day.
+        //  • The timeline (above the view buttons) replays the window: Replay, Play /
+        //    Pause, a slider, speed, and "Show full paths" (the whole window at once).
+        //  • Picking a flight from the Track list, or clicking its path, shows only
+        //    that flight. The camera follows it while it is on screen.
+        //  • Links: 3Dairspace.html?airport=pou&track=<document id>   (opens at the start of that track)
+        //           3Dairspace.html?airport=pou&date=2026-10-02&time=15:30&window=60
+        //           3Dairspace.html?airport=pou&date=2026-10-02&tail=N12KB
+        //  Dates and times are the airport's local time. Altitude uses the recorded
+        //  GNSS height ("ag") when a track has it, otherwise pressure altitude.
+        // ════════════════════════════════════════════════════════════════
+        import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+        const HISTORY_SOURCES = {
+            pou: { collection: 'tracks_pou', tz: 'America/New_York' },
+            owd: { collection: 'tracks_owd', tz: 'America/New_York' }
+        };
+        const HISTORY_LOOKBACK_MIN = 180;   // also fetch visits that started up to this long before the window (they may still be flying in it)
+        const HISTORY_MAX_FLIGHTS = 150;    // most visits drawn at once
+        const HISTORY_KEPT_DAYS = 30;       // how long the logger keeps tracks (TRACK_RETENTION_DAYS); only used in messages
+        const HISTORY_SPEEDS = [1, 5, 10, 30, 60];
+        const HISTORY_DEFAULT_SPEED = 10;
+
+        // [FIRST OPEN] A link to one track (?airport=…&track=…): ask the database for that track's record
+        // straight away, alongside sign-in, instead of after the map has started. The map's own start-up
+        // loading was holding this read up on a first open, so the page sat on "History · loading…".
+        const histEarly = (() => {
+            const qp = new URLSearchParams(location.search), id = qp.get('track');
+            const src = HISTORY_SOURCES[(qp.get('airport') || '').toLowerCase()];
+            if (!id || !src) return null;
+            const promise = getDoc(doc(db, src.collection, id));
+            promise.catch(() => {});   // if it fails (for example, not signed in yet) the normal read below is used
+            return { id, collection: src.collection, promise };
+        })();
+
+        let historyOn = false, historyReady = false;
+        let histWin = null;                 // { startMs, endMs } of what is loaded
+        let histPlaying = false, histSpeed = HISTORY_DEFAULT_SPEED, histDragging = false;
+        let histLoadGen = 0, histFocusSeen = null;
+
+        const histEl = (id) => document.getElementById(id);
+        const histSource = () => HISTORY_SOURCES[currentAirportCode()];
+        function currentAirportCode() { return Object.keys(AIRPORT_3D).find(k => AIRPORT_3D[k] === cfg) || null; }
+
+        // ── Airport-local dates and times ──
+        function tzParts(ms, tz) {
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(ms));
+            const g = (t) => Number(parts.find(p => p.type === t).value);
+            return { y: g('year'), mo: g('month'), d: g('day'), h: g('hour') % 24, mi: g('minute'), s: g('second') };
+        }
+        // Airport wall-clock time -> UTC milliseconds
+        function zonedToUtcMs(y, mo, d, h, mi, tz) {
+            const wall = Date.UTC(y, mo - 1, d, h, mi);
+            let guess = wall;
+            for (let i = 0; i < 3; i++) {
+                const p = tzParts(guess, tz);
+                guess = wall - (Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi) - Math.floor(guess / 60000) * 60000);
+            }
+            return guess;
+        }
+        const pad2 = (n) => String(n).padStart(2, '0');
+        const histClock = (ms, withSec) => new Intl.DateTimeFormat('en-US', Object.assign({ timeZone: histSource().tz, hour: 'numeric', minute: '2-digit' }, withSec ? { second: '2-digit' } : {})).format(new Date(ms));
+        const histDay = (ms) => new Intl.DateTimeFormat('en-US', { timeZone: histSource().tz, month: 'short', day: 'numeric' }).format(new Date(ms));
+        // "2026-10-02" or "10/02/2026" -> { y, mo, d }
+        function parseDateText(s) {
+            let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec((s || '').trim());
+            if (m) return { y: +m[1], mo: +m[2], d: +m[3] };
+            m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((s || '').trim());
+            return m ? { y: +m[3], mo: +m[1], d: +m[2] } : null;
+        }
+        // "15:30", "3:30 PM" or "3:30:00 PM" -> { h, mi }
+        function parseTimeText(s) {
+            const m = /^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?$/.exec((s || '').trim());
+            if (!m) return null;
+            let h = +m[1];
+            if (m[3]) h = (h % 12) + (/p/i.test(m[3]) ? 12 : 0);
+            return (h < 24 && +m[2] < 60) ? { h, mi: +m[2] } : null;
+        }
+
+        // [FIRST OPEN] Cesium rounds down when its clock is turned back into a date, so the plain reading can be
+        // 1 ms early. That made a track that was opened at its start look as if it had not started yet. This gives the exact millisecond.
+        const histJdTmp = new Cesium.JulianDate();
+        function histMsOf(jd) {
+            const ms = Cesium.JulianDate.toDate(jd).getTime();
+            return Math.abs(Cesium.JulianDate.secondsDifference(jd, Cesium.JulianDate.fromDate(new Date(ms + 1), histJdTmp))) < 0.0004 ? ms + 1 : ms;
+        }
+        const histClockMs = () => histMsOf(viewer.clock.currentTime);
+        function histSetTime(ms) {
+            if (!histWin) return;
+            const t = Math.min(histWin.endMs, Math.max(histWin.startMs, ms));
+            viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(t));
+        }
+        function histPlay(on) {
+            histPlaying = !!on && !!histWin;
+            viewer.clock.multiplier = histSpeed;
+            viewer.clock.shouldAnimate = histPlaying;
+            histEl('tl-play').textContent = histPlaying ? 'Pause' : 'Play';
+        }
+
+        // ── One recorded visit -> one track (same models, trails and info panel as live) ──
+        function buildHistoryTrack(id, d) {
+            const startMs = Date.parse(d.start || d.timestamp);
+            const pts = Array.isArray(d.track) ? d.track : [];
+            if (!isFinite(startMs) || pts.length < 2) return null;
+            const hex = String(d.hex || '').toLowerCase();
+            const stored = String(d.registration || '').trim();
+            const storedOk = !!stored && stored !== 'Unknown';
+            // type / icon: your FAA registry by transponder address; helicopters from the logger's own flag
+            const info = { hex, flight: storedOk ? stored : '', category: d.aircraftType === 'Rotorcraft' ? 'A7' : undefined };
+            enrichAircraft(info);
+            const reg = storedOk ? stored : (info.r || (hex ? hex.toUpperCase() : 'Unknown'));   // name shown on labels and in the list
+
+            const tr = tracks[id] = createTrack(id);
+            const rows = [];
+            let gnss = 0, baro = 0, lowest = Infinity;
+            for (let i = 0; i < pts.length; i++) {
+                const p = pts[i];
+                if (num(p.lat) == null || num(p.lon) == null || num(p.alt) == null) continue;
+                const sec = startMs / 1000 + (num(p.t) ?? i * 2);
+                if (tr.last && sec <= tr.last.sec) continue;
+                let alt, src;
+                if (num(p.ag) != null) { alt = { onGround: false, haeFt: p.ag, mslFt: p.ag - cfg.geoidFt }; src = 'g'; gnss++; }
+                else if (p.alt === cfg.fieldElevFt) { alt = { onGround: true, mslFt: cfg.fieldElevFt, haeFt: cfg.fieldElevFt + cfg.geoidFt }; src = 'x'; }   // the logger stores field elevation for aircraft on the ground
+                else { alt = { onGround: false, mslFt: p.alt, haeFt: p.alt + cfg.geoidFt }; src = 'b'; baro++; }
+                if (!alt.onGround) lowest = Math.min(lowest, alt.mslFt);
+
+                const heightM = alt.haeFt * FT + (alt.onGround ? GROUND_LIFT_M : 0);
+                addPoint(tr, sec, Cesium.Cartesian3.fromDegrees(p.lon, p.lat, heightM), bandIndex(alt.mslFt));
+
+                // climb / descent rate from the recorded altitudes a few points back (for the model's nose angle)
+                const back = rows[rows.length - 3];
+                const rate = (back && back.src === src && src !== 'x' && sec > back.sec) ? (alt.mslFt - back.alt.mslFt) / (sec - back.sec) * 60 : undefined;
+                setAttitude(tr, {
+                    alt_baro: alt.onGround ? 'ground' : 0, gs: num(p.gs) ?? 0, lat: p.lat, lon: p.lon, geom_rate: rate,
+                    track: (num(p.trk) != null && p.trk !== 0) ? p.trk : undefined   // the logger stores 0 when no track was sent; fall back to direction of movement
+                });
+                rows.push({ sec, alt, src, gs: num(p.gs) });
+            }
+            if (rows.length < 2) { removeTrack(tr); return null; }
+
+            const first = rows[0], last = rows[rows.length - 1];
+            const startMsReal = Math.round(first.sec * 1000), endMsReal = Math.round(last.sec * 1000);   // [FIRST OPEN] whole milliseconds
+            const span = new Cesium.TimeIntervalCollection([new Cesium.TimeInterval({
+                start: Cesium.JulianDate.fromDate(new Date(startMsReal)), stop: Cesium.JulianDate.fromDate(new Date(endMsReal)) })]);
+            tr.entity.availability = span;   // the aircraft is only drawn during its recorded visit
+            tr.drop.availability = span;
+
+            applyIcon(tr, info);
+
+            const rowAt = (time) => {   // latest recorded point at or before the replay time
+                const s = histMsOf(time) / 1000 + 0.0005;   // [FIRST OPEN] exact time, so the first and last recorded points count
+                let lo = 0, hi = rows.length - 1;
+                if (s < first.sec || s > last.sec + 0.001) return null;
+                while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (rows[mid].sec <= s) lo = mid; else hi = mid - 1; }
+                return rows[lo];
+            };
+            tr.entity.model.heightReference = new Cesium.CallbackProperty(time => {
+                const r = rowAt(time);
+                return (r && r.alt.onGround) ? Cesium.HeightReference.CLAMP_TO_GROUND : Cesium.HeightReference.NONE;
+            }, false);
+            tr.entity.label.text = new Cesium.CallbackProperty(time => {
+                const r = rowAt(time) || first;
+                return `${reg}\n${r.alt.onGround ? 'GND' : Math.round(r.alt.mslFt).toLocaleString() + ' ft'}`;
+            }, false);
+
+            const source = gnss && !baro ? 'GNSS' : (gnss ? 'GNSS, pressure where missing' : (baro ? 'Pressure (not corrected)' : 'On ground only'));
+            const fixed = [
+                ['Registration', info.r || (/^N[0-9]/.test(reg) ? reg : '—')],
+                ['Callsign', (storedOk && stored !== info.r) ? stored : '—'],
+                ['ICAO hex', hex ? hex.toUpperCase() : '—'],
+                ['Type', info.t || '—'],
+                ['Recorded', `${histDay(startMsReal)}, ${histClock(startMsReal, true)} – ${histClock(endMsReal, true)}`],
+                ['Lowest altitude', isFinite(lowest) ? `${Math.round(lowest).toLocaleString()} ft MSL` : 'On ground'],
+                ['Altitude source', source]
+            ];
+            tr.entity.name = `${reg} · ${histClock(startMsReal)}`;
+            tr.entity.description = new Cesium.CallbackProperty(time => {
+                const r = rowAt(time);
+                const now = r ? [
+                    ['At replay time', histClock(r.sec * 1000, true)],
+                    ['Altitude (MSL)', r.alt.onGround ? 'On ground' : `${Math.round(r.alt.mslFt).toLocaleString()} ft`],
+                    ['Height above field', r.alt.onGround ? '0 ft' : `${Math.round(r.alt.mslFt - cfg.fieldElevFt).toLocaleString()} ft`],
+                    ['Ground speed', r.gs != null ? `${Math.round(r.gs)} kt` : '—']
+                ] : [];
+                return '<table class="cesium-infoBox-defaultTable"><tbody>' +
+                    fixed.concat(now).filter(([, v]) => v !== '—').map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('') + '</tbody></table>';
+            }, false);
+
+            tr.hist = { startMs: startMsReal, endMs: endMsReal, reg };
+            return tr;
+        }
+
+        // Track list in History: one entry per recorded visit, in time order
+        function histRefreshList() {
+            const sel = histEl('track-select');
+            const items = Object.values(tracks).filter(t => t.hist).sort((a, b) => a.hist.startMs - b.hist.startMs);
+            sel.innerHTML = '';
+            const all = document.createElement('option');
+            all.value = '';
+            all.textContent = `All flights (${items.length})`;
+            sel.appendChild(all);
+            for (const t of items) {
+                const o = document.createElement('option');
+                o.value = t.hex;
+                o.textContent = `${histClock(t.hist.startMs)} · ${t.hist.reg}`;
+                sel.appendChild(o);
+            }
+            sel.value = focusHex || '';
+            trackListKey = null;   // so the live list is rebuilt after switching back (null never matches, even with no aircraft)
+        }
+
+        function histFramePath(tr) {
+            const pos = tr.segs.flatMap(s => s.pts.map(p => p.pos));
+            if (pos.length < 2) return;
+            viewer.camera.flyToBoundingSphere(Cesium.BoundingSphere.fromPoints(pos), {
+                duration: 0, offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(20), Cesium.Math.toRadians(-40), 0) });
+        }
+
+        // [FIRST OPEN] Put the view on the aircraft now, from the same spot the follow camera uses. Following only
+        // starts once the aircraft's model has loaded; until then the view used to wait at the airport.
+        function histLookAt(tr) {
+            const now = viewer.clock.currentTime, p = tr.entity.position.getValue(now);
+            if (!p) return;
+            viewer.camera.lookAt(p, tr.entity.viewFrom.getValue(now));
+            viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+        }
+
+        // Follow the selected flight while its aircraft is on screen; leave the camera free otherwise.
+        function histSyncFollow() {
+            if (!historyOn || !histWin) return;
+            const tr = focusHex ? tracks[focusHex] : null;
+            if (focusHex !== histFocusSeen) {
+                histFocusSeen = focusHex;
+                if (tr && tr.hist && histClockMs() < tr.hist.startMs) histSetTime(tr.hist.startMs);   // not started yet: jump to where it appears
+            }
+            if (tr && tr.hist) {
+                const ms = histClockMs(), onScreen = ms >= tr.hist.startMs && ms <= tr.hist.endMs;
+                if (onScreen && viewer.trackedEntity !== tr.entity) viewer.trackedEntity = tr.entity;
+                else if (!onScreen && viewer.trackedEntity) viewer.trackedEntity = undefined;
+            }
+        }
+
+        // Draw a set of recorded visits and show the whole window at once
+        function histShow(items, win, what, focusId, noneText, atStart) {
+            clearTracks();
+            items.sort((a, b) => String(a.d.timestamp).localeCompare(String(b.d.timestamp)));
+            let shown = 0;
+            for (const it of items.slice(0, HISTORY_MAX_FLIGHTS)) if (buildHistoryTrack(it.id, it.d)) shown++;
+
+            histWin = win;
+            const c = viewer.clock;
+            c.startTime = Cesium.JulianDate.fromDate(new Date(win.startMs));
+            c.stopTime = Cesium.JulianDate.fromDate(new Date(win.endMs));
+            c.clockRange = Cesium.ClockRange.CLAMPED;
+            histEl('tl-slider').max = Math.max(1, Math.round((win.endMs - win.startMs) / 1000));
+            histEl('hist-timeline').style.display = shown ? 'flex' : 'none';
+            histPlay(false);
+            histSetTime(win.endMs);   // all paths at once
+            histFocusSeen = null;
+            histRefreshList();
+
+            const range = `${histDay(win.startMs)}, ${histClock(win.startMs)} – ${histClock(win.endMs)}`;
+            if (!shown) {
+                const old = Date.now() - win.endMs > HISTORY_KEPT_DAYS * 86400000;
+                setStatus(`History · ${noneText || 'no recorded flights · ' + range}` + (old ? ` (tracks are kept for ${HISTORY_KEPT_DAYS} days)` : ''));
+            } else {
+                setStatus(`History · ${shown} flight${shown === 1 ? '' : 's'} · ${what || ''}${range}` +
+                    (items.length > shown ? ` · showing the first ${shown} of ${items.length}; choose a shorter length` : ''));
+            }
+            if (focusId && tracks[focusId]) {
+                setFocus(focusId);
+                if (atStart) histSetTime(tracks[focusId].hist.startMs);   // a link to one track opens at the start of that track
+                histSyncFollow();
+                if (!viewer.trackedEntity) histFramePath(tracks[focusId]);
+                else if (atStart) histLookAt(tracks[focusId]);   // [FIRST OPEN]
+            }
+        }
+
+        // [FIRST OPEN] Add more recorded visits to what is showing, without moving the clock, the view or the selection
+        function histAddFlights(items, note) {
+            items.sort((a, b) => String(a.d.timestamp).localeCompare(String(b.d.timestamp)));
+            const count = () => Object.values(tracks).filter(t => t.hist).length;
+            let room = HISTORY_MAX_FLIGHTS - count();
+            for (const it of items) {
+                if (tracks[it.id]) continue;
+                if (room <= 0) break;
+                if (buildHistoryTrack(it.id, it.d)) room--;
+            }
+            histRefreshList();
+            const shown = count();
+            setStatus(`History · ${shown} flight${shown === 1 ? '' : 's'} · ${histDay(histWin.startMs)}, ${histClock(histWin.startMs)} – ${histClock(histWin.endMs)}${note || ''}`);
+        }
+
+        async function histRun(job) {
+            const src = histSource();
+            if (!src) { setStatus('History is not set up for this airport yet.', true); return; }
+            const gen = ++histLoadGen;
+            setStatus('History · loading…');
+            try {
+                const out = await job(src);
+                if (gen !== histLoadGen || !historyOn || !out) return;
+                histShow(out.items, out.win, out.what, out.focusId, out.noneText, out.atStart);
+            } catch (err) {
+                console.error('[3D] history load failed:', err);
+                if (gen === histLoadGen) setStatus(`History could not be loaded (${err.code || err.message || 'error'})`, true);
+            }
+        }
+
+        // Every visit overlapping [startMs, endMs]
+        function histLoadWindow(startMs, endMs, focusId) {
+            return histRun(async (src) => {
+                const from = new Date(startMs - HISTORY_LOOKBACK_MIN * 60000).toISOString(), to = new Date(endMs).toISOString();
+                const snap = await getDocs(query(collection(db, src.collection), where('timestamp', '>=', from), where('timestamp', '<=', to)));
+                const items = snap.docs.map(s => ({ id: s.id, d: s.data() }))
+                    .filter(x => (Date.parse(x.d.end) || Date.parse(x.d.timestamp)) >= startMs);
+                return { items, win: { startMs, endMs }, focusId };
+            });
+        }
+
+        // One tail number's visits on one airport-local date
+        function histLoadTail(date, tail) {
+            return histRun(async (src) => {
+                const snap = await getDocs(query(collection(db, src.collection),
+                    where('date', '==', `${pad2(date.mo)}/${pad2(date.d)}/${date.y}`), where('registration', '==', tail)));
+                const items = snap.docs.map(s => ({ id: s.id, d: s.data() }));
+                const dayStart = zonedToUtcMs(date.y, date.mo, date.d, 0, 0, src.tz);
+                let startMs = dayStart, endMs = dayStart + 86400000;
+                if (items.length) {
+                    startMs = Math.min(...items.map(x => Date.parse(x.d.start || x.d.timestamp))) - 30000;
+                    endMs = Math.max(...items.map(x => Date.parse(x.d.end) || Date.parse(x.d.timestamp))) + 30000;
+                }
+                return { items, win: { startMs, endMs }, what: `${tail} · `, noneText: `no recorded flights for ${tail} on ${histDay(dayStart + 43200000)}` };
+            });
+        }
+
+        // One recorded visit by its document id, with the 30 minutes around it
+        function histLoadTrack(id) {
+            return histRun(async (src) => {
+                const gen = histLoadGen;   // [FIRST OPEN]
+                let snap = null;
+                if (histEarly && histEarly.id === id && histEarly.collection === src.collection) snap = await histEarly.promise.catch(() => null);   // [FIRST OPEN] already asked for at page load
+                if (!snap) snap = await getDoc(doc(db, src.collection, id));
+                if (!snap.exists()) { setStatus('History · that recorded flight was not found (it may be older than the tracks that are kept)', true); return null; }
+                const d = snap.data(), s = Date.parse(d.start || d.timestamp), e = Date.parse(d.end) || s;
+                const pad = Math.max(0, (30 * 60000 - (e - s)) / 2);
+                const startMs = Math.floor((s - pad) / 60000) * 60000, endMs = Math.ceil((e + pad) / 60000) * 60000;
+                const p = tzParts(startMs, src.tz);
+                histEl('hist-date').value = `${p.y}-${pad2(p.mo)}-${pad2(p.d)}`;
+                histEl('hist-time').value = `${pad2(p.h)}:${pad2(p.mi)}`;
+                const from = new Date(startMs - HISTORY_LOOKBACK_MIN * 60000).toISOString(), to = new Date(endMs).toISOString();
+                // [FIRST OPEN] show this flight as soon as its own record arrives, at the start of its track.
+                // The other flights around it take longer to fetch and are added when they arrive.
+                if (gen !== histLoadGen || !historyOn) return null;
+                histShow([{ id, d }], { startMs, endMs }, '', id, null, true);
+                const mine = tracks[id];
+                if (mine) setStatus(`History · ${mine.hist.reg} · ${histDay(startMs)}, ${histClock(startMs)} – ${histClock(endMs)} · adding nearby flights…`);
+                let items = [], note = '';
+                try {
+                    const near = await getDocs(query(collection(db, src.collection), where('timestamp', '>=', from), where('timestamp', '<=', to)));
+                    items = near.docs.map(x => ({ id: x.id, d: x.data() })).filter(x => (Date.parse(x.d.end) || Date.parse(x.d.timestamp)) >= startMs);
+                } catch (err) {
+                    console.error('[3D] nearby flights failed:', err);
+                    note = ' · nearby flights could not be loaded';
+                }
+                if (gen !== histLoadGen || !historyOn) return null;
+                if (mine) { histAddFlights(items, note); return null; }   // already showing: just add the others
+                if (!items.some(x => x.id === id)) items.push({ id, d });
+                return { items, win: { startMs, endMs }, focusId: id, atStart: true };
+            });
+        }
+
+        function histLoadFromPanel() {
+            const src = histSource();
+            const date = parseDateText(histEl('hist-date').value), time = parseTimeText(histEl('hist-time').value);
+            if (!src || !date || !time) { setStatus('History · choose a date and a start time first', true); return; }
+            const startMs = zonedToUtcMs(date.y, date.mo, date.d, time.h, time.mi, src.tz);
+            histLoadWindow(startMs, startMs + Number(histEl('hist-window').value) * 60000);
+        }
+        function histFindTail() {
+            const date = parseDateText(histEl('hist-date').value);
+            let tail = histEl('hist-tail').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (/^\d/.test(tail)) tail = 'N' + tail;
+            histEl('hist-tail').value = tail;
+            if (!date || !tail) { setStatus('History · choose a date and type a tail number first', true); return; }
+            histLoadTail(date, tail);
+        }
+
+        function enterHistory(autoLoad) {
+            if (!cfg || !viewer) return;
+            if (!historyOn) {
+                historyOn = true;
+                backfillCount++;   // holds the live feed: poll() waits while backfillCount is above zero
+                viewer.allowDataSourcesToSuspendAnimation = false;   // keep replay speed steady while models and trails load
+            }
+            pollGen++;             // drop any live update still on its way
+            histLoadGen++;
+            clearTracks();
+            histWin = null;
+            histPlay(false);
+            histEl('mode-live').classList.remove('mode-on');
+            histEl('mode-history').classList.add('mode-on');
+            histEl('a3d-history').style.display = 'flex';
+            histEl('main-content').classList.add('hist-on');
+            histEl('hist-timeline').style.display = 'none';
+            histRefreshList();
+            setStatus('History · choose a date and time, then press "Show flights"');
+
+            const src = histSource();
+            if (src && !histEl('hist-date').value) {   // start with the most recent hour
+                const p = tzParts(Math.floor((Date.now() - 3600000) / 300000) * 300000, src.tz);
+                histEl('hist-date').value = `${p.y}-${pad2(p.mo)}-${pad2(p.d)}`;
+                histEl('hist-time').value = `${pad2(p.h)}:${pad2(p.mi)}`;
+            }
+            if (autoLoad) histLoadFromPanel();
+        }
+
+        function exitHistory() {
+            if (!historyOn) return;
+            historyOn = false;
+            backfillCount--;
+            viewer.allowDataSourcesToSuspendAnimation = true;
+            histLoadGen++;
+            histWin = null;
+            histPlaying = false;
+            const c = viewer.clock;
+            c.clockRange = Cesium.ClockRange.UNBOUNDED;
+            c.multiplier = 1;
+            c.shouldAnimate = true;
+            c.currentTime = Cesium.JulianDate.fromDate(new Date(Date.now() - DISPLAY_DELAY_S * 1000));
+            histEl('mode-history').classList.remove('mode-on');
+            histEl('mode-live').classList.add('mode-on');
+            histEl('a3d-history').style.display = 'none';
+            histEl('main-content').classList.remove('hist-on');
+            histEl('hist-timeline').style.display = 'none';
+            trackListKey = null;
+            const code = currentAirportCode();
+            if (code) startAirport(code);   // restarts the live view
+            refreshTrackList();             // show the live list straight away, even when no aircraft are in view
+        }
+
+        function initHistory() {
+            if (historyReady) return;
+            historyReady = true;
+
+            // timeline row, placed inside the view-button bar above the buttons
+            const tl = document.createElement('div');
+            tl.id = 'hist-timeline';
+            tl.innerHTML =
+                '<button type="button" id="tl-replay" class="vb-btn vb-wide" title="Go back to the start and play">Replay</button>' +
+                '<button type="button" id="tl-play" class="vb-btn vb-wide" title="Play or pause the replay">Play</button>' +
+                '<input type="range" id="tl-slider" min="0" max="3600" step="1" value="0" aria-label="Replay time">' +
+                '<span id="tl-time"></span>' +
+                '<select id="tl-speed" aria-label="Replay speed" title="Replay speed">' +
+                    HISTORY_SPEEDS.map(s => `<option value="${s}"${s === HISTORY_DEFAULT_SPEED ? ' selected' : ''}>${s}× speed</option>`).join('') + '</select>' +
+                '<button type="button" id="tl-all" class="vb-btn vb-wide" title="Show the whole of every path in this time window at once">Show full paths</button>';
+            histEl('a3d-viewbar').appendChild(tl);
+
+            histEl('mode-live').addEventListener('click', exitHistory);
+            histEl('mode-history').addEventListener('click', () => { if (!historyOn) enterHistory(true); });
+            histEl('hist-load').addEventListener('click', histLoadFromPanel);
+            histEl('hist-find').addEventListener('click', histFindTail);
+            histEl('hist-tail').addEventListener('keydown', e => { if (e.key === 'Enter') histFindTail(); });
+
+            histEl('tl-play').addEventListener('click', () => {
+                if (!histWin) return;
+                if (!histPlaying && histClockMs() >= histWin.endMs) {   // at the end: start over
+                    const tr = focusHex ? tracks[focusHex] : null;
+                    histSetTime(tr && tr.hist ? tr.hist.startMs : histWin.startMs);
+                }
+                histPlay(!histPlaying);
+            });
+            histEl('tl-replay').addEventListener('click', () => {
+                if (!histWin) return;
+                const tr = focusHex ? tracks[focusHex] : null;
+                histSetTime(tr && tr.hist ? tr.hist.startMs : histWin.startMs);   // the selected flight's start, or the start of the window
+                histPlay(true);
+            });
+            histEl('tl-all').addEventListener('click', () => { if (histWin) { histPlay(false); histSetTime(histWin.endMs); } });
+            histEl('tl-speed').addEventListener('change', e => { histSpeed = Number(e.target.value) || 1; viewer.clock.multiplier = histSpeed; });
+            const slider = histEl('tl-slider');
+            slider.addEventListener('input', () => { histDragging = true; if (histWin) histSetTime(histWin.startMs + Number(slider.value) * 1000); });
+            for (const ev of ['change', 'pointerup', 'blur']) slider.addEventListener(ev, () => { histDragging = false; });
+
+            // these run after the existing handlers, so the selection has already been applied
+            histEl('track-select').addEventListener('change', () => {
+                if (!historyOn) return;
+                histSyncFollow();
+                const tr = focusHex ? tracks[focusHex] : null;
+                if (tr && tr.hist && !viewer.trackedEntity) histFramePath(tr);   // picked from the list and not on screen: bring its path into view
+            });
+            viewer.selectedEntityChanged.addEventListener(() => histSyncFollow());
+            histEl('airport-select').addEventListener('change', () => {
+                if (!historyOn) return;        // the live view for the new airport has just been started; replace it with History
+                pollGen++;
+                clearTracks();
+                histWin = null;
+                histEl('hist-timeline').style.display = 'none';
+                histRefreshList();
+                histLoadFromPanel();
+            });
+
+            viewer.clock.onTick.addEventListener(() => {
+                if (!historyOn || !histWin) return;
+                const ms = histClockMs();
+                if (histPlaying && ms >= histWin.endMs) histPlay(false);
+                if (!histDragging) slider.value = Math.round((ms - histWin.startMs) / 1000);
+                histEl('tl-time').textContent = histClock(ms, true);
+                histSyncFollow();
+            });
+
+            // view-button bar wording and Move buttons while in History
+            viewer.scene.preRender.addEventListener(() => {
+                const stopBtn = histEl('vb-stop'), want = historyOn ? 'Show all flights' : 'Stop following';
+                if (stopBtn && stopBtn.textContent !== want) stopBtn.textContent = want;
+                if (historyOn) {
+                    const locked = !!viewer.trackedEntity;   // Move is only off while the camera is actually following
+                    document.querySelectorAll('#vb-move .vb-btn').forEach(b => { if (b.disabled !== locked) b.disabled = locked; });
+                }
+            });
+
+            // links from other pages
+            const qp = new URLSearchParams(location.search);
+            const wantAirport = (qp.get('airport') || '').toLowerCase();
+            const isAdmin = histEl('airport-selector').style.display === 'flex';
+            if (isAdmin && AIRPORT_3D[wantAirport] && wantAirport !== currentAirportCode()) {
+                histEl('airport-select').value = wantAirport;
+                startAirport(wantAirport);
+            }
+            const date = parseDateText(qp.get('date')), time = parseTimeText(qp.get('time'));
+            if (qp.get('track')) {
+                enterHistory(false);
+                histLoadTrack(qp.get('track'));
+            } else if (date) {
+                enterHistory(false);
+                histEl('hist-date').value = `${date.y}-${pad2(date.mo)}-${pad2(date.d)}`;
+                if (time) histEl('hist-time').value = `${pad2(time.h)}:${pad2(time.mi)}`;
+                const len = String(parseInt(qp.get('window'), 10));
+                if ([...histEl('hist-window').options].some(o => o.value === len)) histEl('hist-window').value = len;
+                if (qp.get('tail')) { histEl('hist-tail').value = qp.get('tail'); histFindTail(); }
+                else if (time) histLoadFromPanel();
+            }
+        }
+
+        // ── Auth (same pattern as portal.html) ──────────────────────────
+        function showAuth() {
+            document.getElementById('auth-screen').style.display = 'flex';
+            document.getElementById('main-content').style.display = 'none';
+        }
+        function hideAuth() {
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+        }
+
+        async function initUser(user) {
+            const snap = await getDoc(doc(db, 'Users', user.uid));
+            if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
+            const profile = snap.data();
+
+            hideAuth();
+            initViewer();
+            renderLegend();
+            initRecentPaths();   // [RECENT PATHS]
+            initTrackFocus();    // [TRACK FOCUS]
+            initViewButtons();   // [VIEW BUTTONS]
+
+            if (profile.role === 'admin') {
+                const selector = document.getElementById('airport-selector');
+                selector.style.display = 'flex';
+                const select = document.getElementById('airport-select');
+                select.innerHTML = Object.entries(AIRPORT_3D).map(([code, info]) => `<option value="${code}">${info.name}</option>`).join('');
+                select.onchange = () => startAirport(select.value);
+                startAirport(select.value);
+            } else {
+                startAirport(profile.airport);
+            }
+            initHistory();       // [HISTORY]
+        }
+
+        window._authSignIn = async () => {
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            document.getElementById('auth-error').textContent = '';
+            try { await signInWithEmailAndPassword(auth, email, password); }
+            catch (e) { document.getElementById('auth-error').textContent = 'Invalid email or password.'; }
+        };
+
+        window._authSignOut = () => { auth.signOut(); };
+
+        onAuthStateChanged(auth, user => { if (user) { initUser(user); } else { showAuth(); } });
+    </script>
+
+</body>
+</html>
