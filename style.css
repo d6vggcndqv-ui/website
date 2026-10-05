@@ -62,7 +62,7 @@ main{
 .nav-links li a{ /* styles for the navigation links */
     text-decoration: none; /* removes underline from links */
     color: #333; /* sets link color */
-    font-size: 1.25rem; /* sets font size for links */
+    font-size: 1.15rem; /* sets font size for links */
     font-weight: 500; /* makes links slightly bolder */
     transition: color 0.3s ease; /* smooth transition for hover effect */
     white-space: nowrap; /* prevents links from wrapping to the next line */
