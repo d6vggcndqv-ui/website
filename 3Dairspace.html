@@ -97,6 +97,13 @@
         #main-content.a3d-fs #a3d-wrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; max-width: none; margin: 0; padding: 0; }
         #main-content.a3d-fs #cesiumContainer { flex: 1 1 auto; height: auto; min-height: 0; border-radius: 0; }
         #main-content.a3d-fs #a3d-status, #main-content.a3d-fs #a3d-legend { left: 12px; }
+        /* [SMOOTH PATH] Smoothed / Recorded switch in the History row */
+        #path-switch-wrap { display: inline-flex; align-items: center; gap: 6px; }
+        #path-switch { display: inline-flex; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
+        .path-btn { margin: 0; padding: 6px 12px; border: none; background: #fff; color: #333; font: 500 14px 'DM Sans', sans-serif; cursor: pointer; }
+        .path-btn + .path-btn { border-left: 1px solid #ccc; }
+        .path-btn.path-on { background: #0057ff; color: #fff; }
+        #main-content.a3d-fs #path-switch-wrap { color: #fff; }
     </style>
 </head>
 
@@ -169,6 +176,13 @@
                 <span class="hist-or">or</span>
                 <label>Tail number <input type="text" id="hist-tail" placeholder="N12345" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false"></label>
                 <button type="button" id="hist-find" class="hist-btn hist-btn-2">Find on this date</button>
+                <!-- [SMOOTH PATH] draw the paths smoothed, or exactly as recorded -->
+                <span id="path-switch-wrap">Path
+                    <span id="path-switch" role="group" aria-label="How paths are drawn">
+                        <button type="button" id="path-smooth" class="path-btn path-on" title="Evens out the steps in reported altitude. Never drawn more than half a reporting step from the recorded height.">Smoothed</button>
+                        <button type="button" id="path-recorded" class="path-btn" title="Draw every point exactly as it was recorded.">Recorded</button>
+                    </span>
+                </span>
                 <span id="hist-note">Airport local time</span>
             </div>
             <div id="a3d-wrap">
@@ -1557,6 +1571,7 @@
                     addPoint(tr, sec, Cesium.Cartesian3.fromDegrees(ac.lon, ac.lat, heightM), bandIndex(alt.mslFt));
                 }
                 updateInfo(tr, ac, alt);
+                trailNoteReport(tr, ac);   // [SMOOTH PATH] reporting step, and the note in the info panel
             }
 
             const cutoff = data.now - TRAIL_SECONDS;
@@ -1736,6 +1751,15 @@
             }
             if (rows.length < 2) { removeTrack(tr); return null; }
 
+            // [SMOOTH PATH] work out the smoothed height of every point; draw it if "Smoothed" is on
+            const drawn = trailPoints(tr);
+            if (drawn.length === rows.length) {
+                drawn.forEach((pt, i) => trailNotePoint(pt, !rows[i].alt.onGround));
+                const hundreds = pts.every(p => num(p.alt) == null || p.alt === cfg.fieldElevFt || p.alt % 100 === 0);   // this aircraft reports altitude in 100 ft steps
+                trailSmooth(drawn, -Infinity, (hundreds ? SMOOTH_CAP_100_FT : SMOOTH_CAP_25_FT) * FT);
+                if (histSmooth) trailApply(tr, drawn, true, -Infinity);
+            }
+
             const first = rows[0], last = rows[rows.length - 1];
             const startMsReal = Math.round(first.sec * 1000), endMsReal = Math.round(last.sec * 1000);   // [FIRST OPEN] whole milliseconds
             const span = new Cesium.TimeIntervalCollection([new Cesium.TimeInterval({
@@ -1781,7 +1805,8 @@
                     ['Ground speed', r.gs != null ? `${Math.round(r.gs)} kt` : '—']
                 ] : [];
                 return '<table class="cesium-infoBox-defaultTable"><tbody>' +
-                    fixed.concat(now).filter(([, v]) => v !== '—').map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('') + '</tbody></table>';
+                    fixed.concat(now).filter(([, v]) => v !== '—').map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('') + '</tbody></table>' +
+                    (histSmooth ? SMOOTH_NOTE : '');   // [SMOOTH PATH]
             }, false);
 
             tr.hist = { startMs: startMsReal, endMs: endMsReal, reg };
@@ -2140,6 +2165,283 @@
         }
 
         // ════════════════════════════════════════════════════════════════
+        // [TRAIL STYLE] Curtain under each path: light shading from the path straight
+        // down to the ground, in the same altitude colour, strongest at the path and
+        // fading toward the ground.
+        //    Live: every path that is showing. History: the selected flight only.
+        // Nothing in the existing track code is changed, and the path lines themselves
+        // are untouched: once a frame this looks at the paths that exist and adds,
+        // updates or removes its own drawing to match.
+        // The curtain cannot be clicked, so clicks pass through to whatever is behind it.
+        // ════════════════════════════════════════════════════════════════
+        const CURTAIN_ALPHA_TOP = 0.34;     // curtain opacity at the path
+        const CURTAIN_ALPHA_GROUND = 0.06;  // curtain opacity at the ground
+
+        let trailStyleReady = false, curtainLayer = null, curtainLook = null;
+        let curtainEpoch = 0, curtainFrame = 0;
+        const curtainRecs = new Set();      // curtain pieces currently on screen
+        const curtainCarto = new Cesium.Cartographic(), curtainHead = new Cesium.Cartesian3();
+
+        // Ground height (m above the ellipsoid) under a longitude / latitude in radians, read from the same
+        // elevation tiles the terrain is built from, at a fixed zoom. Returns undefined until that tile has arrived.
+        const CURTAIN_TERRAIN_Z = 12;       // about 30 m per sample here; these tiles are normally already loaded for the view
+        const curtainTiles = new Map();     // "x/y" -> decoded tile, null if unavailable, undefined while loading
+        function curtainGroundM(lon, lat) {
+            const n = 1 << CURTAIN_TERRAIN_Z;
+            const xf = (lon + Math.PI) / (2 * Math.PI) * n;
+            const yf = (1 - Math.log(Math.tan(lat) + 1 / Math.cos(lat)) / Math.PI) / 2 * n;
+            const x = Math.floor(xf), y = Math.floor(yf), key = x + '/' + y;
+            if (!curtainTiles.has(key)) {
+                curtainTiles.set(key, undefined);
+                loadTerrarium(CURTAIN_TERRAIN_Z, x, y).then(t => { curtainTiles.set(key, t); curtainEpoch++; });   // curtains waiting on it are re-seated
+                return undefined;
+            }
+            const t = curtainTiles.get(key);
+            if (!t) return undefined;
+            const S = t.size, H = t.h;
+            const fx = Math.min(Math.max((xf - x) * S - 0.5, 0), S - 1), fy = Math.min(Math.max((yf - y) * S - 0.5, 0), S - 1);
+            const x0 = Math.floor(fx), x1 = Math.min(x0 + 1, S - 1), y0 = Math.floor(fy), y1 = Math.min(y0 + 1, S - 1), tx = fx - x0, ty = fy - y0;
+            return (H[y0 * S + x0] * (1 - tx) + H[y0 * S + x1] * tx) * (1 - ty) + (H[y1 * S + x0] * (1 - tx) + H[y1 * S + x1] * tx) * ty + cfg.geoidFt * FT;
+        }
+
+        // The point on the ground straight below a path point. `cache` (the path point itself) remembers the answer.
+        // Until the elevation tile arrives the field elevation is used, and `note.waiting` is set so the strip is redone later.
+        function curtainFoot(pos, cache, note) {
+            if (cache && cache.gOk) return cache.gPos;
+            const c = Cesium.Cartographic.fromCartesian(pos, undefined, curtainCarto);
+            if (!c) return pos;
+            let groundM = curtainGroundM(c.longitude, c.latitude);
+            const known = groundM !== undefined;
+            if (!known) { groundM = (cfg.fieldElevFt + cfg.geoidFt) * FT; if (note) note.waiting = true; }
+            const foot = (c.height - groundM >= 3) ? Cesium.Cartesian3.fromRadians(c.longitude, c.latitude, groundM) : pos;   // on the ground: no curtain
+            if (cache && known) { cache.gOk = true; cache.gPos = foot; }
+            return foot;
+        }
+
+        // One strip of curtain under a run of path points
+        function curtainStrip(tops, feet, color) {
+            const n = tops.length;
+            if (n < 2) return null;
+            const pos = new Float64Array(n * 6), col = new Uint8Array(n * 8), idx = new Uint16Array((n - 1) * 6);
+            const r = Math.round(color.red * 255), g = Math.round(color.green * 255), b = Math.round(color.blue * 255);
+            for (let i = 0; i < n; i++) {
+                const t = tops[i], f = feet[i];
+                pos.set([t.x, t.y, t.z, f.x, f.y, f.z], i * 6);
+                col.set([r, g, b, Math.round(CURTAIN_ALPHA_TOP * 255), r, g, b, Math.round(CURTAIN_ALPHA_GROUND * 255)], i * 8);
+                if (i < n - 1) idx.set([2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 2, 2 * i + 1, 2 * i + 3], i * 6);
+            }
+            return new Cesium.Primitive({
+                geometryInstances: new Cesium.GeometryInstance({
+                    geometry: new Cesium.Geometry({
+                        attributes: {
+                            position: new Cesium.GeometryAttribute({ componentDatatype: Cesium.ComponentDatatype.DOUBLE, componentsPerAttribute: 3, values: pos }),
+                            color: new Cesium.GeometryAttribute({ componentDatatype: Cesium.ComponentDatatype.UNSIGNED_BYTE, componentsPerAttribute: 4, normalize: true, values: col })
+                        },
+                        indices: idx,
+                        primitiveType: Cesium.PrimitiveType.TRIANGLES,
+                        boundingSphere: Cesium.BoundingSphere.fromVertices(pos)
+                    })
+                }),
+                appearance: curtainLook,
+                asynchronous: false,   // ready in the same frame, so a rebuilt strip never blinks
+                allowPicking: false
+            });
+        }
+
+        // Keep one curtain piece up to date: rebuilt only when what it covers has changed
+        // (or, while it is waiting for an elevation tile, when one arrives)
+        function curtainKeep(rec, key, build) {
+            rec.seen = curtainFrame;
+            if (rec.key === key && (!rec.waiting || rec.epoch === curtainEpoch)) return;
+            rec.waiting = false;
+            const next = build(rec);
+            if (rec.prim) curtainLayer.remove(rec.prim);
+            rec.prim = next ? curtainLayer.add(next) : null;
+            rec.key = key;
+            rec.epoch = curtainEpoch;
+            curtainRecs.add(rec);
+        }
+
+        function updateTrailStyle() {
+            const time = viewer.clock.currentTime;
+            const nowSec = Cesium.JulianDate.toDate(time).getTime() / 1000;   // the same reading the paths use
+            curtainFrame++;
+            for (const hex in tracks) {
+                const tr = tracks[hex];
+                if (historyOn && focusHex !== hex) continue;   // History: curtain for the selected flight only
+                const lastSeg = tr.segs[tr.segs.length - 1];
+                for (const seg of tr.segs) {
+                    if (!seg.entity.show) continue;   // path hidden (another aircraft is selected)
+                    const pts = seg.pts;
+                    let n = 0;
+                    while (n < pts.length && pts[n].sec <= nowSec) n++;   // points drawn so far
+                    if (n >= 2) {
+                        curtainKeep(seg.fxCurtain || (seg.fxCurtain = {}), `${n}|${pts[0].sec}`, (rec) => {
+                            const tops = [], feet = [];
+                            for (let i = 0; i < n; i++) { tops.push(pts[i].pos); feet.push(curtainFoot(pts[i].pos, pts[i], rec)); }
+                            return curtainStrip(tops, feet, BAND_COLORS[seg.band]);
+                        });
+                    }
+                    if (seg === lastSeg && n >= 1) {   // from the newest point to where the aircraft is right now
+                        const head = tr.samples.getValue(time, curtainHead), tail = pts[n - 1];
+                        if (head && Cesium.Cartesian3.distanceSquared(head, tail.pos) > 1) {
+                            curtainKeep(tr.fxCurtainTip || (tr.fxCurtainTip = {}), `${tail.sec}|${head.x.toFixed(1)}|${head.y.toFixed(1)}|${head.z.toFixed(1)}`, (rec) =>
+                                curtainStrip([tail.pos, Cesium.Cartesian3.clone(head)], [curtainFoot(tail.pos, tail, rec), curtainFoot(head, null, rec)], BAND_COLORS[seg.band]));
+                        }
+                    }
+                }
+            }
+            for (const rec of curtainRecs) {   // pieces whose path is gone, hidden or no longer selected
+                if (rec.seen === curtainFrame) continue;
+                if (rec.prim) curtainLayer.remove(rec.prim);
+                rec.prim = null;
+                rec.key = null;
+                rec.waiting = false;
+                curtainRecs.delete(rec);
+            }
+        }
+
+        function initTrailStyle() {
+            if (trailStyleReady) return;
+            trailStyleReady = true;
+            curtainLayer = viewer.scene.primitives.add(new Cesium.PrimitiveCollection());
+            curtainLook = new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true, closed: false });
+            viewer.scene.preUpdate.addEventListener(updateTrailStyle);
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // [SMOOTH PATH] Draws each path at a smoothed height.
+        // Aircraft report altitude in steps (25 ft, or 100 ft with older encoders), so a
+        // steady climb or descent arrives as a staircase. This evens the steps out.
+        //  • Only the height that is DRAWN changes: path, curtain and aircraft model.
+        //    Position over the ground, time, and everything stored are untouched.
+        //  • Each airborne point is averaged with its neighbours up to SMOOTH_HALF_S
+        //    seconds either side (nearer ones count more). The reach is always the same
+        //    on both sides, so a steady climb is not shifted and the ends of a path stay
+        //    exactly where they were recorded.
+        //  • Cap: a point is never drawn more than half a reporting step from its
+        //    recorded height (50 ft for 100 ft reporting, 12.5 ft for 25 ft).
+        //  • Points on the ground are left alone, and points either side of a gap in
+        //    coverage are not blended together.
+        //  • Altitude colours, labels and info-panel figures still use recorded values.
+        //  • History has a Smoothed / Recorded switch. Live is always smoothed; there the
+        //    newest few seconds of a path settle as the following reports arrive.
+        // ════════════════════════════════════════════════════════════════
+        const SMOOTH_HALF_S = 8;          // how far either side of a point the average reaches (seconds)
+        const SMOOTH_CAP_100_FT = 50;     // most a point may move when the aircraft reports in 100 ft steps
+        const SMOOTH_CAP_25_FT = 12.5;    // ... and when it reports in 25 ft steps
+        const SMOOTH_NOTE = '<div style="padding:5px 6px 2px;font-size:11px;line-height:1.35;color:#b8c4c4;">Path drawn smoothed; figures are as recorded.</div>';
+        let histSmooth = true;            // History: true = Smoothed, false = Recorded
+        let smoothReady = false;
+        const smoothCarto = new Cesium.Cartographic();
+
+        // Every point of a path once, in time order
+        function trailPoints(tr) {
+            const out = [];
+            let prev = null;
+            for (const seg of tr.segs) for (const pt of seg.pts) { if (pt !== prev) out.push(pt); prev = pt; }
+            return out;
+        }
+
+        // Remember a point as recorded. `air` says whether it is airborne; when not given (live paths)
+        // it is worked out from the height, because points on the ground are always placed at field elevation.
+        function trailNotePoint(pt, air) {
+            const c = Cesium.Cartographic.fromCartesian(pt.pos, undefined, smoothCarto);
+            pt.posRec = pt.pos;
+            pt.posSm = pt.pos;
+            pt.lonR = c.longitude;
+            pt.latR = c.latitude;
+            pt.hRec = c.height;
+            pt.air = air !== undefined ? air : Math.abs(c.height - ((cfg.fieldElevFt + cfg.geoidFt) * FT + GROUND_LIFT_M)) > 0.05;
+        }
+
+        // Smoothed position for every point at or after fromSec. capM = most a point may move (metres).
+        function trailSmooth(P, fromSec, capM) {
+            const n = P.length;
+            let a = 0;
+            while (a < n) {
+                if (!P[a].air) { a++; continue; }
+                let b = a;   // a..b = one unbroken airborne stretch
+                while (b + 1 < n && P[b + 1].air && P[b + 1].sec - P[b].sec <= GAP_BREAK_S) b++;
+                for (let i = a; i <= b; i++) {
+                    const pt = P[i];
+                    if (pt.sec < fromSec) continue;
+                    const reach = Math.min(SMOOTH_HALF_S, pt.sec - P[a].sec, P[b].sec - pt.sec);   // same reach both sides
+                    let sum = pt.hRec, weight = 1;
+                    for (let j = i - 1; j >= a && pt.sec - P[j].sec < reach; j--) { const w = 1 - (pt.sec - P[j].sec) / reach; sum += w * P[j].hRec; weight += w; }
+                    for (let j = i + 1; j <= b && P[j].sec - pt.sec < reach; j++) { const w = 1 - (P[j].sec - pt.sec) / reach; sum += w * P[j].hRec; weight += w; }
+                    const h = Math.min(pt.hRec + capM, Math.max(pt.hRec - capM, sum / weight));
+                    pt.posSm = Math.abs(h - pt.hRec) < 0.02 ? pt.posRec : Cesium.Cartesian3.fromRadians(pt.lonR, pt.latR, h);
+                }
+                a = b + 1;
+            }
+        }
+
+        // Draw a path (and move its aircraft) at the smoothed or the recorded heights
+        function trailApply(tr, P, smoothed, fromSec) {
+            for (const pt of P) {
+                if (pt.sec < fromSec || !pt.posRec) continue;
+                const pos = smoothed ? pt.posSm : pt.posRec;
+                if (pos === pt.pos) continue;
+                pt.pos = pos;
+                tr.samples.addSample(Cesium.JulianDate.fromDate(new Date(pt.sec * 1000)), pos);   // same time as before, so it replaces the old height
+            }
+        }
+
+        // Live: called for every report. Notes whether this aircraft reports altitude in 100 ft steps,
+        // and adds the note to its info panel.
+        function trailNoteReport(tr, ac) {
+            if (typeof ac.alt_baro === 'number') {
+                tr.fxBaroN = (tr.fxBaroN || 0) + 1;
+                if (ac.alt_baro % 100 !== 0) tr.fxBaroFine = true;
+            }
+            const d = tr.entity.description && tr.entity.description.getValue(viewer.clock.currentTime);
+            if (typeof d === 'string' && !d.endsWith(SMOOTH_NOTE)) tr.entity.description = d + SMOOTH_NOTE;
+        }
+
+        // Live: once a frame, smooth the part of each path that new reports have changed
+        function updateLiveSmoothing() {
+            for (const hex in tracks) {
+                const tr = tracks[hex];
+                if (tr.hist) continue;   // recorded visits are prepared when they are built
+                const capFt = (tr.fxBaroN >= 4 && !tr.fxBaroFine) ? SMOOTH_CAP_100_FT : SMOOTH_CAP_25_FT;
+                if (tr.last === tr.fxSmLast && capFt === tr.fxCapFt) continue;   // nothing new
+                const P = trailPoints(tr);
+                let fromSec = capFt === tr.fxCapFt ? Infinity : -Infinity;      // reporting step just became known: redo the whole path
+                for (const pt of P) {
+                    if (pt.posRec) continue;
+                    trailNotePoint(pt);
+                    fromSec = Math.min(fromSec, pt.sec - SMOOTH_HALF_S - GAP_BREAK_S);   // earlier points whose average can now reach further
+                }
+                tr.fxSmLast = tr.last;
+                tr.fxCapFt = capFt;
+                if (fromSec === Infinity) continue;
+                trailSmooth(P, fromSec, capFt * FT);
+                trailApply(tr, P, true, fromSec);
+            }
+        }
+
+        // History: the Smoothed / Recorded switch. Keeps the time, the selection and the view as they are.
+        function histSetSmooth(on) {
+            histSmooth = !!on;
+            document.getElementById('path-smooth').classList.toggle('path-on', histSmooth);
+            document.getElementById('path-recorded').classList.toggle('path-on', !histSmooth);
+            for (const id in tracks) {
+                const tr = tracks[id];
+                if (tr.hist) trailApply(tr, trailPoints(tr), histSmooth, -Infinity);
+            }
+            for (const rec of curtainRecs) rec.key = null;   // redraw the curtain to match
+        }
+
+        function initSmoothPath() {
+            if (smoothReady) return;
+            smoothReady = true;
+            document.getElementById('path-smooth').addEventListener('click', () => histSetSmooth(true));
+            document.getElementById('path-recorded').addEventListener('click', () => histSetSmooth(false));
+            viewer.scene.preUpdate.addEventListener(updateLiveSmoothing);
+        }
+
+        // ════════════════════════════════════════════════════════════════
         // [FULLSCREEN] The map's fullscreen button (bottom right) puts this page's own
         // content on screen — the title, Live / History, the Track and Airport lists,
         // the History search row and the map — instead of the whole page, so the site
@@ -2190,6 +2492,8 @@
             }
             initHistory();       // [HISTORY]
             initFullscreen();    // [FULLSCREEN]
+            initSmoothPath();    // [SMOOTH PATH] (before the curtain, so the curtain is drawn at the smoothed height in the same frame)
+            initTrailStyle();    // [TRAIL STYLE]
         }
 
         window._authSignIn = async () => {
