@@ -85,6 +85,18 @@
         #tl-time { min-width: 88px; text-align: center; font: 600 13px 'DM Sans', sans-serif; font-variant-numeric: tabular-nums; }
         #tl-speed { height: 36px; padding: 0 6px; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 8px; background: rgba(255, 255, 255, 0.14); color: #fff; font: 600 13px 'DM Sans', sans-serif; cursor: pointer; }
         #tl-speed option { color: #111; }
+        /* [FULLSCREEN] The fullscreen button shows only this page's own controls and the map, without the site navbar.
+           The map fills everything below the controls, so the view buttons are never cut off. Text turns white on the dark background. */
+        #main-content.a3d-fs { display: flex !important; flex-direction: column; background: #111; overflow: hidden; }
+        #main-content.a3d-fs .a3d-header { flex: 0 0 auto; max-width: none; margin: 10px 0; }
+        #main-content.a3d-fs #a3d-history { flex: 0 0 auto; max-width: none; margin: 0 0 10px; }
+        #main-content.a3d-fs .a3d-header h1 { min-width: 0; font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* one line, so the strip stays thin */
+        #main-content.a3d-fs .a3d-controls { flex: 0 0 auto; }
+        #main-content.a3d-fs .a3d-header h1, #main-content.a3d-fs #track-selector span, #main-content.a3d-fs #airport-selector span, #main-content.a3d-fs #a3d-history label { color: #fff; }
+        #main-content.a3d-fs #hist-note, #main-content.a3d-fs .hist-or { color: #b5b5b5; }
+        #main-content.a3d-fs #a3d-wrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; max-width: none; margin: 0; padding: 0; }
+        #main-content.a3d-fs #cesiumContainer { flex: 1 1 auto; height: auto; min-height: 0; border-radius: 0; }
+        #main-content.a3d-fs #a3d-status, #main-content.a3d-fs #a3d-legend { left: 12px; }
     </style>
 </head>
 
@@ -2127,6 +2139,23 @@
             }
         }
 
+        // ════════════════════════════════════════════════════════════════
+        // [FULLSCREEN] The map's fullscreen button (bottom right) puts this page's own
+        // content on screen — the title, Live / History, the Track and Airport lists,
+        // the History search row and the map — instead of the whole page, so the site
+        // navbar is left out. The matching styles are under [FULLSCREEN] in the CSS.
+        // ════════════════════════════════════════════════════════════════
+        let fullscreenReady = false;
+        function initFullscreen() {
+            if (fullscreenReady || !viewer.fullscreenButton) return;
+            fullscreenReady = true;
+            const page = document.getElementById('main-content');
+            viewer.fullscreenButton.viewModel.fullscreenElement = page;
+            document.addEventListener(Cesium.Fullscreen.changeEventName, () => {
+                page.classList.toggle('a3d-fs', Cesium.Fullscreen.element === page);
+            });
+        }
+
         // ── Auth (same pattern as portal.html) ──────────────────────────
         function showAuth() {
             document.getElementById('auth-screen').style.display = 'flex';
@@ -2160,6 +2189,7 @@
                 startAirport(profile.airport);
             }
             initHistory();       // [HISTORY]
+            initFullscreen();    // [FULLSCREEN]
         }
 
         window._authSignIn = async () => {
