@@ -234282,6 +234282,7 @@ const registrationRegistry = {
   "aa30cf": "N756EZ",
   "aa30d0": "N756F",
   "aa30d3": "N756FC",
+  "a30d33": "N296QS",
   "aa30dc": "N756FM",
   "aa30dd": "N756FN",
   "aa30e3": "N756FU",
