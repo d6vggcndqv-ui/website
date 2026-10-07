@@ -218,6 +218,7 @@ const typeCodeRegistry = {
   'N286VR': 'C56X',
   'N291DV': 'C56X',
   'N296VR': 'C56X',
+  'N296QS': 'E545',
   'N29QA': 'C56X',
   'N29ZR': 'C56X',
   'N2KK': 'C56X',
