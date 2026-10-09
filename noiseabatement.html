@@ -150,6 +150,17 @@
             flex-wrap: wrap;
         }
         .track-item .ti-row2 span { white-space: nowrap; }
+        /* [ADDRESS] complaint address lookup */
+        .na-addr-row { margin-top: -0.5rem; }
+        .na-addr-row #na-addr { width: 320px; }
+        #na-addr-status { font-size: 13px; color: #555; align-self: center; max-width: 520px; }
+        #na-addr-status.na-addr-err { color: #b91c1c; }
+        #na-addr-matches { display: none; flex-direction: column; gap: 4px; margin: -0.75rem 0 1.25rem; font-size: 13px; }
+        #na-addr-matches button { text-align: left; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; max-width: 640px; }
+        #na-addr-matches button:hover { background: #f5f3ff; border-color: #7c3aed; }
+        .track-item .ti-row3 { margin-top: 3px; font-size: 12px; color: #6d28d9; font-weight: 600; }
+        .na-addr-pin { width: 18px; height: 18px; border-radius: 50%; background: #7c3aed; border: 3px solid #fff; box-shadow: 0 0 0 1.5px #7c3aed, 0 1px 4px rgba(0,0,0,0.4); box-sizing: border-box; cursor: grab; }
+        .na-addr-label { background: #fff; border: 1px solid #7c3aed; color: #4c1d95; font-weight: 600; font-size: 12px; }
         .low-alt-dot {
             display: inline-block;
             width: 8px; height: 8px;
@@ -562,6 +573,25 @@
                 <span id="load-status" style="font-size:13px;color:#666;align-self:center;"></span>
             </div>
 
+            <!-- [ADDRESS] complaint address lookup: pin the address, keep only the tracks that passed near it -->
+            <div class="viewer-controls na-addr-row" id="na-addr-row">
+                <label>Report Address
+                    <input type="text" id="na-addr" placeholder="e.g. 12 Main St, Wappingers Falls, NY" autocomplete="off">
+                </label>
+                <label>Within
+                    <select id="na-addr-radius">
+                        <option value="0.5" selected>0.5 mi</option>
+                        <option value="1">1 mi</option>
+                        <option value="2">2 mi</option>
+                    </select>
+                </label>
+                <button class="primary" id="na-addr-find" type="button">Find</button>
+                <button id="na-addr-place" type="button" title="Click this, then click the map where the complaint came from">Place Pin</button>
+                <button id="na-addr-clear" type="button" style="display:none;">Clear pin</button>
+                <span id="na-addr-status"></span>
+            </div>
+            <div id="na-addr-matches"></div>
+
             <!-- Grid -->
             <div class="viewer-grid">
 
@@ -844,6 +874,7 @@
 
                 hideAuth();
                 initMap();
+                initAddressLookup();   // [ADDRESS]
                 // switchAirport must run AFTER initMap so the map exists for hotspot drawing
                 if (profile.role === 'admin') {
                     const select = document.getElementById('airport-select');
@@ -949,6 +980,7 @@
                 drawTrack(trackDoc);
                 loadRelatedFlights(trackDoc);
                 show3dLink(trackDoc);   // [VIEW IN 3D]
+                addressShowTrack(trackDoc);   // [ADDRESS] closest pass to the pin, and the pin in the 3D link
 
                 // Scroll so the full map is visible — slight delay lets the map render first
                 setTimeout(() => {
@@ -1038,6 +1070,370 @@
             const params = new URLSearchParams({ airport: currentAirportKey, track: trackDoc.docId });
             document.getElementById('na-3d-link').href = `${AIRSPACE_3D_PAGE}?${params.toString()}`;
             document.getElementById('na-3d-wrap').style.display = 'block';
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // [ADDRESS] Complaint address lookup.
+        //  • Type the address a complaint came from and press Find. A pin is dropped there,
+        //    the search radius is drawn (0.5, 1 or 2 miles), and the track list keeps only
+        //    the tracks that passed within that radius in the date and time searched,
+        //    closest first. Each shows its closest pass: distance from the pin, height
+        //    above the ground at the pin, and the time.
+        //  • Lookup: the US Census Bureau geocoder first (free, no account; street
+        //    addresses). If it finds nothing, OpenStreetMap's Nominatim (also free; finds
+        //    place names too). Nominatim's rules (operations.osmfoundation.org/policies/
+        //    nominatim): at most one search a second, no type-ahead, answers kept for
+        //    re-use. This page only searches when Find is pressed and remembers answers.
+        //  • The pin can be dragged, or placed by hand with "Place on map".
+        //  • Ground height at the pin comes from the free AWS elevation tiles (the same data
+        //    the 3D page uses). Heights use the recorded altitude this page shows elsewhere.
+        //  • Opening a track (new tab) and "View in 3D" carry the pin with them.
+        //  • The PDF shows the report location and that track's closest pass whenever the
+        //    track in the report passed within the radius.
+        //  • Nothing about the address is stored.
+        // ════════════════════════════════════════════════════════════════════
+        const ADDR_COLOR = '#7c3aed';
+        const ADDR_MAX_GAP_S = 20;          // points further apart than this are not joined when finding the closest pass
+        const ADDR_FAR_MI = 2;              // largest radius offered; tracks whose box is further than this are skipped quickly
+        const MI_M = 1609.344, FT_PER_M = 3.28084;
+        let addrPin = null;                 // { lat, lon, label, byHand }
+        let addrGroundFt = null;            // ground elevation at the pin (ft MSL); null until known
+        let addrGroundOk = false;           // false: elevation tiles unavailable, field elevation used
+        let addrMarker = null, addrCircle = null, addrTrackLayer = null;
+        let addrPasses = new Map();         // docId -> closest pass, for the current pin
+        let addrRanked = [];                // docIds within the radius, closest first, as listed
+        let addrPlacing = false, addrReady = false, addrSearchGen = 0, addrLastNominatim = 0;
+        const addrGeoCache = new Map();     // search text -> matches
+        const addrEl = (id) => document.getElementById(id);
+        const addrRadiusMi = () => Number(addrEl('na-addr-radius').value) || 0.5;
+        const addrMiText = (m) => (m / MI_M).toFixed(2) + ' mi';
+        const addrTimeText = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+
+        function addrStatus(text, isError) {
+            const el = addrEl('na-addr-status');
+            el.textContent = text || '';
+            el.classList.toggle('na-addr-err', !!isError);
+        }
+
+        // ── Closest pass of one track to the pin ──
+        function addrOnGround(p) { return p.alt <= getFieldElev() + 10; }   // the logger stores field elevation for aircraft on the ground
+        function addrClosestPass(doc) {
+            if (!addrPin || !doc || !Array.isArray(doc.track) || !doc.track.length) return null;
+            if (addrPasses.has(doc.docId)) return addrPasses.get(doc.docId);
+            const k = Math.PI / 180, R = 6371008.8, lat0 = addrPin.lat, lon0 = addrPin.lon, cx = Math.cos(lat0 * k);
+            const X = (p) => (p.lon - lon0) * k * cx * R, Y = (p) => (p.lat - lat0) * k * R;
+            let out = null;
+            const b = doc.bbox;
+            if (b && [b.minLat, b.maxLat, b.minLon, b.maxLon].every(v => typeof v === 'number')) {   // quick skip for tracks nowhere near
+                const nx = X({ lon: Math.min(Math.max(lon0, b.minLon), b.maxLon) }), ny = Y({ lat: Math.min(Math.max(lat0, b.minLat), b.maxLat) });
+                if (Math.hypot(nx, ny) > ADDR_FAR_MI * MI_M * 1.05) { addrPasses.set(doc.docId, out); return out; }
+            }
+            const pts = doc.track, startMs = Date.parse(doc.start || doc.timestamp);
+            const keep = (d, a, bb, u) => {
+                if (out && d >= out.distM) return;
+                const lerp = (f) => a[f] + u * (bb[f] - a[f]);
+                out = { distM: d, timeMs: startMs + lerp('t') * 1000, altFt: lerp('alt'), lat: lerp('lat'), lon: lerp('lon'),
+                        onGround: addrOnGround(a) && addrOnGround(bb) };
+            };
+            for (let i = 0; i < pts.length; i++) {
+                const a = pts[i];
+                if (typeof a.lat !== 'number' || typeof a.lon !== 'number' || typeof a.alt !== 'number') continue;
+                const ax = X(a), ay = Y(a);
+                keep(Math.hypot(ax, ay), a, a, 0);
+                const n = pts[i + 1];
+                if (!n || typeof n.lat !== 'number' || typeof n.lon !== 'number' || typeof n.alt !== 'number' || n.t - a.t > ADDR_MAX_GAP_S) continue;
+                const dx = X(n) - ax, dy = Y(n) - ay, len2 = dx * dx + dy * dy;
+                if (!len2) continue;
+                const u = -(ax * dx + ay * dy) / len2;
+                if (u > 0 && u < 1) keep(Math.hypot(ax + u * dx, ay + u * dy), a, n, u);   // somewhere between the two recorded points
+            }
+            addrPasses.set(doc.docId, out);
+            return out;
+        }
+        function addrHeightText(pass) {
+            if (pass.onGround) return 'on the ground';
+            if (addrGroundFt == null) return 'height …';
+            return `${Math.max(0, Math.round(pass.altFt - addrGroundFt)).toLocaleString()} ft above`;
+        }
+        function addrPassText(pass) { return `${addrMiText(pass.distM)} · ${addrHeightText(pass)} · ${addrTimeText(pass.timeMs)}`; }
+
+        // ── Hooks used by the existing list, track and PDF code ──
+        // the tracks that pass the other filters (changed in place): keep those within the radius, closest first
+        function addressApply(list) {
+            addrRanked = [];
+            if (!addrPin) return;
+            const total = list.length, rM = addrRadiusMi() * MI_M;
+            const kept = list.map(doc => ({ doc, pass: addrClosestPass(doc) }))
+                .filter(x => x.pass && x.pass.distM <= rM)
+                .sort((a, b) => a.pass.distM - b.pass.distM);
+            list.length = 0;
+            kept.forEach(x => list.push(x.doc));
+            addrRanked = kept.map(x => x.doc.docId);
+            const farMi = map ? map.distance([addrPin.lat, addrPin.lon], getAirportCoord()) / MI_M : 0;   // a long way off usually means the wrong town
+            if (farMi > 25) { addrStatus(`${addrPin.label} · this is ${Math.round(farMi)} mi from the airport. Check the town or state.`, true); return; }
+            if (total) addrStatus(`${addrPin.label} · ${kept.length} of ${total} track${total === 1 ? '' : 's'} passed within ${addrRadiusMi()} mi`);
+            else addrStatus(`${addrPin.label} · load tracks to see which passed within ${addrRadiusMi()} mi`);
+        }
+        function addressEmptyMessage(listEl) {
+            if (addrPin && tracks.length) listEl.innerHTML = `<div class="empty-state">No tracks passed within ${addrRadiusMi()} mi of the pin in this time range.<br>Try a larger distance or a wider time range.</div>`;
+        }
+        function addressAnnotateRow(el, doc) {
+            const pass = addrPin && addrClosestPass(doc);
+            if (!pass) return;
+            const row = document.createElement('div');
+            row.className = 'ti-row3';
+            row.textContent = 'Closest pass: ' + addrPassText(pass);
+            el.appendChild(row);
+        }
+        function addressAddToLink(params) {
+            if (!addrPin) return;
+            params.set('pin', `${addrPin.lat.toFixed(6)},${addrPin.lon.toFixed(6)}`);
+            params.set('pin-label', addrPin.label);
+            params.set('pin-radius', String(addrRadiusMi()));
+        }
+        // with a track open: dashed line from the pin to the closest pass, view showing both, pin in the 3D link
+        function addressShowTrack(doc) {
+            if (addrTrackLayer) { addrTrackLayer.remove(); addrTrackLayer = null; }
+            const link = addrEl('na-3d-link');
+            if (link && link.getAttribute('href') && link.getAttribute('href') !== '#') {
+                const [base, q] = link.getAttribute('href').split('?');
+                const params = new URLSearchParams(q || '');
+                ['pin', 'pin-label', 'pin-radius'].forEach(k => params.delete(k));
+                addressAddToLink(params);
+                link.setAttribute('href', `${base}?${params.toString()}`);
+            }
+            if (!addrPin || !doc || !map) return;
+            const pass = addrClosestPass(doc);
+            if (!pass) return;
+            addrTrackLayer = L.layerGroup().addTo(map);
+            L.polyline([[addrPin.lat, addrPin.lon], [pass.lat, pass.lon]], { color: ADDR_COLOR, weight: 2, dashArray: '6,5', interactive: false }).addTo(addrTrackLayer);
+            L.circleMarker([pass.lat, pass.lon], { radius: 5, color: '#fff', weight: 2, fillColor: ADDR_COLOR, fillOpacity: 1 })
+                .bindTooltip('Closest pass: ' + addrPassText(pass), { permanent: true, direction: 'top', offset: [0, -6], className: 'na-addr-label' })
+                .addTo(addrTrackLayer);
+            try {
+                const pts = (doc.track || []).map(p => [p.lat, p.lon]);
+                map.fitBounds(L.latLngBounds(pts.concat([[addrPin.lat, addrPin.lon]])).pad(0.15));
+            } catch (e) {}
+        }
+        const addrIsClosest = (d) => !!addrPin && !!d && addrRanked.includes(d.docId);   // any track listed as passing within the radius
+        function addressPdfRows(d) {
+            if (!addrIsClosest(d)) return [];
+            const pass = addrClosestPass(d);
+            if (!pass) return [];
+            let label = addrPin.label;
+            if (label.length > 58) label = label.slice(0, 57) + '…';
+            const height = pass.onGround ? 'On the ground'
+                : addrGroundFt == null ? '—'
+                : `${Math.max(0, Math.round(pass.altFt - addrGroundFt)).toLocaleString()} ft (ground ${Math.round(addrGroundFt).toLocaleString()} ft MSL${addrGroundOk ? '' : ', approx.'})`;
+            return [
+                ['Report Location', label],
+                ['Closest Pass', `${addrMiText(pass.distM)} at ${addrTimeText(pass.timeMs)}`],
+                ['Height Above Location', height]
+            ];
+        }
+        function addressDrawOnPdfMap(offMap, renderer, d) {
+            if (!addrIsClosest(d)) return;
+            const pass = addrClosestPass(d);
+            L.circle([addrPin.lat, addrPin.lon], { radius: addrRadiusMi() * MI_M, color: ADDR_COLOR, weight: 1.5, fillColor: ADDR_COLOR, fillOpacity: 0.05, dashArray: '4,4', renderer, interactive: false }).addTo(offMap);
+            if (pass) L.polyline([[addrPin.lat, addrPin.lon], [pass.lat, pass.lon]], { color: ADDR_COLOR, weight: 2, dashArray: '6,5', renderer, interactive: false }).addTo(offMap);
+            L.circleMarker([addrPin.lat, addrPin.lon], { radius: 7, color: '#fff', weight: 3, fillColor: ADDR_COLOR, fillOpacity: 1, renderer, interactive: false }).addTo(offMap);
+        }
+
+        // ── Address lookup ──
+        // US Census Bureau geocoder. It does not allow ordinary cross-site requests, so it is called the way
+        // its documentation describes (format=jsonp with a callback).
+        function addrCensus(q) {
+            return new Promise((resolve) => {
+                const cb = 'naCensus' + Date.now() + Math.floor(Math.random() * 1e6);
+                const tag = document.createElement('script');
+                let timer = null;
+                const done = (v) => { clearTimeout(timer); try { delete window[cb]; } catch (e) { window[cb] = undefined; } tag.remove(); resolve(v); };
+                timer = setTimeout(() => done(null), 10000);
+                window[cb] = (data) => {
+                    const m = (data && data.result && Array.isArray(data.result.addressMatches)) ? data.result.addressMatches : [];
+                    done(m.filter(x => x && x.coordinates).map(x => ({ lat: Number(x.coordinates.y), lon: Number(x.coordinates.x), label: String(x.matchedAddress || q) })));
+                };
+                tag.onerror = () => done(null);
+                tag.src = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?' +
+                    new URLSearchParams({ address: q, benchmark: 'Public_AR_Current', format: 'jsonp', callback: cb }).toString();
+                document.head.appendChild(tag);
+            });
+        }
+        // OpenStreetMap Nominatim, preferring results near the airport
+        async function addrNominatim(q) {
+            const wait = 1100 - (Date.now() - addrLastNominatim);   // at most one search a second
+            if (wait > 0) await new Promise(r => setTimeout(r, wait));
+            addrLastNominatim = Date.now();
+            const [la, lo] = getAirportCoord();
+            const params = new URLSearchParams({ q, format: 'jsonv2', addressdetails: '1', limit: '5', countrycodes: 'us',
+                viewbox: `${lo - 0.35},${la + 0.25},${lo + 0.35},${la - 0.25}`, bounded: '0' });
+            const res = await fetch('https://nominatim.openstreetmap.org/search?' + params.toString(), { headers: { Accept: 'application/json' } });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const list = await res.json();
+            return (Array.isArray(list) ? list : []).map(r => {
+                const a = r.address || {};
+                const street = [a.house_number, a.road].filter(Boolean).join(' ');
+                const town = a.city || a.town || a.village || a.hamlet || a.suburb || a.county || '';
+                const parts = [r.name && r.name !== a.road ? r.name : '', street, town, a.state].filter(Boolean);
+                return { lat: Number(r.lat), lon: Number(r.lon), label: parts.length >= 2 ? parts.join(', ') : String(r.display_name || q) };
+            }).filter(m => isFinite(m.lat) && isFinite(m.lon));
+        }
+        // -> { matches: [...], failed: true when neither service answered }
+        async function addrLookup(q) {
+            const key = q.trim().toLowerCase();
+            if (addrGeoCache.has(key)) return addrGeoCache.get(key);
+            const census = await addrCensus(q);   // null: no answer
+            let matches = census || [], osmFailed = false;
+            if (!matches.length) {
+                try { matches = await addrNominatim(q); }
+                catch (err) { console.warn('[ADDRESS] Nominatim lookup failed:', err); osmFailed = true; }
+            }
+            const out = { matches, failed: !matches.length && census === null && osmFailed };
+            if (!out.failed) addrGeoCache.set(key, out);
+            return out;
+        }
+        async function addressFind() {
+            const q = addrEl('na-addr').value.trim();
+            addrEl('na-addr-matches').style.display = 'none';
+            addrEl('na-addr-matches').innerHTML = '';
+            if (!q) { addrStatus('Type the address the complaint came from.', true); return; }
+            const gen = ++addrSearchGen;
+            addrStatus('Looking up the address…');
+            const found = await addrLookup(q);
+            if (gen !== addrSearchGen) return;
+            const matches = found.matches;
+            if (found.failed) {
+                addrStatus('The address lookup is not answering right now. Try again, or click "Place on map" and click where it is.', true);
+                return;
+            }
+            if (!matches.length) {
+                addrStatus('Address not found. Check the town, or click "Place on map" and click where it is.', true);
+                return;
+            }
+            if (matches.length === 1) { addressSetPin(matches[0], true); return; }
+            const box = addrEl('na-addr-matches');
+            box.innerHTML = '';
+            const note = document.createElement('div');
+            note.textContent = 'More than one match. Pick the right one:';
+            note.style.color = '#555';
+            box.appendChild(note);
+            matches.slice(0, 5).forEach(m => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = m.label;
+                b.addEventListener('click', () => { box.style.display = 'none'; box.innerHTML = ''; addressSetPin(m, true); });
+                box.appendChild(b);
+            });
+            box.style.display = 'flex';
+            addrStatus('');
+        }
+
+        // ── Ground elevation at the pin (ft MSL) from the AWS terrain tiles ──
+        async function addrGroundElevationFt(lat, lon) {
+            const z = 14, n = 2 ** z, latR = lat * Math.PI / 180;
+            const xf = (lon + 180) / 360 * n, yf = (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n;
+            const x = Math.floor(xf), y = Math.floor(yf);
+            const res = await fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const blob = await res.blob();
+            let bmp;
+            try { bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); }
+            catch (e) { bmp = await createImageBitmap(blob); }
+            const c = document.createElement('canvas');
+            c.width = bmp.width; c.height = bmp.height;
+            const ctx = c.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(bmp, 0, 0);
+            const S = bmp.width, px = ctx.getImageData(0, 0, S, S).data;
+            const h = (i, j) => { const o = (j * S + i) * 4; return px[o] * 256 + px[o + 1] + px[o + 2] / 256 - 32768; };   // metres above sea level
+            const fx = Math.min(Math.max((xf - x) * S - 0.5, 0), S - 1), fy = Math.min(Math.max((yf - y) * S - 0.5, 0), S - 1);
+            const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = Math.min(x0 + 1, S - 1), y1 = Math.min(y0 + 1, S - 1), tx = fx - x0, ty = fy - y0;
+            const m = (h(x0, y0) * (1 - tx) + h(x1, y0) * tx) * (1 - ty) + (h(x0, y1) * (1 - tx) + h(x1, y1) * tx) * ty;
+            return m * FT_PER_M;
+        }
+
+        // ── Pin ──
+        function addrRefresh() {
+            renderList();
+            if (selectedDoc) addressShowTrack(selectedDoc);
+        }
+        function addressSetPin(pin, fit) {
+            if (!map) return;
+            addrPin = { lat: pin.lat, lon: pin.lon, label: pin.label || 'Pin', byHand: !!pin.byHand };
+            addrPasses = new Map();
+            addrGroundFt = null; addrGroundOk = false;
+            const ll = [addrPin.lat, addrPin.lon];
+            if (!addrMarker) {
+                addrMarker = L.marker(ll, { draggable: true, keyboard: false, zIndexOffset: 1000,
+                    icon: L.divIcon({ className: '', html: '<div class="na-addr-pin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }) })
+                    .bindTooltip('', { direction: 'top', offset: [0, -10] });
+                addrMarker.on('dragend', () => {
+                    const p = addrMarker.getLatLng();
+                    addressSetPin({ lat: p.lat, lon: p.lng, label: `Pin placed by hand (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})`, byHand: true }, false);
+                });
+                addrCircle = L.circle(ll, { radius: addrRadiusMi() * MI_M, color: ADDR_COLOR, weight: 1.5, fillColor: ADDR_COLOR, fillOpacity: 0.05, dashArray: '4,4', interactive: false });
+            }
+            addrMarker.setLatLng(ll).setTooltipContent(addrPin.label).addTo(map);
+            addrCircle.setLatLng(ll).setRadius(addrRadiusMi() * MI_M).addTo(map);
+            addrEl('na-addr-clear').style.display = '';
+            if (fit) { try { map.fitBounds(addrCircle.getBounds().pad(0.25)); } catch (e) {} }
+            addrRefresh();
+            const mine = addrPin;
+            addrGroundElevationFt(mine.lat, mine.lon)
+                .then(ft => { if (addrPin === mine) { addrGroundFt = ft; addrGroundOk = true; addrRefresh(); } })
+                .catch(err => {
+                    console.warn('[ADDRESS] ground elevation unavailable, using field elevation:', err);
+                    if (addrPin === mine) { addrGroundFt = getFieldElev(); addrGroundOk = false; addrRefresh(); }
+                });
+        }
+        function addressClear() {
+            addrPin = null; addrPasses = new Map(); addrRanked = []; addrPlacing = false;
+            addrSearchGen++;
+            if (addrMarker) addrMarker.remove();
+            if (addrCircle) addrCircle.remove();
+            if (addrTrackLayer) { addrTrackLayer.remove(); addrTrackLayer = null; }
+            if (map) map.getContainer().style.cursor = '';
+            if (!addrReady) return;
+            addrEl('na-addr').value = '';
+            addrEl('na-addr-clear').style.display = 'none';
+            addrEl('na-addr-matches').style.display = 'none';
+            addrStatus('');
+            const link = addrEl('na-3d-link');
+            if (link && link.getAttribute('href') && link.getAttribute('href') !== '#') addressShowTrack(null);   // drop the pin from the 3D link
+        }
+
+        function initAddressLookup() {
+            if (addrReady || !map) return;
+            addrReady = true;
+            addrEl('na-addr-find').addEventListener('click', addressFind);
+            addrEl('na-addr').addEventListener('keydown', e => { if (e.key === 'Enter') addressFind(); });
+            addrEl('na-addr-clear').addEventListener('click', () => { addressClear(); renderList(); });
+            addrEl('na-addr-place').addEventListener('click', () => {
+                addrPlacing = true;
+                map.getContainer().style.cursor = 'crosshair';
+                addrStatus('Click the map where the complaint came from.');
+            });
+            map.on('click', e => {
+                if (!addrPlacing) return;
+                addrPlacing = false;
+                map.getContainer().style.cursor = '';
+                addressSetPin({ lat: e.latlng.lat, lon: e.latlng.lng, label: `Pin placed by hand (${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)})`, byHand: true }, false);
+            });
+            addrEl('na-addr-radius').addEventListener('change', () => {
+                if (addrCircle) addrCircle.setRadius(addrRadiusMi() * MI_M);
+                if (addrPin) addrRefresh();
+            });
+            const sel = addrEl('airport-select');
+            if (sel) sel.addEventListener('change', () => { addressClear(); });   // a pin near one airport means nothing at the other
+            // a track opened from the list arrives with the pin in its link
+            const qp = new URLSearchParams(location.search);
+            const pin = (qp.get('pin') || '').split(',').map(Number);
+            if (pin.length === 2 && pin.every(isFinite) && Math.abs(pin[0]) <= 90 && Math.abs(pin[1]) <= 180) {
+                const r = qp.get('pin-radius');
+                if ([...addrEl('na-addr-radius').options].some(o => o.value === r)) addrEl('na-addr-radius').value = r;
+                const label = (qp.get('pin-label') || 'Pin').slice(0, 200);
+                addrEl('na-addr').value = label;
+                addressSetPin({ lat: pin[0], lon: pin[1], label, byHand: /^Pin placed by hand/.test(label) }, false);
+            }
         }
 
         // ── Leaflet map ─────────────────────────────────────────────────────
@@ -1276,6 +1672,7 @@
             document.getElementById('na-related-wrap').style.display = 'none';
             document.getElementById('na-related-list').innerHTML = '';
             document.getElementById('na-3d-wrap').style.display = 'none';   // [VIEW IN 3D]
+            addressClear();   // [ADDRESS]
             selectedDoc = null;
             naCancelAnim();
             if (trackLayer) trackLayer.clearLayers();
@@ -1303,6 +1700,7 @@
                     if (opFilter === 'all') return true;
                     return opFilter === 'yes' ? doc.hasRelatedFlight === true : doc.hasRelatedFlight !== true;
                 });
+            addressApply(visibleTracks);   // [ADDRESS] only tracks that passed near the pin, closest first
 
             countEl.textContent = visibleTracks.length ? `${visibleTracks.length} track${visibleTracks.length !== 1 ? 's' : ''}` : '';
 
@@ -1310,6 +1708,7 @@
                 listEl.innerHTML = filterMode === 'exceedance'
                     ? '<div class="empty-state">No exceedances found for this date range.</div>'
                     : '<div class="empty-state">No tracks found for this date range.<br>Try widening the window or check the Firestore console.</div>';
+                addressEmptyMessage(listEl);   // [ADDRESS]
                 return;
             }
 
@@ -1347,6 +1746,7 @@
                         ${typeStr ? `<span>${typeStr}</span>` : ''}
                         <span>${dur}</span>
                     </div>`;
+                addressAnnotateRow(el, doc);   // [ADDRESS] closest pass to the pin
 
                 el.addEventListener('click', () => {
                     const base  = window.location.href.split('?')[0];
@@ -1368,6 +1768,7 @@
                     if (exc !== 'all') params.set('exceedance', exc);
                     const op = document.getElementById('filter-operation').value;
                     if (op !== 'all')  params.set('operation', op);
+                    addressAddToLink(params);   // [ADDRESS] the track tab gets the pin too
                     window.open(`${base}?${params.toString()}`, '_blank');
                 });
 
@@ -1563,6 +1964,7 @@
                     ['Data Points',                     pts.length.toLocaleString()],
                     ['Below Pattern Alt (1,000 ft AGL)', belowPatt ? 'YES' : 'No'],
                 ];
+                fields.push(...addressPdfRows(d));   // [ADDRESS] report location and closest pass, when this track passed within the radius
 
                 pdf.setFontSize(11);
                 pdf.setFont('helvetica', 'bold');
@@ -1655,6 +2057,7 @@
                               fillOpacity: 1, weight: 2, renderer, interactive: false }
                         ).addTo(offMap);
                     }
+                    addressDrawOnPdfMap(offMap, renderer, d);   // [ADDRESS] pin, radius and closest pass, when this track passed within the radius
 
                     // Wait for tiles to load, then merge tile images + canvas overlay
                     const TIMEOUT = 8000;
