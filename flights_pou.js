@@ -28,6 +28,9 @@ const RUNWAYS = [
 ];
 const RUNWAY_CORRIDOR_KM = 0.15;
 const LOW_SPEED_THRESHOLD_KTS = 10;
+// [PENDING LANDING] NEW: hold a ground-flip landing briefly to see if it's a touch and go
+const PENDING_LANDING_HOLD_MS = 30000;   // max time to hold before logging the Landing
+const PENDING_LANDING_MIN_GS_KTS = 25;   // slower than this on the ground = staying down, log the Landing
 
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -197,7 +200,19 @@ async function fetchAndDetect() {
         state.helicopterClimbs = 0;
         state.wasDescendingOnRunway = false;
         state.maxDistanceWhileAirborne = 0;
-        logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Landing", state.lastRunway);
+        // [PENDING LANDING] fixed-wing landings are held instead of logged; helicopters log immediately as before
+        if (isHelicopter) {
+          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Landing", state.lastRunway);
+        } else {
+          state.pendingLanding = {
+            time: now,
+            registration: registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight,
+            aacAdg: aacAdg,
+            category: category,
+            aircraftClass: aircraftClass,
+            runway: state.lastRunway
+          };
+        }
       }
 
       // --- LANDING option 2: within airport area, was descending on runway, now very slow (under 5kts) ---
@@ -213,6 +228,31 @@ async function fetchAndDetect() {
         state.consecutiveClimbs = 0;
         state.wasDescendingOnRunway = false;
         logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Landing", state.lastRunway);
+      }
+
+      // --- [PENDING LANDING] NEW: resolve a held landing ---
+      if (state.pendingLanding) {
+        const pending = state.pendingLanding;
+        const liftedOff  = !isOnGround(currentAlt) && typeof currentAlt === "number";
+        const slowedDown = typeof flight.gs === "number" && flight.gs < PENDING_LANDING_MIN_GS_KTS;
+        const leftRunway = isOnGround(currentAlt) && !isOnRunway(flight.lat, flight.lon);
+
+        if (liftedOff) {
+          // airborne again without ever slowing to taxi speed: one Touch and Go
+          state.pendingLanding = null;
+          state.lastTouchAndGo = now;
+          state.lastTakeoff = now;   // also stops TAKEOFF option 1 below from firing
+          state.landingLogged = false;
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
+          state.wasDescendingOnRunway = false;
+          touchAndGoLoggedThisIteration = true;
+          logFlight(pending.registration, pending.aacAdg, pending.category, pending.aircraftClass, "Touch and Go", state.lastRunway);
+        } else if (slowedDown || leftRunway) {
+          // staying down: log the held Landing
+          state.pendingLanding = null;
+          logFlight(pending.registration, pending.aacAdg, pending.category, pending.aircraftClass, "Landing", pending.runway);
+        }
       }
 
       // --- TAKEOFF option 1: was on ground, now showing a number ---
@@ -391,6 +431,16 @@ async function fetchAndDetect() {
 
       aircraftState[flight.hex] = state;
     });
+
+    // --- [PENDING LANDING] NEW: timeout sweep, logs any landing held longer than the hold window ---
+    // Runs outside the loop so a landing still gets logged if the aircraft drops out of the feed.
+    for (const hex in aircraftState) {
+      const pending = aircraftState[hex].pendingLanding;
+      if (pending && (now - pending.time) > PENDING_LANDING_HOLD_MS) {
+        aircraftState[hex].pendingLanding = null;
+        logFlight(pending.registration, pending.aacAdg, pending.category, pending.aircraftClass, "Landing", pending.runway);
+      }
+    }
 
     previousAircraft = currentAircraft;
 
