@@ -2442,6 +2442,71 @@
         }
 
         // ════════════════════════════════════════════════════════════════
+        // [REPORT PIN] Marks a report address passed in from Noise Abatement.
+        //  The "View in 3D" link adds  pin=<lat>,<lon>  pin-label=<address>  pin-radius=<miles>.
+        //  This draws a purple pin on the ground at the address with the address above
+        //  it, and the same search radius as a dashed ring on the ground. It shows in
+        //  History only. Without those link values nothing is drawn. Like the paths,
+        //  the pin and ring are not hidden behind hills.
+        //  Clicking the pin works like clicking empty space (back to all flights).
+        // ════════════════════════════════════════════════════════════════
+        const REPORT_COLOR = '#7c3aed';
+        const REPORT_PIN_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="' + REPORT_COLOR + '" stroke="#ffffff" stroke-width="3"/></svg>');
+        let reportPinReady = false;
+        function initReportPin() {
+            if (reportPinReady) return;
+            reportPinReady = true;
+            const qp = new URLSearchParams(location.search);
+            const ll = (qp.get('pin') || '').split(',').map(Number);
+            if (ll.length !== 2 || !ll.every(isFinite) || Math.abs(ll[0]) > 90 || Math.abs(ll[1]) > 180) return;
+            const [lat, lon] = ll;
+            let label = (qp.get('pin-label') || 'Report location').trim().slice(0, 200);
+            if (label.length > 48) label = label.slice(0, 47) + '…';
+            const radiusMi = Number(qp.get('pin-radius'));
+            const color = Cesium.Color.fromCssColorString(REPORT_COLOR);
+            // Heights come from the same elevation tiles as the curtain ([TRAIL STYLE]), so the pin and ring sit on
+            // the ground whatever detail the map has loaded so far. Field elevation is used until a tile arrives.
+            const k = Math.PI / 180;
+            const ring = [];
+            if (radiusMi > 0 && radiusMi <= 10) {   // the radius searched on Noise Abatement
+                const r = radiusMi * 1609.344;
+                for (let i = 0; i <= 120; i++) {
+                    const a = (i / 120) * 2 * Math.PI;
+                    ring.push([lon + (r * Math.sin(a)) / (6371008.8 * Math.cos(lat * k)) / k, lat + (r * Math.cos(a)) / 6371008.8 / k]);
+                }
+            }
+            let allKnown = true;
+            const onGround = (lo, la, liftM) => {
+                let g = curtainGroundM(lo * k, la * k);
+                if (g === undefined) { allKnown = false; g = (cfg.fieldElevFt + cfg.geoidFt) * FT; }
+                return Cesium.Cartesian3.fromDegrees(lo, la, g + liftM);
+            };
+            const pin = viewer.entities.add({
+                billboard: { image: REPORT_PIN_ICON, width: 22, height: 22, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                label: {
+                    text: label, font: '600 13px "DM Sans", sans-serif', fillColor: Cesium.Color.WHITE,
+                    showBackground: true, backgroundColor: color.withAlpha(0.88), backgroundPadding: new Cesium.Cartesian2(8, 5),
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM, pixelOffset: new Cesium.Cartesian2(0, -16),
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                }
+            });
+            const ringEntity = ring.length ? viewer.entities.add({
+                polyline: { width: 2.5, material: new Cesium.PolylineDashMaterialProperty({ color, dashLength: 16 }) }
+            }) : null;
+            let seenEpoch = -1, settled = false;
+            viewer.scene.preUpdate.addEventListener(() => {   // place now, and again each time another elevation tile arrives
+                if (pin.show !== historyOn) { pin.show = historyOn; if (ringEntity) ringEntity.show = historyOn; }   // History only
+                if (settled || seenEpoch === curtainEpoch) return;
+                seenEpoch = curtainEpoch;
+                allKnown = true;
+                pin.position = onGround(lon, lat, 2);
+                if (ringEntity) ringEntity.polyline.positions = ring.map(([lo, la]) => onGround(lo, la, 3));
+                settled = allKnown;
+            });
+        }
+
+        // ════════════════════════════════════════════════════════════════
         // [FULLSCREEN] The map's fullscreen button (bottom right) puts this page's own
         // content on screen — the title, Live / History, the Track and Airport lists,
         // the History search row and the map — instead of the whole page, so the site
@@ -2493,6 +2558,7 @@
             initHistory();       // [HISTORY]
             initFullscreen();    // [FULLSCREEN]
             initSmoothPath();    // [SMOOTH PATH] (before the curtain, so the curtain is drawn at the smoothed height in the same frame)
+            initReportPin();     // [REPORT PIN]
             initTrailStyle();    // [TRAIL STYLE]
         }
 
