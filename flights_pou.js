@@ -130,7 +130,7 @@ const aircraftTypeCache = {};
 
 async function fetchAndDetect() {
   try {
-    const response = await fetch('https://map.fl-technologies-data.com/tar1090/data/aircraft.json');
+    const response = await fetch('/tar1090/data/aircraft.json');
     const data = await response.json();
     const now = Date.now();
     const currentAircraft = {};
@@ -848,7 +848,7 @@ async function pruneOldTracks() {
 // ---- Main capture pass (own fetch, own interval) ----
 async function captureTracks() {
   try {
-    const response = await fetch('https://map.fl-technologies-data.com/tar1090/data/aircraft.json');
+    const response = await fetch('/tar1090/data/aircraft.json');
     const data = await response.json();
     const nowMs = Date.now();
  
