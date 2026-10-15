@@ -9284,6 +9284,7 @@ const classRegistry = {
   "a058e3": "Single-Engine",
   "a058e4": "Single-Engine",
   "a058e5": "Single-Engine",
+  "a058e6": "Single-Engine",
   "a058e7": "Turbine",
   "a058e9": "Single-Engine",
   "a058ea": "Single-Engine",
