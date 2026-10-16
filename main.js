@@ -54,7 +54,7 @@ async function findCameraEvent(registration, isoTimestamp, windowSeconds = 60) {
  * @returns {string} HTML string for the icon link
  */
 function cameraIconHtml(eventId) {
-    return `<a href="${CAMERA_API_BASE}/events/${eventId}/thumbnail?api_key=${CAMERA_API_KEY}" target="_blank" title="View photo" style="text-decoration:none;font-size:11px;color:#0057ff;margin-left:4px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M3 7h3l2-3h8l2 3h3v13H3z"></path><circle cx="12" cy="13" r="4"></circle></svg></a>`;
+    return `<a href="${CAMERA_API_BASE}/events/${eventId}/thumbnail?api_key=${CAMERA_API_KEY}" target="_blank" title="View photo or video" style="text-decoration:none;font-size:11px;color:#0057ff;margin-left:4px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0057ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M3 7h3l2-3h8l2 3h3v13H3z"></path><circle cx="12" cy="13" r="4"></circle></svg></a>`;
 }
 
 /**
@@ -117,3 +117,86 @@ function attachCameraIcons(pageRows) {
         });
     });
 }
+
+// ── Camera icon: Photo / Video chooser popover (ADDED) ───────
+// Intercepts clicks on camera icons injected by attachCameraIcons()
+// and shows a small popover anchored under the icon offering:
+//   Photo → opens the existing thumbnail URL in a new tab
+//   Video → same URL with "/thumbnail?" replaced by "/video?"
+// Additive only: relies on the existing [data-camera-slot] markup.
+
+let cameraChooserEl = null;
+let cameraChooserAnchor = null;
+
+function closeCameraChooser() {
+    if (cameraChooserEl) cameraChooserEl.remove();
+    cameraChooserEl = null;
+    cameraChooserAnchor = null;
+}
+
+function openCameraChooser(linkEl) {
+    closeCameraChooser();
+
+    const photoUrl = linkEl.href;
+    const videoUrl = photoUrl.replace('/thumbnail?', '/video?');
+
+    const menu = document.createElement('div');
+    menu.setAttribute('data-camera-chooser', '');
+    menu.style.cssText =
+        'position:absolute;z-index:9999;display:flex;flex-direction:column;' +
+        'background:#fff;border:1px solid #d0d7e2;border-radius:6px;' +
+        'box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px;min-width:90px;';
+
+    const makeBtn = (label, url) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.style.cssText =
+            'background:none;border:none;padding:6px 12px;text-align:left;' +
+            'font-size:12px;color:#222;cursor:pointer;border-radius:4px;';
+        b.addEventListener('mouseenter', () => { b.style.background = '#eef3ff'; b.style.color = '#0057ff'; });
+        b.addEventListener('mouseleave', () => { b.style.background = 'none';    b.style.color = '#222'; });
+        b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.open(url, '_blank', 'noopener');
+            closeCameraChooser();
+        });
+        return b;
+    };
+
+    menu.append(makeBtn('Photo', photoUrl), makeBtn('Video', videoUrl));
+    document.body.appendChild(menu);
+
+    // Anchor just below the icon; nudge left if it would overflow the viewport.
+    const r = linkEl.getBoundingClientRect();
+    menu.style.top  = `${r.bottom + window.scrollY + 4}px`;
+    menu.style.left = `${r.left + window.scrollX}px`;
+    const mr = menu.getBoundingClientRect();
+    if (mr.right > window.innerWidth - 8) {
+        menu.style.left = `${window.innerWidth - mr.width - 8 + window.scrollX}px`;
+    }
+
+    cameraChooserEl = menu;
+    cameraChooserAnchor = linkEl;
+}
+
+// Delegated: icons are injected after render, so listen at the document level.
+document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-camera-chooser]')) return; // handled by the buttons
+
+    const link = e.target.closest('[data-camera-slot] a');
+    if (link) {
+        e.preventDefault();
+        if (cameraChooserAnchor === link) { closeCameraChooser(); return; } // toggle off
+        openCameraChooser(link);
+        return;
+    }
+
+    closeCameraChooser(); // click anywhere else dismisses
+});
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCameraChooser(); });
+// Close on scroll/resize so the popover never drifts away from its icon
+// (covers scrolling inside table containers too, via capture).
+window.addEventListener('scroll', closeCameraChooser, true);
+window.addEventListener('resize', closeCameraChooser);
