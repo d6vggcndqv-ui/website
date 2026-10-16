@@ -3,7 +3,7 @@
 // autonomous camera system at fltech-p2, and renders a small camera
 // icon linking to the footage when a match is found.
 
-const CAMERA_API_BASE = 'https://fltech-p2.tail15d9e4.ts.net';
+const CAMERA_API_BASE = 'https://fltech-p2.tailf2088d.ts.net';
 const CAMERA_API_KEY  = '9fd29c198dc4214cc570e438eb37c09fe53d3687842a5014d9f0671411a0eda6';
 
 /**
