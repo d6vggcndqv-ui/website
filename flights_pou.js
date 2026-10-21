@@ -79,6 +79,33 @@ function isOnRunway(lat, lon, track) {
   return null;
 }
 
+/// --- [RUNWAY ALIGNMENT FIX] NEW: runway naming that handles the 6/24 x 15/33 intersection ---
+// Problem it fixes: isOnRunway returns the first corridor that contains the aircraft, and 6/24 is
+// checked first, so 15/33 traffic passing through the intersection was wrongly named 6 or 24.
+// This version skips any runway the aircraft is crossing (track more than RUNWAY_ALIGN_MAX_DEG
+// off both ends) and names the one it is aligned with, so that traffic is correctly named 15 or 33.
+// If no runway is aligned, it returns exactly what isOnRunway would, so on/off-runway is unchanged.
+const RUNWAY_ALIGN_MAX_DEG = 45;
+function isOnRunwayAligned(lat, lon, track) {
+  const firstMatch = isOnRunway(lat, lon, track);
+  if (!firstMatch || typeof track !== "number") return firstMatch;
+  for (const rwy of RUNWAYS) {
+    const dx = rwy.lat2 - rwy.lat1;
+    const dy = rwy.lon2 - rwy.lon1;
+    const t = Math.max(0, Math.min(1, ((lat - rwy.lat1) * dx + (lon - rwy.lon1) * dy) / (dx * dx + dy * dy)));
+    const dist = getDistance(lat, lon, rwy.lat1 + t * dx, rwy.lon1 + t * dy);
+    if (dist > RUNWAY_CORRIDOR_KM) continue;
+    const bearingForward = getBearing(rwy.lat1, rwy.lon1, rwy.lat2, rwy.lon2);
+    const bearingReverse = (bearingForward + 180) % 360;
+    const diffForward = angleDiff(track, bearingForward);
+    const diffReverse = angleDiff(track, bearingReverse);
+    if (Math.min(diffForward, diffReverse) <= RUNWAY_ALIGN_MAX_DEG) {
+      return diffForward <= diffReverse ? rwy.names[0] : rwy.names[1];
+    }
+  }
+  return firstMatch;
+}
+
 function isOnGround(alt) {
   return alt === "ground";
 }
@@ -282,7 +309,7 @@ async function fetchAndDetect() {
         ? state.runwayEntryTrack
         : flight.track;
 
-      const currentRunway = isOnRunway(flight.lat, flight.lon, trackForRunway);
+      const currentRunway = isOnRunwayAligned(flight.lat, flight.lon, trackForRunway); // [RUNWAY ALIGNMENT FIX] was isOnRunway
       if (currentRunway) state.lastRunway = currentRunway;
 
       if (!positionOnRunway) state.runwayEntryTrack = null;
