@@ -31,6 +31,9 @@ const LOW_SPEED_THRESHOLD_KTS = 10;
 // [PENDING LANDING] NEW: hold a ground-flip landing briefly to see if it's a touch and go
 const PENDING_LANDING_HOLD_MS = 30000;   // max time to hold before logging the Landing
 const PENDING_LANDING_MIN_GS_KTS = 25;   // slower than this on the ground = staying down, log the Landing
+// [ARRIVAL FLAG] NEW: catch touch and gos from aircraft that never report "ground"
+const ARRIVAL_MIN_GS_KTS = 40;     // entering the runway corridor faster than this, airborne = arriving
+const ARRIVAL_CLEAR_GS_KTS = 25;   // slowing below this on the runway = full stop / back-taxi, clear the flag
 
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -413,6 +416,44 @@ async function fetchAndDetect() {
             touchAndGoLoggedThisIteration = true;
             logFlight( registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Touch and Go", state.lastRunway);
           }
+        }
+      }
+
+      // --- [ARRIVAL FLAG] NEW: did this aircraft enter the runway corridor already flying? ---
+      // Set on the first poll inside the corridor if it was seen outside the corridor on the previous
+      // poll and is now airborne and fast. Departures enter slowly from a taxiway, so they never set it.
+      // Cleared when the aircraft leaves the corridor, slows to a stop/back-taxi, or an event is logged.
+      if (!isHelicopter) {
+        if (!currentRunway || currentGs < ARRIVAL_CLEAR_GS_KTS ||
+            takeoffLoggedThisIteration || touchAndGoLoggedThisIteration) {
+          state.arrivedAirborne = false;
+        } else if (prev && !isOnRunway(prev.lat, prev.lon) &&
+                   !isOnGround(currentAlt) && typeof currentAlt === "number" &&
+                   currentGs > ARRIVAL_MIN_GS_KTS) {
+          state.arrivedAirborne = true;
+        }
+      }
+
+      // --- [ARRIVAL FLAG] NEW: touch and go for aircraft that never report "ground" ---
+      // Same conditions as TAKEOFF option 2 below, but the aircraft arrived airborne, so climbing away
+      // is a touch and go (or low approach), not a departure. Logging here sets lastTakeoff and
+      // touchAndGoLoggedThisIteration, which stops TAKEOFF option 2 from also firing.
+      if (!isHelicopter && !isOnGround(currentAlt) && currentRunway &&
+          state.arrivedAirborne &&
+          currentGs > 40 && currentGs > prevGs &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" &&
+          currentAlt > prevAlt && currentAlt < 500 &&
+          !state.wasDescendingOnRunway && !touchAndGoLoggedThisIteration && !takeoffLoggedThisIteration) {
+        if ((now - state.lastTakeoff) > COOLDOWN_MS && (now - state.lastTouchAndGo) > COOLDOWN_MS) {
+          state.lastTouchAndGo = now;
+          state.lastTakeoff = now;
+          state.landingLogged = false;
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
+          state.wasDescendingOnRunway = false;
+          state.arrivedAirborne = false;
+          touchAndGoLoggedThisIteration = true;
+          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Touch and Go", currentRunway || state.lastRunway);
         }
       }
 
