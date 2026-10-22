@@ -55425,6 +55425,7 @@ const registrationRegistry = {
   "a21ba1": "N235FS",
   "a21ba3": "N235FU",
   "a21ba5": "N235FW",
+  "a21ba6": "N235FX",
   "a21ba7": "N235FY",
   "a21bab": "N235GB",
   "a21bac": "N235GC",
