@@ -346,13 +346,13 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou' };
-        const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
+        const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou', pns: 'flights_pns' };
+        const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional', pns: 'PNS — Pensacola International' };
         // Matches portal.html's AIRPORT_INFO logo convention
-        const AIRPORT_LOGOS = { pou: 'pou-logo.jpg' };
+        const AIRPORT_LOGOS = { pou: 'pou-logo.jpg', pns: 'pns-logo.jpg' };
         // Collections whose logging history doesn't go back to the beginning of time —
         // "All time" for these should be qualified with when the data actually starts.
-        const ALL_TIME_START = { flights_pou: '5/21/26' };
+        const ALL_TIME_START = { flights_pou: '5/21/26', flights_pns: '10/28/26' };
         function setAirportLogo(code) {
             const img = document.getElementById('page-airport-logo');
             const src = AIRPORT_LOGOS[code];
@@ -366,6 +366,31 @@
             else { note.style.display = 'none'; }
         }
         let currentCollection = 'flights';
+
+        // ── Per-airport time zone helpers (added for PNS) ───────────────────────
+        // Everything on this page (today, hour-of-day, day buckets, weekday, date picker)
+        // is evaluated in the airport's own time zone, not the viewer's browser zone.
+        const TZ_BY_COLLECTION = { flights: 'America/New_York', flights_pou: 'America/New_York', flights_pns: 'America/Chicago' };
+        function tz() { return TZ_BY_COLLECTION[currentCollection] || 'America/New_York'; }
+        function tzParts(date) {
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz(), hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(date);
+            const o = {};
+            parts.forEach(p => { o[p.type] = p.value; });
+            return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour, mi: +o.minute, s: +o.second };
+        }
+        function todayYMD() { const p = tzParts(new Date()); return p.y + '-' + String(p.mo).padStart(2, '0') + '-' + String(p.d).padStart(2, '0'); }
+        function addDaysYMD(ymd, n) { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+        function dayKey(ymd) { return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: 'UTC' }); }
+        function weekdayOfYMD(ymd) { return new Date(ymd + 'T12:00:00Z').getUTCDay(); }
+        // UTC ms of 00:00 local airport time on the given YYYY-MM-DD (DST-safe)
+        function tzStartOfDayMs(ymd) {
+            const guess = Date.parse(ymd + 'T00:00:00Z');
+            const offsetAt = ms => { const p = tzParts(new Date(ms)); return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000; };
+            return guess - offsetAt(guess - offsetAt(guess));
+        }
+        function hourInTz(ts) { return tzParts(new Date(ts)).h; }
+        function weekdayInTz(ts) { const p = tzParts(new Date(ts)); return weekdayOfYMD(p.y + '-' + String(p.mo).padStart(2, '0') + '-' + String(p.d).padStart(2, '0')); }
+        // ────────────────────────────────────────────────────────────────────────
 
         function getCollectionName(airport) {
             return AIRPORT_COLLECTIONS[airport] || 'flights_' + airport;
@@ -468,8 +493,7 @@
         async function loadData(days) {
             const constraints = [orderBy('timestamp', 'desc')];
             if (days === 1) {
-                const startOfToday = new Date();
-                startOfToday.setHours(0, 0, 0, 0);
+                const startOfToday = new Date(tzStartOfDayMs(todayYMD()));
                 constraints.push(where('timestamp', '>=', startOfToday.toISOString()));
             } else if (days > 1) {
                 const cutoff = new Date();
@@ -596,15 +620,13 @@
             const labels = [];
             const byDay = {};
             for (let i = numDays - 1; i >= 0; i--) {
-                const d = specificDate ? new Date(specificDate + 'T12:00:00') : new Date();
-                if (!specificDate) d.setDate(d.getDate() - i);
-                const key = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+                const key = dayKey(specificDate ? specificDate : addDaysYMD(todayYMD(), -i));
                 labels.push(key);
                 byDay[key] = { Takeoff: 0, Landing: 0, 'Touch and Go': 0 };
             }
             rows.forEach(r => {
                 const ts = new Date(r.timestamp);
-                const key = ts.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+                const key = ts.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: tz() });
                 if (byDay[key]) byDay[key][r.event] = (byDay[key][r.event] || 0) + 1;
             });
             charts['day'] = new Chart(document.getElementById('chart-by-day'), {
@@ -729,7 +751,7 @@
             destroyChart('hours');
             const counts = Array(24).fill(0);
             rows.forEach(r => {
-                const h = new Date(r.timestamp).getHours();
+                const h = hourInTz(r.timestamp);
                 counts[h]++;
             });
             const labels = counts.map((_, i) => {
@@ -783,12 +805,10 @@
             const totals = Array(7).fill(0);
 
             for (let i = numDays - 1; i >= 0; i--) {
-                const d = new Date();
-                d.setDate(d.getDate() - i);
-                occurrences[d.getDay()]++;
+                occurrences[weekdayOfYMD(addDaysYMD(todayYMD(), -i))]++;
             }
             rows.forEach(r => {
-                totals[new Date(r.timestamp).getDay()]++;
+                totals[weekdayInTz(r.timestamp)]++;
             });
 
             const averages = totals.map((total, i) => occurrences[i] ? +(total / occurrences[i]).toFixed(1) : 0);
@@ -945,8 +965,8 @@
         }
     
         async function refreshForDate(dateStr) {
-            const start = new Date(dateStr + 'T00:00:00');
-            const end   = new Date(dateStr + 'T23:59:59');
+            const start = new Date(tzStartOfDayMs(dateStr));
+            const end   = new Date(tzStartOfDayMs(addDaysYMD(dateStr, 1)) - 1);
             const constraints = [
                 orderBy('timestamp', 'desc'),
                 where('timestamp', '>=', start.toISOString()),
@@ -992,7 +1012,7 @@
             }
             const activeBtn = document.querySelector('.range-btn.active');
             const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
-            if (days === 1) return 'Flight Operations — Today, ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            if (days === 1) return 'Flight Operations — Today, ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: tz() });
             if (days === 0) {
                 const start = ALL_TIME_START[currentCollection];
                 return 'Flight Operations — All Time' + (start ? ' (Since ' + start + ')' : '');
@@ -1000,7 +1020,7 @@
             const end = new Date();
             const start = new Date();
             start.setDate(start.getDate() - days);
-            const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: tz() });
             return `Flight Operations — ${fmt(start)} to ${fmt(end)}`;
         }
 

@@ -115,6 +115,10 @@
             .portal-hero-overlay img { height: 34px; }
             .portal-map-section iframe { height: 320px; }
         }
+
+        /* ── Admin airport selector (same look as dashboard.html) ── */
+        #airport-selector { display: none; align-items: center; gap: 10px; width: 100%; max-width: 1100px; margin: 0 auto 16px; padding: 0 24px; box-sizing: border-box; font-size: 14px; }
+        #airport-selector select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
     </style>
 </head>
 
@@ -160,6 +164,11 @@
         <!-- Main content (hidden until authenticated) -->
         <div id="main-content" style="display:none;">
 
+            <div id="airport-selector">
+                <span>Airport:</span>
+                <select id="airport-select"></select>
+            </div>
+
             <div class="portal-hero">
                 <div class="portal-hero-img-wrap">
                     <img id="portal-hero-img" src="" alt="" onerror="this.style.display='none';">
@@ -172,7 +181,7 @@
             <section class="portal-section portal-snapshot">
                 <div class="portal-section-header">
                     <h2>Year-to-Date Operations</h2>
-                    <span class="portal-section-subheader">Since 5/21/2026</span>
+                    <span class="portal-section-subheader" id="portal-since"></span>
                 </div>
                 <div class="snapshot-metrics">
                     <div class="snapshot-card"><div class="snapshot-label">Total</div><div class="snapshot-value" id="snap-total">—</div></div>
@@ -222,14 +231,30 @@
                 name: 'POU — Hudson Valley Regional',
                 hero: 'pou-hero.jpg',
                 logo: 'pou-logo.jpg',
-                mapUrl: 'https://map.fl-technologies-data.com/tar1090/'
-            }
+                mapUrl: 'https://map.fl-technologies-data.com/tar1090/',
+                since: 'Since 5/21/2026'
+            },
+            pns: {
+                name: 'PNS — Pensacola International',
+                hero: 'pns-hero.jpg',
+                logo: 'pns-logo.jpg',
+                mapUrl: 'https://map.fl-technologies-data.com/tar1090/',   // shared map — PNS feed is merged into the same tar1090 instance
+                since: 'Since 10/28/2026'
+            },
         };
 
         // Matches the collection naming convention used in dashboard.html / flighthistory.html
-        const AIRPORT_COLLECTIONS = { pou: 'flights_pou' };
+        const AIRPORT_COLLECTIONS = { pou: 'flights_pou', pns: 'flights_pns' };
         function getCollectionName(airport) {
             return AIRPORT_COLLECTIONS[airport] || 'flights_' + airport;
+        }
+
+        let currentAirport = null;
+        function switchAirport(code) {
+            currentAirport = code;
+            ['snap-total', 'snap-takeoffs', 'snap-landings', 'snap-tng'].forEach(id => document.getElementById(id).textContent = '—');
+            renderAirport(code);
+            loadSnapshot(code);
         }
 
         async function loadSnapshot(airport) {
@@ -242,6 +267,8 @@
                 getCountFromServer(query(col, where('event', '==', 'Landing'))),
                 getCountFromServer(query(col, where('event', '==', 'Touch and Go')))
             ]);
+
+            if (airport !== currentAirport) return;   // admin switched airports while this was loading
 
             document.getElementById('snap-total').textContent    = totalSnap.data().count.toLocaleString();
             document.getElementById('snap-takeoffs').textContent = takeoffSnap.data().count.toLocaleString();
@@ -268,6 +295,7 @@
             document.getElementById('portal-logo-img').alt = info.name + ' logo';
             document.getElementById('portal-map-iframe').src = info.mapUrl;
             document.getElementById('portal-map-fullscreen').href = info.mapUrl;
+            document.getElementById('portal-since').textContent = info.since || '';
         }
 
         async function initUser(user) {
@@ -275,12 +303,15 @@
             if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
             const profile = snap.data();
 
-            // Airport selector removed for now since only POU exists — re-add the
-            // admin branch (select dropdown + AIRPORT_INFO options) once a second
-            // airport is ready. For now everyone lands on POU.
-            const airport = profile.airport || 'pou';
-            renderAirport(airport);
-            loadSnapshot(airport);
+            let airport = profile.airport || 'pou';
+            if (profile.role === 'admin') {
+                document.getElementById('airport-selector').style.display = 'flex';
+                const select = document.getElementById('airport-select');
+                select.innerHTML = Object.entries(AIRPORT_INFO).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
+                if (AIRPORT_INFO[airport]) select.value = airport; else airport = select.value;
+                select.onchange = () => switchAirport(select.value);
+            }
+            switchAirport(airport);
 
             hideAuth();
         }

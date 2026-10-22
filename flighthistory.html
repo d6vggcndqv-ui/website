@@ -388,10 +388,10 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou' };
-    const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
+    const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou', pns: 'flights_pns' };
+    const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional', pns: 'PNS — Pensacola International' };
     // Matches portal.html's AIRPORT_INFO logo convention
-    const AIRPORT_LOGOS = { pou: 'pou-logo.jpg' };
+    const AIRPORT_LOGOS = { pou: 'pou-logo.jpg', pns: 'pns-logo.jpg' };
     function setAirportLogo(code) {
         const img = document.getElementById('page-airport-logo');
         const src = AIRPORT_LOGOS[code];
@@ -402,6 +402,28 @@
     // Added alongside currentCollection so the track lookup knows which
     // tracks_<airport> collection to query.
     let currentAirportKey = 'owd';
+
+    // ── Per-airport time zone helpers (added for PNS) ───────────────────────
+    // "Today" and the From/To date filters are evaluated in the airport's own
+    // time zone, not the viewer's browser zone.
+    const TZ_BY_COLLECTION = { flights: 'America/New_York', flights_pou: 'America/New_York', flights_pns: 'America/Chicago' };
+    function tz() { return TZ_BY_COLLECTION[currentCollection] || 'America/New_York'; }
+    function tzParts(date) {
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz(), hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(date);
+        const o = {};
+        parts.forEach(p => { o[p.type] = p.value; });
+        return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour, mi: +o.minute, s: +o.second };
+    }
+    function todayYMD() { const p = tzParts(new Date()); return p.y + '-' + String(p.mo).padStart(2, '0') + '-' + String(p.d).padStart(2, '0'); }
+    function addDaysYMD(ymd, n) { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+    // UTC ms of 00:00 local airport time on the given YYYY-MM-DD (DST-safe)
+    function tzStartOfDayMs(ymd) {
+        const guess = Date.parse(ymd + 'T00:00:00Z');
+        const offsetAt = ms => { const p = tzParts(new Date(ms)); return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000; };
+        return guess - offsetAt(guess - offsetAt(guess));
+    }
+    function tzEndOfDayMs(ymd) { return tzStartOfDayMs(addDaysYMD(ymd, 1)) - 1; }
+    // ────────────────────────────────────────────────────────────────────────
 
     function getCollectionName(airport) {
         return AIRPORT_COLLECTIONS[airport] || 'flights_' + airport;
@@ -631,7 +653,8 @@
 
         // Fee status — only applicable to landings that processRow resolves
         // to an actual fee (based/exempt/non-turbine landings show nothing).
-        const feeInfo = row.event === 'Landing' ? processRow(row, row.docId) : null;
+        // PNS: fee files loaded on this page are POU-specific, so no fee block for PNS until it has its own schedule.
+        const feeInfo = (row.event === 'Landing' && currentAirportKey !== 'pns') ? processRow(row, row.docId) : null;
         const feeHtml = !feeInfo ? '' : (feeInfo.needsReview
             ? `<div class="fh-fee-block">
                    <div class="fh-fee-heading">Landing Fee</div>
@@ -680,6 +703,10 @@
         const aircraftClass = document.getElementById('filter-class').value;
         const registration = document.getElementById('filter-callsign').value.trim().toUpperCase();
     
+        // Airport-time-zone boundaries for the From/To filters (computed once, not per row)
+        const fromTs = from ? tzStartOfDayMs(from) : null;
+        const toTs   = to   ? tzEndOfDayMs(to)     : null;
+
         filteredRows = allRows.filter(r => {
         if (event    && r.event !== event) return false;
         if (category && r.aircraftType !== category) return false;
@@ -692,9 +719,9 @@
             // "YYYY-MM-DDT23:59:59" parses as LOCAL time — mixing the two
             // shifts the "from" boundary by your UTC offset. Anchor both
             // ends to local time explicitly.
-            const ts = new Date(r.timestamp);
-            if (from && ts < new Date(from + 'T00:00:00')) return false;
-            if (to   && ts > new Date(to + 'T23:59:59')) return false;
+            const ts = new Date(r.timestamp).getTime();
+            if (fromTs !== null && ts < fromTs) return false;
+            if (toTs   !== null && ts > toTs)   return false;
         }
         return true;
         });
@@ -722,18 +749,16 @@
     }
     
     function todayRange() {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        const end = new Date();
-        end.setHours(23, 59, 59, 999);
+        const start = new Date(tzStartOfDayMs(todayYMD()));
+        const end = new Date(tzEndOfDayMs(todayYMD()));
         return { from: start.toISOString(), to: end.toISOString() };
     }
     
     document.getElementById('btn-apply').addEventListener('click', () => {
         const from = document.getElementById('filter-from').value;
         const to   = document.getElementById('filter-to').value;
-        const fromISO = from ? new Date(from + 'T00:00:00').toISOString() : null;
-        const toISO   = to   ? new Date(to + 'T23:59:59').toISOString() : null;
+        const fromISO = from ? new Date(tzStartOfDayMs(from)).toISOString() : null;
+        const toISO   = to   ? new Date(tzEndOfDayMs(to)).toISOString() : null;
         loadAll(fromISO, toISO).then(() => applyFilters());
     });
     

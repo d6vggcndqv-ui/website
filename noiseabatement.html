@@ -531,7 +531,7 @@
                             document.getElementById('date-from').value = '';
                             document.getElementById('date-to').value   = '';
                         } else {
-                            const fmt = d => d.toISOString().slice(0,10);
+                            const fmt = d => window._naToday ? window._naToday() : d.toISOString().slice(0,10);
                             document.getElementById('date-from').value = fmt(new Date());
                             document.getElementById('date-to').value   = fmt(new Date());
                             document.getElementById('time-from').value = '00:00';
@@ -716,24 +716,24 @@
         const db   = getFirestore(app);
 
         // ── Airport config ──────────────────────────────────────────────────
-        const AIRPORT_COLLECTIONS = { owd: 'tracks_owd', pou: 'tracks_pou' };
+        const AIRPORT_COLLECTIONS = { owd: 'tracks_owd', pou: 'tracks_pou', pns: 'tracks_pns' };
         // Maps to the flights_* collection (not tracks_*) for the Related Flights lookup.
-        const AIRPORT_FLIGHTS_COLLECTIONS = { owd: 'flights', pou: 'flights_pou' };
-        const AIRPORT_LABELS      = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional' };
+        const AIRPORT_FLIGHTS_COLLECTIONS = { owd: 'flights', pou: 'flights_pou', pns: 'flights_pns' };
+        const AIRPORT_LABELS      = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional', pns: 'PNS — Pensacola International' };
         // Matches portal.html's AIRPORT_INFO logo convention
-        const AIRPORT_LOGOS = { pou: 'pou-logo.jpg' };
+        const AIRPORT_LOGOS = { pou: 'pou-logo.jpg', pns: 'pns-logo.jpg' };
         function setAirportLogo(code) {
             const img = document.getElementById('page-airport-logo');
             const src = AIRPORT_LOGOS[code];
             if (src) { img.src = src; img.style.display = ''; }
             else { img.style.display = 'none'; }
         }
-        const AIRPORT_COORDS      = { owd: [42.1905, -71.1728], pou: [41.6266, -73.8842] };
-        const AIRPORT_ELEV        = { owd: 49, pou: 165 };   // field elevation MSL (ft)
+        const AIRPORT_COORDS      = { owd: [42.1905, -71.1728], pou: [41.6266, -73.8842], pns: [30.4727, -87.1866] };
+        const AIRPORT_ELEV        = { owd: 49, pou: 165, pns: 120.9 };   // field elevation MSL (ft)
         // Matches TRACK_RADIUS_KM in each airport's tracking script (e.g. flights_pou.js).
         // OWD value not yet confirmed — using POU's for now until flights_owd.js is checked.
-        const AIRPORT_TRACK_RADIUS_KM = { owd: 8.05, pou: 11.27 };
-        const AIRPORT_OPERATION_LABELS = { owd: 'OWD Operation', pou: 'HVRA Operation' };
+        const AIRPORT_TRACK_RADIUS_KM = { owd: 8.05, pou: 11.27, pns: 11.27 };   // PNS: same as POU for now
+        const AIRPORT_OPERATION_LABELS = { owd: 'OWD Operation', pou: 'HVRA Operation', pns: 'PNS Operation' };
         const PATTERN_CEIL_AGL    = 1000;                     // low-alt dot threshold (ft AGL)
 
         // FAA-designated hot spots shown on the map when POU is selected
@@ -745,6 +745,34 @@
 
         let currentCollection = 'tracks_owd';
         let currentAirportKey = 'owd';
+
+        // ── Per-airport time zone helpers (added for PNS) ───────────────────
+        // Default dates, the track-list time filter, the playback clock, address
+        // pass times and the report timestamp use the airport's own time zone,
+        // not the viewer's browser zone.
+        const AIRPORT_TZ = { owd: 'America/New_York', pou: 'America/New_York', pns: 'America/Chicago' };
+        function tz() { return AIRPORT_TZ[currentAirportKey] || 'America/New_York'; }
+        function tzParts(date) {
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz(), hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(date);
+            const o = {};
+            parts.forEach(p => { o[p.type] = p.value; });
+            return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour, mi: +o.minute, s: +o.second };
+        }
+        function todayYMD() { const p = tzParts(new Date()); return p.y + '-' + String(p.mo).padStart(2, '0') + '-' + String(p.d).padStart(2, '0'); }
+        // UTC ms for a wall-clock date ('YYYY-MM-DD') and time ('HH:MM:SS') in the airport's time zone (DST-safe)
+        function tzLocalToMs(ymd, hms) {
+            const guess = Date.parse(ymd + 'T' + hms + 'Z');
+            const offsetAt = ms => { const p = tzParts(new Date(ms)); return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000; };
+            return guess - offsetAt(guess - offsetAt(guess));
+        }
+        window._naToday = todayYMD;   // lets the inline "date filter" checkbox handler use it
+        // Per-airport example shown in the Report Address box
+        const AIRPORT_ADDR_PLACEHOLDER = {
+            owd: 'e.g. 12 Main St, Wappingers Falls, NY',
+            pou: 'e.g. 12 Main St, Wappingers Falls, NY',
+            pns: 'e.g. 12 Main St, Pensacola, FL'
+        };
+        // ────────────────────────────────────────────────────────────────────
 
         function getFieldElev()   { return AIRPORT_ELEV[currentAirportKey]      || 49; }
         function getAirportLabel(){ return AIRPORT_LABELS[currentAirportKey]     || 'OWD — Norwood Memorial Airport'; }
@@ -807,6 +835,19 @@
             // Update operation filter label for the new airport
             const opLabel = document.getElementById('filter-operation-label');
             if (opLabel) opLabel.firstChild.textContent = AIRPORT_OPERATION_LABELS[key] || 'Operation';
+
+            // (added for PNS) airport-specific address example
+            const addrInput = document.getElementById('na-addr');
+            if (addrInput) addrInput.placeholder = AIRPORT_ADDR_PLACEHOLDER[key] || AIRPORT_ADDR_PLACEHOLDER.owd;
+            // (added for PNS) first load only: default the date range to "today" in the airport's time zone,
+            // unless a noise-inquiry deep link already supplied dates
+            if (!window._naDefaultsSet) {
+                window._naDefaultsSet = true;
+                if (!window._deepLinkDate && document.getElementById('date-from').value) {
+                    document.getElementById('date-from').value = todayYMD();
+                    document.getElementById('date-to').value   = todayYMD();
+                }
+            }
         }
 
         // ── Auth wiring ─────────────────────────────────────────────────────
@@ -902,8 +943,8 @@
         const today = new Date();
         const week  = new Date(today); week.setDate(today.getDate() - 6);
         const fmt   = d => d.toISOString().slice(0, 10);
-        document.getElementById('date-from').value = fmt(today);
-        document.getElementById('date-to').value   = fmt(today);
+        document.getElementById('date-from').value = todayYMD();
+        document.getElementById('date-to').value   = todayYMD();
         document.getElementById('time-from').value = '00:00';
         document.getElementById('time-to').value   = '23:59';
 
@@ -922,7 +963,7 @@
             const exceedance = params.get('exceedance');
 
             // Store airport key so initUser can apply it once the dropdown is built
-            if (airport && (airport === 'owd' || airport === 'pou')) {
+            if (airport && (airport === 'owd' || airport === 'pou' || airport === 'pns')) {
                 window._deepLinkAirport = airport;
             }
 
@@ -931,6 +972,7 @@
                 window._deepLinkTrackId = trackId;
             }
 
+            if (dateFrom || dateTo) window._deepLinkDate = true;   // (added for PNS) keep deep-link dates on first load
             if (dateFrom) document.getElementById('date-from').value = dateFrom;
             if (dateTo)   document.getElementById('date-to').value   = dateTo;
             if (timeFrom) document.getElementById('time-from').value = timeFrom;
@@ -1032,7 +1074,8 @@
             }
 
             list.innerHTML = events.map(r => {
-                const feeInfo = r.event === 'Landing' ? processRow(r, r.docId) : null;
+                // PNS: fee files on this page are POU-specific — no fee block for PNS until it has its own schedule
+                const feeInfo = (r.event === 'Landing' && currentAirportKey !== 'pns') ? processRow(r, r.docId) : null;
                 const feeHtml = !feeInfo ? '' : (feeInfo.needsReview
                     ? `<div class="na-fee-block">
                            <div class="na-block-heading">Landing Fee</div>
@@ -1107,7 +1150,7 @@
         const addrEl = (id) => document.getElementById(id);
         const addrRadiusMi = () => Number(addrEl('na-addr-radius').value) || 0.5;
         const addrMiText = (m) => (m / MI_M).toFixed(2) + ' mi';
-        const addrTimeText = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+        const addrTimeText = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: tz() });
 
         function addrStatus(text, isError) {
             const el = addrEl('na-addr-status');
@@ -1550,7 +1593,7 @@
             const sessionStart = new Date(doc.start).getTime();
             function fmtPointTime(pt) {
                 const d = new Date(sessionStart + pt.t * 1000);
-                let h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+                const tp = tzParts(d); let h = tp.h, m = tp.mi, s = tp.s;
                 const ap = h >= 12 ? 'PM' : 'AM';
                 h = h % 12 || 12;
                 return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${ap}`;
@@ -1648,8 +1691,8 @@
             document.getElementById('date-to').disabled     = false;
             document.getElementById('time-from').disabled   = false;
             document.getElementById('time-to').disabled     = false;
-            document.getElementById('date-from').value = fmt(new Date());
-            document.getElementById('date-to').value   = fmt(new Date());
+            document.getElementById('date-from').value = todayYMD();
+            document.getElementById('date-to').value   = todayYMD();
             document.getElementById('time-from').value = '00:00';
             document.getElementById('time-to').value   = '23:59';
             document.getElementById('filter-cs').value = '';
@@ -1868,11 +1911,11 @@
 
                 // Only add timestamp bounds when dates are provided
                 if (fromVal) {
-                    const fromISO = new Date(fromVal + 'T' + timeFrom + ':00').toISOString();
+                    const fromISO = new Date(tzLocalToMs(fromVal, timeFrom + ':00')).toISOString();
                     constraints.unshift(where('timestamp', '>=', fromISO));
                 }
                 if (toVal) {
-                    const toISO = new Date(toVal + 'T' + timeTo + ':59').toISOString();
+                    const toISO = new Date(tzLocalToMs(toVal, timeTo + ':59')).toISOString();
                     constraints.unshift(where('timestamp', '<=', toISO));
                 }
                 // Registration filtering is done client-side in renderList (substring match)
@@ -1936,7 +1979,7 @@
                 pdf.setFontSize(9);
                 pdf.setFont('helvetica', 'normal');
                 pdf.text('Noise Abatement · Flight Track Report', mg, 16);
-                const generated = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+                const generated = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit', timeZone: tz() });
                 pdf.text('Generated: ' + generated, pw - mg, 16, { align: 'right' });
                 pdf.setTextColor(0, 0, 0);
                 y = 30;

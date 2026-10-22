@@ -251,6 +251,10 @@
             font-size: 12px;
             margin-right: 6px;
         }
+
+        /* ── Admin airport selector (added for PNS; same look as dashboard.html) ── */
+        #airport-selector { display: none; align-items: center; gap: 10px; margin-bottom: 1rem; font-size: 14px; }
+        #airport-selector select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
     </style>
 </head>
 
@@ -299,7 +303,12 @@
                 <h1 style="margin:0;">Landing Fees</h1>
                 <img id="page-airport-logo" src="" alt="" style="display:none;" onerror="this.style.display='none';">
             </div>
-           
+
+            <!-- Admin airport selector (added for PNS) -->
+            <div id="airport-selector">
+                <span>Airport:</span>
+                <select id="airport-select"></select>
+            </div>
 
             <section>
 
@@ -428,6 +437,46 @@
         document.getElementById('main-content').style.display = 'block';
     }
 
+    // ── PNS: no fee schedule yet (added for PNS) ───────────────────
+    // PNS users get the page layout with no data and a contact message.
+    // Nothing is queried and the POU fee files are never applied to PNS.
+    let feeScheduleMissing = false;
+    function showFeeScheduleNotConfigured() {
+        feeScheduleMissing = true;
+        const logo = document.getElementById('page-airport-logo');
+        logo.src = 'pns-logo.jpg';
+        logo.style.display = '';
+        ['summary-landings', 'summary-total', 'summary-review'].forEach(id => document.getElementById(id).textContent = '—');
+        document.getElementById('fee-meta').textContent = '';
+        document.getElementById('fee-tbody').innerHTML =
+            '<tr><td colspan="7" style="color:#666;padding:2rem 14px;font-size:15px;">' +
+            'To set up this page with your fee schedule contact ' +
+            '<a href="mailto:will@fl-technologies.com" style="color:#0057ff;text-decoration:none;font-weight:500;">will@fl-technologies.com</a>' +
+            '</td></tr>';
+        document.getElementById('page-info').textContent = 'Page 1 of 1';
+        document.querySelectorAll('.fee-controls input, .fee-controls select, .fee-controls button, .preset-btn')
+            .forEach(el => { el.disabled = true; });
+        // Drop any POU rows still held in memory (relevant when an admin switches to PNS)
+        allRows = []; filteredRows = []; expandedDocId = null;
+        btnPrev.disabled = true; btnNext.disabled = true;
+    }
+
+    // Admin switched back to POU: restore the normal POU view
+    function showPouFees() {
+        feeScheduleMissing = false;
+        const logo = document.getElementById('page-airport-logo');
+        logo.src = 'pou-logo.jpg';
+        logo.style.display = '';
+        document.querySelectorAll('.fee-controls input, .fee-controls select, .fee-controls button, .preset-btn')
+            .forEach(el => { el.disabled = false; });
+        document.getElementById('fee-tbody').innerHTML = '<tr><td colspan="6" style="color:#999;padding:2rem 14px;">Loading data...</td></tr>';
+        loadData(currentRange());
+    }
+
+    // Admin airport dropdown — POU and PNS only (no OWD)
+    const FEE_PAGE_AIRPORTS = { pou: 'POU — Hudson Valley Regional', pns: 'PNS — Pensacola International' };
+    // ───────────────────────────────────────────────────────────────
+
     async function initUser(user) {
         try {
             const snap = await getDoc(doc(db, 'Users', user.uid));
@@ -435,6 +484,19 @@
                 showAuth();
                 document.getElementById('auth-error').textContent = 'Account not configured.';
                 return;
+            }
+            const profile = snap.data();
+            // PNS (non-admin): show the empty, formatted page with the contact message
+            if (profile.role !== 'admin' && profile.airport === 'pns') {
+                showFeeScheduleNotConfigured();
+                hideAuth();
+                return;
+            }
+            if (profile.role === 'admin') {
+                document.getElementById('airport-selector').style.display = 'flex';
+                const select = document.getElementById('airport-select');
+                select.innerHTML = Object.entries(FEE_PAGE_AIRPORTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+                select.onchange = () => { if (select.value === 'pns') showFeeScheduleNotConfigured(); else showPouFees(); };
             }
             hideAuth();
             loadData(currentRange());
@@ -748,6 +810,7 @@
 
     // ── Filters ────────────────────────────────────────────────────
     function applyFilters() {
+        if (feeScheduleMissing) return;   // PNS: keep the contact message in place
         const reg  = document.getElementById('filter-reg').value.trim().toUpperCase();
         const tier = document.getElementById('filter-tier').value;
 
@@ -765,6 +828,7 @@
 
     // ── Load from Firestore ────────────────────────────────────────
     async function loadData({ from, to }) {
+        if (feeScheduleMissing) return;   // PNS: nothing to load
         metaEl.textContent = 'Loading...';
         document.getElementById('summary-landings').textContent = '—';
         document.getElementById('summary-total').textContent    = '—';
@@ -776,6 +840,7 @@
                 orderBy('timestamp', 'desc')
             );
             const snap = await getDocs(q);
+            if (feeScheduleMissing) return;   // admin switched to PNS while this was loading
 
             allRows = [];
             console.log(`[LandingFees] Total docs returned: ${snap.docs.length}`);

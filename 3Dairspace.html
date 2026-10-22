@@ -237,6 +237,15 @@
                 fieldElevFt: 49, geoidFt: -92,        // confirm both
                 radiusKm: 11.27, ceilingAglFt: 4500,
                 feedUrl: AIRCRAFT_FEED
+            },
+            // PNS — added. geoidFt: NGS GEOID18 at the field = -27.42 m = -90 ft.
+            // radiusKm / ceilingAglFt: same as POU for now (confirm against the PNS logger once it exists).
+            pns: {
+                name: 'PNS — Pensacola International',
+                lat: 30.4727, lon: -87.1866,
+                fieldElevFt: 120.9, geoidFt: -90,
+                radiusKm: 11.27, ceilingAglFt: 4500,
+                feedUrl: AIRCRAFT_FEED   // PNS feed is being merged into this same tar1090 instance
             }
         };
 
@@ -1626,7 +1635,8 @@
 
         const HISTORY_SOURCES = {
             pou: { collection: 'tracks_pou', tz: 'America/New_York' },
-            owd: { collection: 'tracks_owd', tz: 'America/New_York' }
+            owd: { collection: 'tracks_owd', tz: 'America/New_York' },
+            pns: { collection: 'tracks_pns', tz: 'America/Chicago' }
         };
         const HISTORY_LOOKBACK_MIN = 180;   // also fetch visits that started up to this long before the window (they may still be flying in it)
         const HISTORY_MAX_FLIGHTS = 150;    // most visits drawn at once
