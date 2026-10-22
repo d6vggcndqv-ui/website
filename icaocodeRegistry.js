@@ -26607,6 +26607,7 @@ const typeCodeRegistry = {
   'N235EG': 'BE36',
   'N235EP': 'C172',
   'N235FA': 'BE55',
+  'N235FX': 'E55P',
   'N235HL': 'C182',
   'N235HP': 'C182',
   'N235JF': 'B737',
