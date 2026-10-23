@@ -1,0 +1,1020 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-analytics.js";
+import { getFirestore, collection, addDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+  authDomain: "owd-data.firebaseapp.com",
+  projectId: "owd-data",
+  storageBucket: "owd-data.firebasestorage.app",
+  messagingSenderId: "912110224300",
+  appId: "1:912110224300:web:ba2b8073871ec023817009",
+  measurementId: "G-PHD4THC11M"
+};
+
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const db = getFirestore(app);
+
+const PNS_LAT = 30.4727;
+const PNS_LNG = -87.1866;
+const MAX_DISTANCE_KM = 3;
+const HELICOPTER_DISTANCE_KM = 1;
+const COOLDOWN_MS = 60000;
+
+const RUNWAYS = [
+  { names: ["8", "26"], lat1: 30.471309, lon1: -87.195925, lat2: 30.475289, lon2: -87.174209 },
+  { names: ["17", "35"], lat1: 30.482892, lon1: -87.190669, lat2: 30.464068, lon2: -87.185639 }
+];
+const RUNWAY_CORRIDOR_KM = 0.15;
+const LOW_SPEED_THRESHOLD_KTS = 10;
+// [PENDING LANDING] NEW: hold a ground-flip landing briefly to see if it's a touch and go
+const PENDING_LANDING_HOLD_MS = 30000;   // max time to hold before logging the Landing
+const PENDING_LANDING_MIN_GS_KTS = 25;   // slower than this on the ground = staying down, log the Landing
+// [ARRIVAL FLAG] NEW: catch touch and gos from aircraft that never report "ground"
+const ARRIVAL_MIN_GS_KTS = 40;     // entering the runway corridor faster than this, airborne = arriving
+const ARRIVAL_CLEAR_GS_KTS = 25;   // slowing below this on the runway = full stop / back-taxi, clear the flag
+
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function getBearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function angleDiff(a, b) {
+  const diff = Math.abs(a - b) % 360;
+  return diff > 180 ? 360 - diff : diff;
+}
+
+function isOnRunway(lat, lon, track) {
+  for (const rwy of RUNWAYS) {
+    const dx = rwy.lat2 - rwy.lat1;
+    const dy = rwy.lon2 - rwy.lon1;
+    const t = Math.max(0, Math.min(1, ((lat - rwy.lat1) * dx + (lon - rwy.lon1) * dy) / (dx * dx + dy * dy)));
+    const closestLat = rwy.lat1 + t * dx;
+    const closestLon = rwy.lon1 + t * dy;
+    const dist = getDistance(lat, lon, closestLat, closestLon);
+    if (dist <= RUNWAY_CORRIDOR_KM) {
+      if (typeof track === "number") {
+        const bearingForward = getBearing(rwy.lat1, rwy.lon1, rwy.lat2, rwy.lon2);
+        const bearingReverse = (bearingForward + 180) % 360;
+        const diffForward = angleDiff(track, bearingForward);
+        const diffReverse = angleDiff(track, bearingReverse);
+        return diffForward <= diffReverse ? rwy.names[0] : rwy.names[1];
+      }
+      return t < 0.5 ? rwy.names[0] : rwy.names[1];
+    }
+  }
+  return null;
+}
+
+/// --- [RUNWAY ALIGNMENT FIX] NEW: runway naming that handles the 8/26 x 17/35 intersection ---
+// Problem it fixes: isOnRunway returns the first corridor that contains the aircraft, and 8/26 is
+// checked first, so 17/35 traffic passing through the intersection was wrongly named 8 or 26.
+// This version skips any runway the aircraft is crossing (track more than RUNWAY_ALIGN_MAX_DEG
+// off both ends) and names the one it is aligned with, so that traffic is correctly named 17 or 35.
+// If no runway is aligned, it returns exactly what isOnRunway would, so on/off-runway is unchanged.
+const RUNWAY_ALIGN_MAX_DEG = 45;
+function isOnRunwayAligned(lat, lon, track) {
+  const firstMatch = isOnRunway(lat, lon, track);
+  if (!firstMatch || typeof track !== "number") return firstMatch;
+  for (const rwy of RUNWAYS) {
+    const dx = rwy.lat2 - rwy.lat1;
+    const dy = rwy.lon2 - rwy.lon1;
+    const t = Math.max(0, Math.min(1, ((lat - rwy.lat1) * dx + (lon - rwy.lon1) * dy) / (dx * dx + dy * dy)));
+    const dist = getDistance(lat, lon, rwy.lat1 + t * dx, rwy.lon1 + t * dy);
+    if (dist > RUNWAY_CORRIDOR_KM) continue;
+    const bearingForward = getBearing(rwy.lat1, rwy.lon1, rwy.lat2, rwy.lon2);
+    const bearingReverse = (bearingForward + 180) % 360;
+    const diffForward = angleDiff(track, bearingForward);
+    const diffReverse = angleDiff(track, bearingReverse);
+    if (Math.min(diffForward, diffReverse) <= RUNWAY_ALIGN_MAX_DEG) {
+      return diffForward <= diffReverse ? rwy.names[0] : rwy.names[1];
+    }
+  }
+  return firstMatch;
+}
+
+function isOnGround(alt) {
+  return alt === "ground";
+}
+
+async function logFlight(registration, aacAdg, category, aircraftClass, event, runway = "n/a") {
+  try {
+    if (category === "Rotorcraft") runway = "n/a";
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - COOLDOWN_MS).toISOString();
+    const dedupCheck = query(
+      collection(db, "flights_pns"),
+      where("registration", "==", registration ? registration.trim() : "Unknown"),
+      where("event", "==", event),
+      where("timestamp", ">=", cutoff)
+    );
+    const existing = await getDocs(dedupCheck);
+    if (!existing.empty) {
+      console.log(`Skipping duplicate ${event} for ${registration}`);
+      return;
+    }
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const year = now.getFullYear();
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    await addDoc(collection(db, "flights_pns"), {
+      registration: registration ? registration.trim() : "Unknown",
+      aircraftType: aacAdg || "Unknown",
+      category: category,
+      class: aircraftClass,
+      event: event,
+      runway: runway,
+      timestamp: now.toISOString(),
+      date: `${month}/${day}/${year}`,
+      time: `${hours}:${minutes}:${seconds} ${ampm}`
+    });
+    console.log(`Logged ${event} for ${registration}`);
+  } catch (error) {
+    console.error("Error logging flight:", error);
+  }
+}
+
+let previousAircraft = {};
+let aircraftState = {};
+const aircraftTypeCache = {};
+
+async function fetchAndDetect() {
+  try {
+    const response = await fetch('/tar1090/data/aircraft.json');
+    const data = await response.json();
+    const now = Date.now();
+    const currentAircraft = {};
+
+    data.aircraft.forEach(flight => {
+      if (!flight.lat || !flight.lon) return;
+      const distance = getDistance(PNS_LAT, PNS_LNG, flight.lat, flight.lon);
+      if (distance > MAX_DISTANCE_KM) return;
+
+      currentAircraft[flight.hex] = flight;
+
+      // Resolve AAC-ADG from registry, cache per hex so it only runs once per aircraft
+      if (!aircraftTypeCache[flight.hex]) {
+        if (flight.category === "A7") {
+          aircraftTypeCache[flight.hex] = "n/a";
+        } else {
+          aircraftTypeCache[flight.hex] = (typeof aircraftRegistry !== "undefined" && aircraftRegistry[flight.hex.toLowerCase()]) || "Unknown";
+        }
+      }
+      const aacAdg = aircraftTypeCache[flight.hex];
+      const category = flight.category === "A7" ? "Rotorcraft" : "Airplane";
+      const aircraftClass = flight.category === "A7" ? "Rotorcraft" : (classRegistry[flight.hex.toLowerCase()] || "Unknown");
+
+      const prev = previousAircraft[flight.hex];
+      const state = aircraftState[flight.hex] || {
+        lastTakeoff: 0,
+        lastLanding: 0,
+        lastTouchAndGo: 0,
+        landingLogged: false,
+        minAltOnRunway: null,
+        consecutiveClimbs: 0,
+        helicopterClimbs: 0,
+        wasDescendingOnRunway: false,
+        maxDistanceWhileAirborne: 0,
+        consecutiveDescents: 0,
+        lastRunway: "n/a",
+        minGsOnRunway: null,
+        gsAccelCount: 0,
+        didDecelerateOnRunway: false,
+        consecutiveDecelsOnRunway: 0,
+        wasOnRunway: false,
+        runwayEntryTrack: null
+      };
+
+      const currentAlt = flight.alt_baro;
+      const prevAlt = prev ? prev.alt_baro : null;
+      const currentGs = flight.gs || 0;
+      const prevGs = prev ? (prev.gs || 0) : 0;
+      const isHelicopter = flight.category === "A7";
+
+      let takeoffLoggedThisIteration = false;
+      let touchAndGoLoggedThisIteration = false;
+
+      // --- track max distance while airborne for helicopters ---
+      if (isHelicopter && !isOnGround(currentAlt)) {
+        state.maxDistanceWhileAirborne = Math.max(state.maxDistanceWhileAirborne, distance);
+      }
+
+      // --- LANDING option 1: transitions to "ground" ---
+      if (isOnGround(currentAlt) && prevAlt !== null && !isOnGround(prevAlt) &&
+          typeof prevAlt === "number" && !state.landingLogged) {
+        console.log('LANDING CONDITION MET for',  registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight);
+        state.landingLogged = true;
+        state.lastLanding = now;
+        state.minAltOnRunway = null;
+        state.consecutiveClimbs = 0;
+        state.helicopterClimbs = 0;
+        state.wasDescendingOnRunway = false;
+        state.maxDistanceWhileAirborne = 0;
+        // [PENDING LANDING] fixed-wing landings are held instead of logged; helicopters log immediately as before
+        if (isHelicopter) {
+          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Landing", state.lastRunway);
+        } else {
+          state.pendingLanding = {
+            time: now,
+            registration: registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight,
+            aacAdg: aacAdg,
+            category: category,
+            aircraftClass: aircraftClass,
+            runway: state.lastRunway
+          };
+        }
+      }
+
+      // --- LANDING option 2: within airport area, was descending on runway, now very slow (under 5kts) ---
+      if (!state.landingLogged && !isOnGround(currentAlt) &&
+          distance <= MAX_DISTANCE_KM &&
+          state.wasDescendingOnRunway &&
+          currentGs < 5 && currentGs !== 0 &&
+          (now - state.lastLanding) > COOLDOWN_MS) {
+        console.log('LANDING CONDITION 2 MET for',  registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight);
+        state.landingLogged = true;
+        state.lastLanding = now;
+        state.minAltOnRunway = null;
+        state.consecutiveClimbs = 0;
+        state.wasDescendingOnRunway = false;
+        logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Landing", state.lastRunway);
+      }
+
+      // --- [PENDING LANDING] NEW: resolve a held landing ---
+      if (state.pendingLanding) {
+        const pending = state.pendingLanding;
+        const liftedOff  = !isOnGround(currentAlt) && typeof currentAlt === "number";
+        const slowedDown = typeof flight.gs === "number" && flight.gs < PENDING_LANDING_MIN_GS_KTS;
+        const leftRunway = isOnGround(currentAlt) && !isOnRunway(flight.lat, flight.lon);
+
+        if (liftedOff) {
+          // airborne again without ever slowing to taxi speed: one Touch and Go
+          state.pendingLanding = null;
+          state.lastTouchAndGo = now;
+          state.lastTakeoff = now;   // also stops TAKEOFF option 1 below from firing
+          state.landingLogged = false;
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
+          state.wasDescendingOnRunway = false;
+          touchAndGoLoggedThisIteration = true;
+          logFlight(pending.registration, pending.aacAdg, pending.category, pending.aircraftClass, "Touch and Go", state.lastRunway);
+        } else if (slowedDown || leftRunway) {
+          // staying down: log the held Landing
+          state.pendingLanding = null;
+          logFlight(pending.registration, pending.aacAdg, pending.category, pending.aircraftClass, "Landing", pending.runway);
+        }
+      }
+
+      // --- TAKEOFF option 1: was on ground, now showing a number ---
+      if (prevAlt !== null && isOnGround(prevAlt) && !isOnGround(currentAlt) &&
+          typeof currentAlt === "number") {
+        if ((now - state.lastTakeoff) > COOLDOWN_MS) {
+          state.lastTakeoff = now;
+          state.landingLogged = false;
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
+          state.helicopterClimbs = 0;
+          state.wasDescendingOnRunway = false;
+          state.maxDistanceWhileAirborne = 0;
+          takeoffLoggedThisIteration = true;
+          logFlight( registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Takeoff", state.lastRunway);
+        }
+      }
+
+      // --- track descending on runway ---
+      const positionOnRunway = isOnRunway(flight.lat, flight.lon);
+      if (positionOnRunway && !state.wasOnRunway) {
+        state.runwayEntryTrack = typeof flight.track === "number" ? flight.track : null;
+      }
+      state.wasOnRunway = !!positionOnRunway;
+
+      const trackForRunway = (currentGs < LOW_SPEED_THRESHOLD_KTS && typeof state.runwayEntryTrack === "number")
+        ? state.runwayEntryTrack
+        : flight.track;
+
+      const currentRunway = isOnRunwayAligned(flight.lat, flight.lon, trackForRunway); // [RUNWAY ALIGNMENT FIX] was isOnRunway
+      if (currentRunway) state.lastRunway = currentRunway;
+
+      if (!positionOnRunway) state.runwayEntryTrack = null;
+
+      if (!isHelicopter && currentRunway &&
+          !isOnGround(currentAlt) && !isOnGround(prevAlt) &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" &&
+          currentAlt < prevAlt && currentGs > 30) {
+        state.consecutiveDescents++;
+        if (state.consecutiveDescents >= 2) {
+          state.wasDescendingOnRunway = true;
+        }
+      } else if (!isHelicopter && currentRunway) {
+        state.consecutiveDescents = 0;
+      }
+
+      // --- reset wasDescendingOnRunway and consecutiveDescents if aircraft leaves runway corridor ---
+      if (!currentRunway) {
+        state.wasDescendingOnRunway = false;
+        state.consecutiveDescents = 0;
+      }
+
+      // --- TOUCH AND GO detection (runs before takeoff option 2) ---
+      if (!isHelicopter && !isOnGround(currentAlt) && currentRunway &&
+          typeof currentAlt === "number" && currentAlt < 500 &&
+          state.wasDescendingOnRunway &&
+          (now - state.lastTakeoff) > COOLDOWN_MS && !takeoffLoggedThisIteration) {
+
+        if (state.minAltOnRunway === null || currentAlt < state.minAltOnRunway) {
+          state.minAltOnRunway = currentAlt;
+          state.consecutiveClimbs = 0;
+        }
+
+        if (state.minAltOnRunway !== null && currentAlt > state.minAltOnRunway &&
+            prevAlt !== null && typeof prevAlt === "number" && currentAlt > prevAlt) {
+          state.consecutiveClimbs++;
+        } else if (prevAlt !== null && typeof prevAlt === "number" && currentAlt < prevAlt) {
+          state.consecutiveClimbs = 0;
+        }
+
+        if (state.consecutiveClimbs >= 2) {
+          if ((now - state.lastTouchAndGo) > COOLDOWN_MS) {
+            state.lastTouchAndGo = now;
+            state.lastTakeoff = now;
+            state.landingLogged = false;
+            state.minAltOnRunway = null;
+            state.consecutiveClimbs = 0;
+            state.wasDescendingOnRunway = false;
+            touchAndGoLoggedThisIteration = true;
+            logFlight( registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Touch and Go", state.lastRunway);
+          }
+        }
+      }
+
+      // --- reset touch and go tracking if aircraft leaves runway ---
+      if (!currentRunway) {
+        state.minAltOnRunway = null;
+        state.consecutiveClimbs = 0;
+        state.minGsOnRunway = null;
+        state.gsAccelCount = 0;
+        state.didDecelerateOnRunway = false;
+        state.consecutiveDecelsOnRunway = 0;
+      }
+
+      // --- TOUCH AND GO option 2: deceleration then acceleration on runway, never below 35kts ---
+      if (!isHelicopter && !isOnGround(currentAlt) && currentRunway &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" &&
+          (now - state.lastTakeoff) > COOLDOWN_MS && !takeoffLoggedThisIteration && !touchAndGoLoggedThisIteration) {
+
+        if ((state.minGsOnRunway === null && prevAlt !== null) || currentGs < state.minGsOnRunway) {
+          if (state.minGsOnRunway !== null && currentGs < state.minGsOnRunway) {
+            state.consecutiveDecelsOnRunway++;
+            if (state.consecutiveDecelsOnRunway >= 2) {
+              state.didDecelerateOnRunway = true;
+            }
+          } else {
+            state.consecutiveDecelsOnRunway = 0;
+          }
+          state.minGsOnRunway = currentGs;
+          state.gsAccelCount = 0;
+        } else {
+          state.consecutiveDecelsOnRunway = 0;
+        }
+
+        if (state.minGsOnRunway !== null && currentGs > state.minGsOnRunway && currentGs > prevGs) {
+          state.gsAccelCount++;
+        }
+
+        if (state.gsAccelCount >= 2 && state.minGsOnRunway >= 35 && state.didDecelerateOnRunway) {
+          if ((now - state.lastTouchAndGo) > COOLDOWN_MS) {
+            state.lastTouchAndGo = now;
+            state.lastTakeoff = now;
+            state.landingLogged = false;
+            state.minGsOnRunway = null;
+            state.gsAccelCount = 0;
+            state.didDecelerateOnRunway = false;
+            state.consecutiveDecelsOnRunway = 0;
+            state.minAltOnRunway = null;
+            state.consecutiveClimbs = 0;
+            state.wasDescendingOnRunway = false;
+            touchAndGoLoggedThisIteration = true;
+            logFlight( registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Touch and Go", state.lastRunway);
+          }
+        }
+      }
+
+      // --- [ARRIVAL FLAG] NEW: did this aircraft enter the runway corridor already flying? ---
+      // Set on the first poll inside the corridor if it was seen outside the corridor on the previous
+      // poll and is now airborne and fast. Departures enter slowly from a taxiway, so they never set it.
+      // Cleared when the aircraft leaves the corridor, slows to a stop/back-taxi, or an event is logged.
+      if (!isHelicopter) {
+        if (!currentRunway || currentGs < ARRIVAL_CLEAR_GS_KTS ||
+            takeoffLoggedThisIteration || touchAndGoLoggedThisIteration) {
+          state.arrivedAirborne = false;
+        } else if (prev && !isOnRunway(prev.lat, prev.lon) &&
+                   !isOnGround(currentAlt) && typeof currentAlt === "number" &&
+                   currentGs > ARRIVAL_MIN_GS_KTS) {
+          state.arrivedAirborne = true;
+        }
+      }
+
+      // --- [ARRIVAL FLAG] NEW: touch and go for aircraft that never report "ground" ---
+      // Same conditions as TAKEOFF option 2 below, but the aircraft arrived airborne, so climbing away
+      // is a touch and go (or low approach), not a departure. Logging here sets lastTakeoff and
+      // touchAndGoLoggedThisIteration, which stops TAKEOFF option 2 from also firing.
+      if (!isHelicopter && !isOnGround(currentAlt) && currentRunway &&
+          state.arrivedAirborne &&
+          currentGs > 40 && currentGs > prevGs &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" &&
+          currentAlt > prevAlt && currentAlt < 500 &&
+          !state.wasDescendingOnRunway && !touchAndGoLoggedThisIteration && !takeoffLoggedThisIteration) {
+        if ((now - state.lastTakeoff) > COOLDOWN_MS && (now - state.lastTouchAndGo) > COOLDOWN_MS) {
+          state.lastTouchAndGo = now;
+          state.lastTakeoff = now;
+          state.landingLogged = false;
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
+          state.wasDescendingOnRunway = false;
+          state.arrivedAirborne = false;
+          touchAndGoLoggedThisIteration = true;
+          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Touch and Go", currentRunway || state.lastRunway);
+        }
+      }
+
+      // --- TAKEOFF option 2: fixed wing on runway, accelerating above 40kts, climbing, below 500ft, not previously descending, no touch and go this iteration ---
+      if (!isHelicopter && !isOnGround(currentAlt) && currentRunway &&
+          currentGs > 40 && currentGs > prevGs &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" &&
+          currentAlt > prevAlt && currentAlt < 500 &&
+          !state.wasDescendingOnRunway && !touchAndGoLoggedThisIteration) {
+        if ((now - state.lastTakeoff) > COOLDOWN_MS) {
+          state.lastTakeoff = now;
+          state.landingLogged = false;
+          state.minAltOnRunway = null;
+          state.consecutiveClimbs = 0;
+          state.wasDescendingOnRunway = false;
+          takeoffLoggedThisIteration = true;
+          logFlight( registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Takeoff", currentRunway || state.lastRunway);
+        }
+      }
+
+      // --- TAKEOFF option 3: helicopter within 1km, not on ground, climbing for 2 consecutive fetches ---
+      if (isHelicopter && !isOnGround(currentAlt) && distance <= HELICOPTER_DISTANCE_KM &&
+          typeof currentAlt === "number" && typeof prevAlt === "number" && currentAlt > prevAlt) {
+        state.helicopterClimbs++;
+      } else if (isHelicopter && typeof currentAlt === "number" && typeof prevAlt === "number" &&
+                 currentAlt <= prevAlt) {
+        state.helicopterClimbs = 0;
+      }
+
+      if (isHelicopter && state.helicopterClimbs >= 2) {
+        const hasLandedSinceLastTakeoff = state.landingLogged;
+        const hasNeverTakenOff = state.lastTakeoff === 0;
+
+        if ((hasLandedSinceLastTakeoff || hasNeverTakenOff) &&
+            (now - state.lastTakeoff) > COOLDOWN_MS) {
+          state.lastTakeoff = now;
+          state.landingLogged = false;
+          state.helicopterClimbs = 0;
+          takeoffLoggedThisIteration = true;
+          logFlight(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight, aacAdg, category, aircraftClass, "Takeoff");
+        }
+      }
+
+      aircraftState[flight.hex] = state;
+    });
+
+    // --- [PENDING LANDING] NEW: timeout sweep, logs any landing held longer than the hold window ---
+    // Runs outside the loop so a landing still gets logged if the aircraft drops out of the feed.
+    for (const hex in aircraftState) {
+      const pending = aircraftState[hex].pendingLanding;
+      if (pending && (now - pending.time) > PENDING_LANDING_HOLD_MS) {
+        aircraftState[hex].pendingLanding = null;
+        logFlight(pending.registration, pending.aacAdg, pending.category, pending.aircraftClass, "Landing", pending.runway);
+      }
+    }
+
+    previousAircraft = currentAircraft;
+
+  } catch (error) {
+    console.error("Error fetching aircraft data:", error);
+  }
+}
+
+fetchAndDetect();
+setInterval(fetchAndDetect, 2000);
+
+
+// ════════════════════════════════════════════════════════════════════
+// END OF DAY NOISE INQUIRY SUMMARY
+// Runs at 11:59 PM each night. If more than one noise inquiry was
+// submitted today for PNS, sends a digest email via Web3Forms.
+// ════════════════════════════════════════════════════════════════════
+ 
+async function sendNoiseSummary() {
+  try {
+    // ── Get today's date string matching the format stored in Firestore ("MM/DD/YYYY") ──
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day   = String(now.getDate()).padStart(2, '0');
+    const year  = now.getFullYear();
+    const todayStr = `${month}/${day}/${year}`;
+ 
+    // ── Query noise_inquiries for today's PNS submissions ────────────
+    const q = query(
+      collection(db, "noise_inquiries"),
+      where("date", "==", todayStr),
+      where("airport", "==", "PNS — Pensacola International")
+    );
+    const snapshot = await getDocs(q);
+ 
+    if (snapshot.size <= 1) {
+      console.log(`[NoiseSummary] Only ${snapshot.size} submission(s) today — no summary needed.`);
+      return;
+    }
+ 
+    const submissions = snapshot.docs.map(d => d.data());
+ 
+    // ── Complaint types with time of each submission ──────────────────
+    const typeLines = submissions.map(s => {
+      const time = s.event_time || 'Unknown time';
+      const types = (s.complaint_types || []).join(', ') || 'Not specified';
+      return `  • ${types} — ${time}`;
+    }).join('\n');
+ 
+    // ── Unique addresses ──────────────────────────────────────────────
+    const addresses = [...new Set(submissions.map(s => s.address).filter(Boolean))];
+    const addressLines = addresses.map(a => `  • ${a}`).join('\n');
+ 
+    // ── Comments (non-empty only) ───────────────────────────────────────────
+    const comments = submissions.map(s => s.comments).filter(Boolean);
+    const commentLines = comments.length > 0
+      ? comments.map(c => `  • "${c}"`).join('\n')
+      : '  None';
+ 
+    // ── Noise abatement links ───────────────────────────────────────────────
+    const linkLines = submissions.some(s => s.noise_abatement_link)
+      ? submissions.map((s, i) => `  • Event ${i + 1} (${s.event_time || 'Unknown time'}): ${s.noise_abatement_link || 'N/A'}`).join('\n')
+      : '  None';
+ 
+    // ── Build email body ──────────────────────────────────────────────
+    const body = `Noise Inquiry Summary — ${todayStr}
+Airport: PNS — Pensacola International
+Total Submissions: ${submissions.length}
+ 
+PRIMARY CONCERN:
+${typeLines}
+ 
+LOCATIONS REPORTED FROM:
+${addressLines}
+ 
+COMMENTS:
+${commentLines}
+ 
+NOISE ABATEMENT LINKS:
+${linkLines}`;
+ 
+    // ── Send via Web3Forms ────────────────────────────────────────────
+    const formData = new FormData();
+    formData.append('access_key', '44fd3732-39ce-45f0-b09c-9e1ae5ab4dae');
+    formData.append('subject', `Noise Inquiry Daily Summary — PNS — ${todayStr}`);
+    formData.append('message', body);
+ 
+    const response = await fetch('https://api.web3forms.com/submit', {
+      method: 'POST',
+      body: formData
+    });
+ 
+    if (response.ok) {
+      console.log('[NoiseSummary] Summary email sent successfully.');
+    } else {
+      console.error('[NoiseSummary] Web3Forms submission failed:', response.status);
+    }
+ 
+  } catch (err) {
+    console.error('[NoiseSummary] Error sending summary:', err);
+  }
+}
+ 
+// ── Schedule summary at 11:59 PM ─────────────────────────────────────
+(function scheduleNoiseSummary() {
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 0, 0);
+  let msUntilTarget = target - now;
+  if (msUntilTarget < 0) msUntilTarget += 24 * 60 * 60 * 1000; // already past 11:59, schedule for tomorrow
+  console.log(`[NoiseSummary] Summary scheduled in ${Math.round(msUntilTarget / 60000)} minutes.`);
+  setTimeout(sendNoiseSummary, msUntilTarget);
+})();
+
+
+// ════════════════════════════════════════════════════════════════════
+// END OF MONTH NOISE INQUIRY SUMMARY  —  NEW FEATURE (additive)
+// Runs at 11:59 PM on the last day of each month. If more than one
+// noise inquiry was submitted that month for PNS, sends a digest email
+// via Web3Forms. Reuses the same "noise_inquiries" collection as the
+// daily summary above; does not modify or depend on that code.
+// ════════════════════════════════════════════════════════════════════
+
+async function sendMonthlyNoiseSummary() {
+  try {
+    const now = new Date();
+    const monthNum = now.getMonth(); // 0-indexed
+    const year = now.getFullYear();
+    const monthName = now.toLocaleString('en-US', { month: 'long' });
+
+    // ── Query noise_inquiries for this month's PNS submissions ────────
+    // "date" is stored as "MM/DD/YYYY", so match on the "MM/" and "/YYYY" parts.
+    const monthPadded = String(monthNum + 1).padStart(2, '0');
+    const q = query(
+      collection(db, "noise_inquiries"),
+      where("airport", "==", "PNS — Pensacola International")
+    );
+    const snapshot = await getDocs(q);
+
+    // Filter client-side for this month/year, since Firestore can't do
+    // substring matching on the "MM/DD/YYYY" string field.
+    const submissions = snapshot.docs
+      .map(d => d.data())
+      .filter(s => {
+        if (!s.date) return false;
+        const parts = s.date.split('/'); // [MM, DD, YYYY]
+        return parts.length === 3 && parts[0] === monthPadded && parts[2] === String(year);
+      });
+
+    if (submissions.length <= 1) {
+      console.log(`[MonthlyNoiseSummary] Only ${submissions.length} submission(s) this month — no summary needed.`);
+      return;
+    }
+
+    // ── Tally complaint types across the whole month ──────────────────
+    const typeCounts = {};
+    submissions.forEach(s => {
+      (s.complaint_types || []).forEach(t => {
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+      });
+    });
+    const typeLines = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => `  • ${type} — ${count} report${count > 1 ? 's' : ''}`)
+      .join('\n');
+
+    // ── Submissions per day (busiest days first) ───────────────────────
+    const dayCounts = {};
+    submissions.forEach(s => {
+      if (s.date) dayCounts[s.date] = (dayCounts[s.date] || 0) + 1;
+    });
+    const dayLines = Object.entries(dayCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([date, count]) => `  • ${date} — ${count} submission${count > 1 ? 's' : ''}`)
+      .join('\n');
+
+    // ── Unique addresses, ranked by number of submissions ──────────────
+    const addressCounts = {};
+    submissions.forEach(s => {
+      if (s.address) addressCounts[s.address] = (addressCounts[s.address] || 0) + 1;
+    });
+    const addressLines = Object.entries(addressCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([address, count]) => `  • ${address} — ${count} submission${count > 1 ? 's' : ''}`)
+      .join('\n');
+
+    // ── Comments (non-empty only) ──────────────────────────────────────
+    const comments = submissions.map(s => s.comments).filter(Boolean);
+    const commentLines = comments.length > 0
+      ? comments.map(c => `  • "${c}"`).join('\n')
+      : '  None';
+
+    // ── Noise abatement links ───────────────────────────────────────────
+    const linkLines = submissions.some(s => s.noise_abatement_link)
+      ? submissions
+          .filter(s => s.noise_abatement_link)
+          .map((s, i) => `  • Event ${i + 1} (${s.date || 'Unknown date'}, ${s.event_time || 'Unknown time'}): ${s.noise_abatement_link}`)
+          .join('\n')
+      : '  None';
+
+    // ── Build email body ───────────────────────────────────────────────
+    const body = `Noise Inquiry Monthly Summary — ${monthName} ${year}
+Airport: PNS — Pensacola International
+Total Submissions: ${submissions.length}
+
+PRIMARY CONCERN:
+${typeLines}
+
+SUBMISSIONS BY DAY:
+${dayLines}
+
+LOCATIONS REPORTED FROM:
+${addressLines}
+
+COMMENTS:
+${commentLines}
+
+NOISE ABATEMENT LINKS:
+${linkLines}`;
+
+    // ── Send via Web3Forms ─────────────────────────────────────────────
+    const formData = new FormData();
+    formData.append('access_key', '44fd3732-39ce-45f0-b09c-9e1ae5ab4dae');
+    formData.append('subject', `Noise Inquiry Monthly Summary — PNS — ${monthName} ${year}`);
+    formData.append('message', body);
+
+    const response = await fetch('https://api.web3forms.com/submit', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (response.ok) {
+      console.log('[MonthlyNoiseSummary] Summary email sent successfully.');
+    } else {
+      console.error('[MonthlyNoiseSummary] Web3Forms submission failed:', response.status);
+    }
+
+  } catch (err) {
+    console.error('[MonthlyNoiseSummary] Error sending summary:', err);
+  }
+}
+
+// ── Schedule monthly summary for 11:59 PM on the last day of the month ──
+(function scheduleMonthlyNoiseSummary() {
+  function isLastDayOfMonth(d) {
+    const tomorrow = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    return tomorrow.getMonth() !== d.getMonth();
+  }
+
+  function msUntilNext1159PM(from) {
+    const target = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 23, 59, 0, 0);
+    let ms = target - from;
+    if (ms < 0) ms += 24 * 60 * 60 * 1000;
+    return ms;
+  }
+
+  function scheduleNext() {
+    const now = new Date();
+    const msUntil1159 = msUntilNext1159PM(now);
+    const fireAt = new Date(now.getTime() + msUntil1159);
+
+    if (isLastDayOfMonth(fireAt)) {
+      console.log(`[MonthlyNoiseSummary] Monthly summary scheduled in ${Math.round(msUntil1159 / 60000)} minutes (last day of month).`);
+      setTimeout(() => {
+        sendMonthlyNoiseSummary();
+        scheduleNext(); // queue up next month's check after firing
+      }, msUntil1159);
+    } else {
+      // Not the last day yet — recheck at the next 11:59 PM without firing.
+      setTimeout(scheduleNext, msUntil1159);
+    }
+  }
+
+  scheduleNext();
+})();
+
+
+/* =====================================================================
+   FLIGHT PATH CAPTURE  —  NEW FEATURE  (additive; added 2026-07-17)
+   ---------------------------------------------------------------------
+   Everything below this comment is new. It does NOT read, modify, or
+   depend on the event-detection logic above. It runs its own fetch loop
+   on its own interval, keeps its own state (trackBuffers), and writes
+   flight paths to the "tracks_pns" Firestore collection.
+ 
+   How it works:
+     - While an aircraft is within TRACK_RADIUS_KM of PNS and at/below the
+       noise-relevant ceiling (TRACK_CEILING_AGL_FT above the field), its
+       position reports are buffered in memory.
+     - When that aircraft has not been seen for TRACK_TIMEOUT_MS, the
+       buffered path is flushed as ONE document. One document per visit,
+       so a plane that flies several times a day produces several docs,
+       told apart by their start timestamps.
+     - High overflights (always above the ceiling) are never buffered, so
+       en-route traffic that could never be a noise complaint is ignored.
+     - Stationary aircraft parked on the field (on ground, ~0 kt) are not
+       recorded, so a based aircraft idling on the ramp doesn't bloat a
+       session; the takeoff roll and landing rollout (moving) still are.
+     - Once a day it deletes track docs older than TRACK_RETENTION_DAYS.
+
+   Two things to know:
+     - One new import is needed (deleteDoc, used by the prune). It is
+       placed here so your existing import block stays untouched; feel
+       free to move it up next to your other firestore imports.
+     - This makes a SECOND fetch of aircraft.json (your detector has its
+       own). That keeps the two features fully independent. Merging them
+       into one shared fetch would mean editing your existing code, so it
+       is intentionally left separate.
+   ===================================================================== */
+
+import { deleteDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+// ---- Config ----
+const TRACK_COLLECTION     = "tracks_pns";
+const TRACK_RADIUS_KM      = 11.27;     // wider than the 3 km detection radius; noise corridors run well past it, ~7 miles
+const FIELD_ELEVATION_FT   = 121;     // PNS field elevation (MSL) — confirm against the charted figure
+const TRACK_CEILING_AGL_FT = 4500;   // only keep paths that came at/below this height above the field
+const TRACK_CEILING_MSL_FT = FIELD_ELEVATION_FT + TRACK_CEILING_AGL_FT; // feed reports MSL, so compare against this
+const TRACK_GROUND_MIN_KT  = 3;      // ignore stationary ground samples (parked/idling aircraft)
+const TRACK_TIMEOUT_MS     = 120000; // a visit ends after the aircraft is unseen this long (rides out coverage gaps)
+const TRACK_STATIONARY_MAX_MS = 10 * 60 * 1000; // [STATIONARY FIX] stopped on the ground longer than this = parked, close the visit
+const TRACK_POLL_MS        = 2000;   // sample cadence (matches the feed)
+const TRACK_RETENTION_DAYS = 30;     // prune anything older than this
+const TRACK_PRUNE_EVERY_MS = 24 * 60 * 60 * 1000; // run the prune at most once a day (also runs once on startup)
+
+// ---- State (separate from the detector's aircraftState) ----
+let trackBuffers = {};      // hex -> { hex, registration, type, startMs, lastSeenMs, points[], bbox }
+let lastTrackPruneMs = 0;
+
+// ---- Resolve AAC-ADG the same way the detector does (read-only reuse of aircraftRegistry) ----
+function resolveTrackType(flight) {
+  if (flight.category === "A7") return "Rotorcraft";
+  if (typeof aircraftRegistry !== "undefined" && aircraftRegistry[flight.hex.toLowerCase()]) {
+    return aircraftRegistry[flight.hex.toLowerCase()];
+  }
+  return "Unknown";
+}
+ 
+// ---- Flush one buffered visit to Firestore (one document per visit) ----
+async function flushTrack(hex) {
+  const buf = trackBuffers[hex];
+  delete trackBuffers[hex];                   // free the buffer immediately
+  if (!buf || buf.points.length < 2) return;  // nothing worth storing (e.g. only a single sample)
+ 
+  const start = new Date(buf.startMs);
+  const end   = new Date(buf.lastSeenMs);
+ 
+  // display date/time in the same format your event docs use (derived from the visit start)
+  const month = String(start.getMonth() + 1).padStart(2, '0');
+  const day   = String(start.getDate()).padStart(2, '0');
+  const year  = start.getFullYear();
+  let hours   = start.getHours();
+  const mins  = String(start.getMinutes()).padStart(2, '0');
+  const secs  = String(start.getSeconds()).padStart(2, '0');
+  const ampm  = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+ 
+  let minAlt = buf.points[0][2];
+  for (const p of buf.points) if (p[2] < minAlt) minAlt = p[2];
+ 
+  // Firestore does not allow arrays-of-arrays, so each point is stored as a small map.
+  const trackPoints = buf.points.map(p => ({
+    lat: p[0], lon: p[1], alt: p[2], gs: p[3], trk: p[4], t: p[5]
+  }));
+  // [ALT_GEOM] attach raw GNSS altitude as "ag" (ft, WGS84 ellipsoid) on points that have it; omitted otherwise
+  buf.points.forEach((p, i) => { if (typeof p[6] === "number") trackPoints[i].ag = p[6]; });
+ 
+  try {
+    await addDoc(collection(db, TRACK_COLLECTION), {
+      registration: buf.registration || "Unknown",
+      hex: buf.hex,
+      aircraftType: buf.type || "Unknown",
+      timestamp: start.toISOString(),   // used for ordering and for the retention prune
+      start: start.toISOString(),
+      end: end.toISOString(),
+      date: `${month}/${day}/${year}`,
+      time: `${hours}:${mins}:${secs} ${ampm}`,
+      pointCount: trackPoints.length,
+      minAltMSL: minAlt,                // lowest altitude seen on the visit (MSL)
+      bbox: buf.bbox,                   // {minLat,maxLat,minLon,maxLon} for cheap "passed near here" pre-filtering
+      track: trackPoints                // [{lat,lon,alt,gs,trk,t}, ...]  alt = ft MSL, t = sec since start
+    });
+    console.log(`Stored track for ${buf.registration} — ${trackPoints.length} pts`);
+  } catch (error) {
+    console.error("Error storing track:", error);
+  }
+}
+
+// ---- Delete track docs older than the retention window ----
+async function pruneOldTracks() {
+  try {
+    const cutoff = new Date(Date.now() - TRACK_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const oldQuery = query(collection(db, TRACK_COLLECTION), where("timestamp", "<", cutoff));
+    const snap = await getDocs(oldQuery);
+    let removed = 0;
+    for (const docSnap of snap.docs) {
+      await deleteDoc(docSnap.ref);
+      removed++;
+    }
+    if (removed) console.log(`Pruned ${removed} track(s) older than ${TRACK_RETENTION_DAYS} days`);
+  } catch (error) {
+    console.error("Error pruning tracks:", error);
+  }
+}
+
+// ---- Main capture pass (own fetch, own interval) ----
+async function captureTracks() {
+  try {
+    const response = await fetch('/tar1090/data/aircraft.json');
+    const data = await response.json();
+    const nowMs = Date.now();
+ 
+    data.aircraft.forEach(flight => {
+      if (flight.lat == null || flight.lon == null) return;
+ 
+      const dist = getDistance(PNS_LAT, PNS_LNG, flight.lat, flight.lon);
+      if (dist > TRACK_RADIUS_KM) return;              // outside the capture radius
+ 
+      // altitude in feet MSL: a number from the feed, or field elevation when on the ground
+      const onGround = isOnGround(flight.alt_baro);
+      const altMSL = onGround
+        ? FIELD_ELEVATION_FT
+        : (typeof flight.alt_baro === "number" ? flight.alt_baro : null);
+      const belowCeiling = altMSL !== null && altMSL <= TRACK_CEILING_MSL_FT;
+      const moving = !onGround || (flight.gs || 0) >= TRACK_GROUND_MIN_KT;
+      const recordable = belowCeiling && moving;
+ 
+      let buf = trackBuffers[flight.hex];
+ 
+      if (recordable) {
+        if (!buf) {
+          buf = trackBuffers[flight.hex] = {
+            hex: flight.hex,
+            registration: (registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight || "Unknown").trim(),
+            type: resolveTrackType(flight),
+            startMs: nowMs,
+            lastSeenMs: nowMs,
+            points: [],
+            bbox: { minLat: flight.lat, maxLat: flight.lat, minLon: flight.lon, maxLon: flight.lon }
+          };
+        }
+        // upgrade the registration if it was unknown at first and is now resolvable
+        if (buf.registration === "Unknown") {
+          const resolved = (registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight || "").trim();
+          if (resolved) buf.registration = resolved;
+        }
+        buf.lastSeenMs = nowMs;
+        buf.stationarySinceMs = null; // [STATIONARY FIX] moving again, clear the stop timer
+ 
+        // dedupe consecutive identical positions (parked/slow), then append
+        const rlat = +flight.lat.toFixed(5);
+        const rlon = +flight.lon.toFixed(5);
+        const ralt = Math.round(altMSL);
+        const last = buf.points[buf.points.length - 1];
+        if (!last || last[0] !== rlat || last[1] !== rlon || last[2] !== ralt) {
+          buf.points.push([
+            rlat, rlon, ralt,
+            Math.round(flight.gs || 0),
+            Math.round(flight.track || 0),
+            Math.round((nowMs - buf.startMs) / 1000)   // seconds since visit start
+          ]);
+          // [ALT_GEOM] raw GNSS altitude (ft above the WGS84 ellipsoid, NOT MSL), only when the aircraft reports it
+          if (!onGround && typeof flight.alt_geom === "number") buf.points[buf.points.length - 1][6] = Math.round(flight.alt_geom);
+          buf.bbox.minLat = Math.min(buf.bbox.minLat, flight.lat);
+          buf.bbox.maxLat = Math.max(buf.bbox.maxLat, flight.lat);
+          buf.bbox.minLon = Math.min(buf.bbox.minLon, flight.lon);
+          buf.bbox.maxLon = Math.max(buf.bbox.maxLon, flight.lon);
+        }
+      } else if (buf && !onGround) {
+        // airborne but above the ceiling and a visit is already open:
+        // keep it alive so a brief climb-out doesn't split one visit into two
+        buf.lastSeenMs = nowMs;
+      } else if (buf && onGround) {
+        // [STATIONARY FIX] stopped on the ground with a visit open (run-up / hold short):
+        // keep the visit alive without adding points, up to TRACK_STATIONARY_MAX_MS.
+        // Past that it's parked: set lastSeenMs back to when it stopped so the
+        // visit-end sweep below closes it now, with an accurate end time.
+        if (!buf.stationarySinceMs) buf.stationarySinceMs = nowMs;
+        if (nowMs - buf.stationarySinceMs <= TRACK_STATIONARY_MAX_MS) {
+          buf.lastSeenMs = nowMs;
+        } else {
+          buf.lastSeenMs = buf.stationarySinceMs;
+        }
+      }
+      // (stationary on ground, no open visit) and (above ceiling, no open visit) are intentionally ignored
+    });
+ 
+    // visit-end sweep: flush any buffer not seen within the timeout
+    const stale = nowMs - TRACK_TIMEOUT_MS;
+    const toFlush = [];
+    for (const hex in trackBuffers) {
+      if (trackBuffers[hex].lastSeenMs < stale) toFlush.push(hex);
+    }
+    for (const hex of toFlush) await flushTrack(hex);
+
+    // daily retention prune
+    if (nowMs - lastTrackPruneMs > TRACK_PRUNE_EVERY_MS) {
+      lastTrackPruneMs = nowMs;
+      pruneOldTracks();
+    }
+  } catch (error) {
+    console.error("Error capturing tracks:", error);
+  }
+}
+ 
+captureTracks();
+setInterval(captureTracks, TRACK_POLL_MS);
+
+// Hard refresh the page every 3 hours
+setTimeout(() => location.reload(true), 3 * 60 * 60 * 1000);
