@@ -742,6 +742,11 @@
             { label: 'HS 1', lat: 41.62215924845616, lon: -73.89089257898618 },
             { label: 'HS 2', lat: 41.62338542722897, lon: -73.88858893258008 },
         ];
+        // PNS hot spot (added) — centre and radius taken from the circle drawn in KPNS.kml (HS 1, ~224 m radius)
+        const PNS_HOTSPOTS = [
+            { label: 'HS 1', lat: 30.472822, lon: -87.187946, radius: 224 },
+        ];
+        const HOTSPOTS_BY_AIRPORT = { pou: POU_HOTSPOTS, pns: PNS_HOTSPOTS };
 
         let currentCollection = 'tracks_owd';
         let currentAirportKey = 'owd';
@@ -796,13 +801,14 @@
                     radiusCircle.setRadius(getTrackRadiusKm() * 1000);
                     radiusCircle.setTooltipContent(`${getTrackRadiusKm().toFixed(2)} km tracking radius`);
                 }
-                // Clear existing hotspot markers then draw POU-specific ones
+                // Clear existing hotspot markers then draw this airport's (POU / PNS) if it has any
                 if (hotspotLayer) { map.removeLayer(hotspotLayer); hotspotLayer = null; }
-                if (key === 'pou') {
+                const hotspots = HOTSPOTS_BY_AIRPORT[key];   // POU and PNS have hot spots
+                if (hotspots) {
                     hotspotLayer = L.layerGroup().addTo(map);
-                    POU_HOTSPOTS.forEach(hs => {
+                    hotspots.forEach(hs => {
                         L.circle([hs.lat, hs.lon], {
-                            radius: 60,
+                            radius: hs.radius || 60,
                             color: '#16a34a', fillColor: '#22c55e',
                             fillOpacity: 0.25, weight: 2
                         }).bindTooltip(`FAA Hot Spot — ${hs.label}`, { sticky: true })
