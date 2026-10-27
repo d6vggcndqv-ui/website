@@ -138862,6 +138862,7 @@ const registrationRegistry = {
   "a5a236": "N462NA",
   "a5a237": "N462NB",
   "a5a24c": "N462NY",
+  "a5a24f": "N462PA",
   "a5a24e": "N462P",
   "a5a251": "N462PC",
   "a5a252": "N462PD",
