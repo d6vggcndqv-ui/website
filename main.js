@@ -37,7 +37,7 @@ async function findCameraEvent(registration, isoTimestamp, windowSeconds = 60) {
             const res = await fetch(`${CAMERA_API_BASE}/events?${params}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
-            return data.total > 0 ? data.events[0] : null;
+            return data.total > 0 ? pickCameraEventWithMedia(data.events) : null; // CHANGED: first event that has media (was events[0])
         } catch (e) {
             const isLastAttempt = attempt === MAX_ATTEMPTS;
             console.warn(`Camera lookup failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
@@ -114,6 +114,7 @@ function attachCameraIcons(pageRows) {
             const slot = document.querySelector(`[data-camera-slot="${r.docId}"]`);
             if (!slot) return; // page changed since lookup started
             slot.innerHTML = cameraIconHtml(event.id);
+            applyCameraMediaFlags(slot, event); // ADDED: tag icon with photo/video availability for the popover
         });
     });
 }
@@ -164,7 +165,26 @@ function openCameraChooser(linkEl) {
         return b;
     };
 
-    menu.append(makeBtn('Photo', photoUrl), makeBtn('Video', videoUrl));
+    // ADDED: unavailable media is shown greyed out ("processing…" while the event is still indexing)
+    const makeUnavailableBtn = (label) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.disabled = true;
+        const processing = linkEl.getAttribute('data-in-progress') === 'true';
+        b.textContent = `${label} ${processing ? 'processing…' : 'not available'}`;
+        b.style.cssText =
+            'background:none;border:none;padding:6px 12px;text-align:left;' +
+            'font-size:12px;color:#aaa;cursor:default;border-radius:4px;';
+        return b;
+    };
+    // Missing attributes (older events without has_* fields) count as available.
+    const photoReady = linkEl.getAttribute('data-has-thumbnail') !== 'false';
+    const videoReady = linkEl.getAttribute('data-has-video') !== 'false';
+
+    menu.append( // CHANGED: was makeBtn('Photo', photoUrl), makeBtn('Video', videoUrl)
+        photoReady ? makeBtn('Photo', photoUrl) : makeUnavailableBtn('Photo'),
+        videoReady ? makeBtn('Video', videoUrl) : makeUnavailableBtn('Video')
+    );
     document.body.appendChild(menu);
 
     // Anchor just below the icon; nudge left if it would overflow the viewport.
@@ -200,3 +220,37 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCamer
 // (covers scrolling inside table containers too, via capture).
 window.addEventListener('scroll', closeCameraChooser, true);
 window.addEventListener('resize', closeCameraChooser);
+
+// ── Camera media availability (ADDED) ────────────────────────
+// Uses the has_thumbnail / has_video fields on camera events.
+//   - Picks the first returned event that has a photo or video (skips media-less duplicates)
+//   - No event with media → no icon
+//   - Older events without these fields are treated as available (same as before)
+
+/** Normalizes a has_* flag: true / false, or null when the field is absent (older events). */
+function cameraMediaFlag(v) {
+    if (v === undefined || v === null) return null;
+    return v === true || v === 1 || String(v).toLowerCase() === 'true';
+}
+
+/** True unless the event explicitly reports neither a thumbnail nor a video. */
+function cameraEventHasMedia(ev) {
+    return cameraMediaFlag(ev.has_thumbnail) !== false || cameraMediaFlag(ev.has_video) !== false;
+}
+
+/** First event in API order that has media, or null if none do. */
+function pickCameraEventWithMedia(events) {
+    if (!Array.isArray(events)) return null;
+    return events.find(cameraEventHasMedia) || null;
+}
+
+/** Copies the event's media flags onto the icon link so the popover can grey out what's missing. */
+function applyCameraMediaFlags(slot, ev) {
+    const a = slot.querySelector('a');
+    if (!a) return;
+    const t = cameraMediaFlag(ev.has_thumbnail);
+    const v = cameraMediaFlag(ev.has_video);
+    if (t !== null) a.setAttribute('data-has-thumbnail', String(t));
+    if (v !== null) a.setAttribute('data-has-video', String(v));
+    if (ev.in_progress === true) a.setAttribute('data-in-progress', 'true');
+}
