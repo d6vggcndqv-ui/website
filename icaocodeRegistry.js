@@ -34317,6 +34317,7 @@ const typeCodeRegistry = {
   'N283DM': 'CL60',
   'N283DS': 'DA40',
   'N283FE': 'B763',
+  'N283FX': 'E545',
   'N283G': 'BE24',
   'N283JD': 'BE30',
   'N283JS': 'SR20',
