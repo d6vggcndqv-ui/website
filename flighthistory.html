@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <script src="main.js"></script>
+    <script src="toa-demo-nav.js"></script>   <!-- [TOA DEMO] Noise dropdown -->
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -216,6 +217,10 @@
             color: #991b1b;
             margin-top: 4px;
         }
+
+                /* [TOA DEMO] larger Torrance logo, top-aligned with the title so the navbar doesn't cover it */
+        #page-airport-logo[src$="toa-logo.png"] { height: 72px; top: 6px; transform: none; }
+
     </style>
 </head>
 
@@ -389,9 +394,9 @@
     const db = getFirestore(app);
 
     const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou', pns: 'flights_pns' };
-    const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional', pns: 'PNS — Pensacola International' };
+    const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional', pns: 'PNS — Pensacola International', demo_toa: 'TOA — Torrance Municipal (Demo)' };
     // Matches portal.html's AIRPORT_INFO logo convention
-    const AIRPORT_LOGOS = { pou: 'pou-logo.jpg', pns: 'pns-logo.jpg' };
+    const AIRPORT_LOGOS = { pou: 'pou-logo.jpg', pns: 'pns-logo.jpg', demo_toa: 'toa-logo.png' };
     function setAirportLogo(code) {
         const img = document.getElementById('page-airport-logo');
         const src = AIRPORT_LOGOS[code];
@@ -445,6 +450,7 @@
             console.log('[initUser] snap.exists:', snap.exists());
             if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
             const profile = snap.data();
+            if (window.toaDemoNav) toaDemoNav(profile.airport);   // [TOA DEMO] Noise dropdown, demo_toa only
             console.log('[initUser] profile:', JSON.stringify(profile));
             if (profile.role === 'admin') {
                 console.log('[initUser] admin user detected');

@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noise Monitoring</title>
+    <!-- [NOISE MONITORING DEMO] new page — reads noise_*_demo collections (written by generate_noise_demo.js) plus tracks_pou / flights_pou (read-only) -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script src="main.js"></script>
+    <script src="toa-demo-nav.js"></script>   <!-- [TOA DEMO] Noise dropdown -->
+    <script src="icaocodeRegistry.js"></script>
+    <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+    <style>
+        .page-header-row { position:relative; text-align:center; margin-bottom:0.75rem; }
+        .page-header-row h1 { margin:0; }
+
+        /* ── Demo banner ───────────────────────────────────────────── */
+        .nm-banner {
+            background: #fffbeb; border: 1px solid #fcd34d; color: #78350f;
+            border-radius: 8px; padding: 10px 14px; font-size: 13px; line-height: 1.5; margin-bottom: 1.25rem;
+        }
+        .nm-banner strong { color: #92400e; }
+
+        /* ── Controls (matches noiseabatement.html) ────────────────── */
+        .viewer-controls { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:1.25rem; align-items:flex-end; }
+        .viewer-controls label { display:flex; flex-direction:column; font-size:13px; color:#666; gap:4px; }
+        .viewer-controls input, .viewer-controls select {
+            font-family:'DM Sans',sans-serif; font-size:14px; padding:7px 10px; border:1px solid #ccc; border-radius:6px; background:#fff; color:#111;
+        }
+        .viewer-controls button {
+            font-family:'DM Sans',sans-serif; font-size:14px; padding:8px 18px; border:1px solid #ccc; border-radius:6px; background:#fff; cursor:pointer; transition:background 0.15s;
+        }
+        .viewer-controls button:hover { background:#f0f0f0; }
+        .viewer-controls button.primary { background:#0057ff; color:#fff; border-color:#0057ff; }
+        .viewer-controls button.primary:hover { background:#0040cc; }
+        #nm-status { font-size:13px; color:#666; align-self:center; }
+
+        /* ── Metrics (matches dashboard.html) ──────────────────────── */
+        .metrics { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:1.5rem; }
+        .metric-card { background:#f5f5f5; border-radius:8px; padding:14px 16px; }
+        .metric-card .m-label { font-size:12px; color:#666; margin-bottom:4px; }
+        .metric-card .m-value { font-size:26px; font-weight:600; font-variant-numeric:tabular-nums; }
+        .metric-card .m-sub { font-size:11px; color:#888; margin-top:2px; }
+        .metric-card.warn .m-value { color:#b91c1c; }
+        .metric-card.hb .m-value { color:#6d28d9; }
+
+        /* ── Cards ─────────────────────────────────────────────────── */
+        .nm-grid { scroll-margin-top:80px; display:grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap:20px; margin-bottom:20px; align-items:start; }
+        @media (max-width: 1000px) { .nm-grid { grid-template-columns: 1fr; } }
+        .card { background:#fff; border:1px solid #e5e5e5; border-radius:10px; overflow:hidden; margin-bottom:20px; }
+        .nm-grid .card { margin-bottom:0; }
+        .card-header { padding:12px 16px; border-bottom:1px solid #e5e5e5; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+        .card-header h2 { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:#444; margin:0; }
+        .card-sub { font-size:12px; color:#999; }
+        .card-body { padding:14px 16px; }
+
+        /* ── Map ───────────────────────────────────────────────────── */
+        #nm-map { height:460px; width:100%; }
+        .leaflet-top, .leaflet-bottom { z-index:400; }
+        .nm-legend { display:flex; flex-wrap:wrap; gap:12px; padding:10px 16px; border-top:1px solid #f0f0f0; font-size:12px; color:#555; background:#fafafa; align-items:center; }
+        .nm-legend .sw { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:5px; vertical-align:-1px; border:1px solid rgba(0,0,0,0.2); }
+        .nm-mon-label { background:#fff; border:1px solid #cbd5e1; color:#111; font-weight:700; font-size:11px; padding:1px 5px; box-shadow:none; }
+        .nm-mon-label::before { display:none; }
+
+        /* ── Event detail ──────────────────────────────────────────── */
+        .nm-empty { padding:40px 16px; text-align:center; color:#aaa; font-size:13px; line-height:1.6; }
+        #nm-curve-wrap { position:relative; height:220px; }
+        .nm-facts { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:1px; background:#e5e5e5; border-top:1px solid #e5e5e5; margin-top:12px; }
+        .nm-fact { background:#fff; padding:9px 12px; }
+        .nm-fact .l { font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.03em; }
+        .nm-fact .v { font-size:15px; font-weight:600; margin-top:2px; font-variant-numeric:tabular-nums; }
+        .nm-fact .v.over { color:#b91c1c; }
+        .nm-fact .v small { font-size:12px; font-weight:400; color:#888; }
+        .nm-detail-title { font-size:17px; font-weight:700; }
+        .nm-detail-meta { font-size:13px; color:#666; margin-top:2px; }
+        .nm-detail-flags { margin-top:8px; display:flex; flex-wrap:wrap; gap:5px; }
+        .nm-links { display:flex; flex-wrap:wrap; gap:10px; padding:12px 16px 16px; }
+        .nm-link {
+            display:inline-block; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600; padding:6px 14px;
+            border:1px solid #0057ff; border-radius:6px; background:#fff; color:#0057ff; text-decoration:none; transition:background 0.15s, color 0.15s;
+        }
+        .nm-link:hover { background:#0057ff; color:#fff; }
+        .nm-alts { font-size:13px; color:#92400e; background:#fffbeb; border-top:1px solid #fde68a; padding:9px 16px; }
+
+        /* ── Badges ────────────────────────────────────────────────── */
+        .badge { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:99px; white-space:nowrap; }
+        .b-high   { background:#dcfce7; color:#166534; }
+        .b-review { background:#fef3c7; color:#92400e; }
+        .b-none   { background:#f1f5f9; color:#475569; }
+        .b-lmax, .b-senel { background:#fee2e2; color:#991b1b; }
+        .b-hb     { background:#ede9fe; color:#5b21b6; }
+        .b-curfew { background:#1e293b; color:#fff; }
+        .b-tng    { background:#fef9c3; color:#854d0e; }
+        .b-cal    { background:#ffedd5; color:#9a3412; }
+
+        /* ── Event table ───────────────────────────────────────────── */
+        .nm-table-wrap { overflow-x:auto; }
+        table.nm-table { width:100%; border-collapse:collapse; font-size:13px; }
+        .nm-table th { text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em; color:#666; padding:9px 10px; border-bottom:1px solid #e5e5e5; background:#fafafa; white-space:nowrap; }
+        .nm-table th[data-sort] { cursor:pointer; user-select:none; }
+        .nm-table th[data-sort]:hover { color:#0057ff; }
+        .nm-table td { padding:8px 10px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+        .nm-table td.num { font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+        .nm-table td.num.over { color:#b91c1c; font-weight:700; }
+        .nm-table tbody tr { cursor:pointer; transition:background 0.1s; }
+        .nm-table tbody tr:hover { background:#f7f9ff; }
+        .nm-table tbody tr.selected { background:#eef4ff; box-shadow: inset 3px 0 0 #0057ff; }
+        .nm-reg { font-weight:700; }
+        .nm-dim { color:#999; }
+        .nm-more { text-align:center; padding:12px; }
+        .nm-more button { font-family:'DM Sans',sans-serif; font-size:13px; padding:6px 16px; border:1px solid #ccc; border-radius:6px; background:#fff; cursor:pointer; }
+        .nm-more button:hover { background:#f0f0f0; }
+
+        /* ── Daily / calibration matrices ──────────────────────────── */
+        table.nm-matrix { border-collapse:collapse; font-size:12px; width:100%; }
+        .nm-matrix th, .nm-matrix td { padding:7px 8px; border-bottom:1px solid #f0f0f0; text-align:center; white-space:nowrap; }
+        .nm-matrix th { font-size:11px; font-weight:600; color:#666; background:#fafafa; text-transform:uppercase; letter-spacing:0.03em; }
+        .nm-matrix th:first-child, .nm-matrix td:first-child { text-align:left; }
+        .nm-matrix td.c { font-weight:600; font-variant-numeric:tabular-nums; border-radius:4px; }
+        .nm-matrix td.calfail { outline:2px solid #f97316; outline-offset:-3px; }
+        .nm-matrix td.pass { color:#166534; }
+        .nm-matrix td.fail { color:#fff; background:#dc2626; font-weight:700; }
+        .nm-matrix td.tot { font-weight:700; border-left:1px solid #e5e5e5; }
+        .nm-note { font-size:12px; color:#888; padding:10px 16px; border-top:1px solid #f0f0f0; line-height:1.5; }
+
+        /* ── Auth (matches other portal pages) ─────────────────────── */
+        #auth-screen { display:none; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; }
+        #auth-screen h2 { font-size:1.5rem; font-weight:600; margin-bottom:1.5rem; }
+        #auth-form { display:flex; flex-direction:column; gap:14px; width:100%; max-width:360px; }
+        #auth-form input { font-family:'DM Sans',sans-serif; font-size:14px; padding:10px 12px; border:1px solid #ccc; border-radius:6px; outline:none; }
+        #auth-form input:focus { border-color:#0057ff; }
+        #auth-form button { font-family:'DM Sans',sans-serif; font-size:14px; padding:10px; background:#0057ff; color:#fff; border:none; border-radius:6px; cursor:pointer; }
+        #auth-form button:hover { background:#0040cc; }
+        #auth-error { font-size:13px; color:#dc2626; text-align:center; min-height:18px; }
+        .forgot-link { font-size:12px; color:#0057ff; text-decoration:none; }
+        .forgot-link:hover { text-decoration:underline; }
+
+        /* [ADDRESS] inquiry address lookup (same look as noiseabatement.html) */
+        .nm-addr-row { margin-top:-0.5rem; }
+        .nm-addr-row #nm-addr { width:300px; max-width:100%; }
+        #nm-addr-status { font-size:13px; color:#555; align-self:center; max-width:620px; line-height:1.4; }
+        #nm-addr-status.nm-addr-err { color:#b91c1c; }
+        #nm-addr-matches { display:none; flex-direction:column; gap:4px; margin:-0.75rem 0 1.25rem; font-size:13px; }
+        #nm-addr-matches button { text-align:left; font-family:'DM Sans',sans-serif; font-size:13px; padding:6px 10px; border:1px solid #ddd; border-radius:6px; background:#fff; cursor:pointer; max-width:640px; }
+        #nm-addr-matches button:hover { background:#f5f3ff; border-color:#7c3aed; }
+        .nm-addr-pin { width:18px; height:18px; border-radius:50%; background:#7c3aed; border:3px solid #fff; box-shadow:0 0 0 1.5px #7c3aed, 0 1px 4px rgba(0,0,0,0.4); box-sizing:border-box; cursor:grab; }
+        .nm-addr-label { background:#fff; border:1px solid #7c3aed; color:#4c1d95; font-weight:600; font-size:12px; }
+        .nm-addr-note { font-size:12px; color:#6d28d9; }
+        .nm-fact:has(#nm-addr-fact) { grid-column:1 / -1; }
+        .nm-fact:has(#nm-addr-fact) .l { color:#7c3aed; }
+
+        /* [OPERATIONS] runway operations classified from the flight tracks */
+        .nm-ops-chips { display:flex; flex-wrap:wrap; gap:6px; padding:12px 16px; border-bottom:1px solid #f0f0f0; }
+        .nm-ops-chips button { font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600; padding:5px 11px; border:1px solid #d4d4d8; border-radius:99px; background:#fff; color:#333; cursor:pointer; }
+        .nm-ops-chips button:hover { background:#f4f4f5; }
+        .nm-ops-chips button.active { background:#0057ff; border-color:#0057ff; color:#fff; }
+        .nm-ops-chips button .n { font-weight:400; opacity:0.75; margin-left:4px; }
+        .nm-ops-grid { display:grid; grid-template-columns:minmax(0, 1.1fr) minmax(0, 1fr); align-items:start; }
+        @media (max-width: 1000px) { .nm-ops-grid { grid-template-columns:1fr; } }
+        .nm-ops-list { max-height:640px; overflow:auto; border-right:1px solid #f0f0f0; }
+        .nm-ops-list thead th { position:sticky; top:0; z-index:1; }
+        .op { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; white-space:nowrap; }
+        .op-takeoff { background:#dbeafe; color:#1e40af; }
+        .op-landing { background:#dcfce7; color:#166534; }
+        .op-touch-and-go { background:#fef3c7; color:#92400e; }
+        .op-stop-and-go { background:#ffedd5; color:#9a3412; }
+        .op-taxi-back { background:#e0e7ff; color:#3730a3; }
+        .op-low-approach { background:#f3e8ff; color:#6b21a8; }
+        .op-review { background:#f1f5f9; color:#475569; border:1px dashed #94a3b8; }
+        .b-prohib { background:#fee2e2; color:#991b1b; }
+        .b-hours  { background:#fef3c7; color:#92400e; }
+        .nm-op-title { font-size:17px; font-weight:700; display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+        .nm-op-meta { font-size:13px; color:#666; margin-top:3px; }
+        .nm-op-reason { font-size:14px; line-height:1.5; margin-top:10px; color:#222; }
+        .nm-op-rules { margin:10px 0 0; padding:0; list-style:none; font-size:13px; }
+        .nm-op-rules li { padding:6px 10px; border-radius:6px; margin-bottom:4px; }
+        .nm-op-rules li.bad { background:#fef2f2; color:#991b1b; }
+        .nm-op-rules li.warn { background:#fffbeb; color:#92400e; }
+        .nm-op-rules li.ok { background:#f0fdf4; color:#166534; }
+        #nm-op-chart-wrap { position:relative; height:230px; margin-top:12px; }
+        #nm-op-map { height:230px; margin-top:12px; border-radius:8px; border:1px solid #e5e5e5; }
+
+        .spinner { display:inline-block; width:14px; height:14px; border:2px solid #e0e0e0; border-top-color:#0057ff; border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; margin-right:6px; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-logo">
+            <a href="https://www.fl-technologies.com" target="_blank">
+                <img src="logo.png" alt="Logo">
+            </a>
+        </div>
+        
+        <ul class="nav-links">
+            <li><a href="portal.html">Home</a></li>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="flighthistory.html">Flight History</a></li>
+            <li><a href="landingfees.html">Landing Fees</a></li>
+            <li><a href="noiseabatement.html">Noise Abatement</a></li>
+            <li><a href="3Dairspace.html">3D Airspace</a></li>
+            <li><a href="noisemonitoring.html">Noise Monitoring</a></li>
+        </ul>
+        <a class="nav-btn-secondary" href="#" onclick="if(window._authSignOut){window._authSignOut();} window.location.href='index.html'; return false;">Logout</a>
+    </nav> 
+
+    <main>
+        <!-- Auth screen -->
+        <div id="auth-screen">
+            <h2>Sign-In</h2>
+            <form id="auth-form" onsubmit="return false;">
+                <input type="email"    id="auth-email"    placeholder="Email"    required autocomplete="email">
+                <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
+                <button type="button"  id="auth-submit" onclick="window._authSignIn()">Sign-In</button>
+                <div id="auth-error"></div>
+            </form>
+            <p style="text-align:center;margin-top:8px;">
+                <a href="#" class="forgot-link" onclick="window._forgotPassword(); return false;">Forgot password?</a>
+            </p>
+        </div>
+
+        <!-- Main content -->
+        <div id="main-content" style="display:none;">
+            <div class="page-header-row">
+                <h1>Noise Monitoring</h1>
+            </div>
+
+            <div class="nm-banner">
+                <strong>Demonstration data.</strong> Aircraft movements are real ADS-B tracks recorded at Hudson Valley Regional Airport (POU),
+                October 19–25, 2026. Noise levels are <strong>simulated</strong> at seven virtual monitors and evaluated against Torrance Municipal Airport's
+                published limits (82 dBA Lmax / 88 dB SENEL; 76 / 82 during the departure curfew). Flags are candidates for staff review, not findings.
+            </div>
+
+            <div class="viewer-controls">
+                <label>From
+                    <input type="date" id="nm-from">
+                </label>
+                <label>To
+                    <input type="date" id="nm-to">
+                </label>
+                <label>Monitor
+                    <select id="nm-monitor"><option value="all">All monitors</option></select>
+                </label>
+                <label>Show
+                    <select id="nm-show">
+                        <option value="aircraft">Aircraft events</option>
+                        <option value="flagged">Exceedances only</option>
+                        <option value="hb">Hearing Board candidates</option>
+                        <option value="community">Non-aircraft events</option>
+                        <option value="all">All events</option>
+                    </select>
+                </label>
+                <label>Registration
+                    <input type="text" id="nm-reg" placeholder="e.g. N1474X" style="width:130px;">
+                </label>
+                <button class="primary" id="nm-load">Load</button>
+                <button id="nm-csv">Export violation list (CSV)</button>
+                <span id="nm-status"></span>
+            </div>
+
+            <!-- [ADDRESS] inquiry address lookup: pin the address (and optionally the time of inquiry), keep only the flights that passed near it -->
+            <div class="viewer-controls nm-addr-row" id="nm-addr-row">
+                <label>Inquiry Address
+                    <input type="text" id="nm-addr" placeholder="e.g. 12 Main St, Wappingers Falls, NY" autocomplete="off">
+                </label>
+                <label>Within
+                    <select id="nm-addr-radius">
+                        <option value="0.5" selected>0.5 mi</option>
+                        <option value="1">1 mi</option>
+                        <option value="2">2 mi</option>
+                    </select>
+                </label>
+                <label><span>Time of Inquiry <span class="nm-dim">(±15 min, optional)</span></span>
+                    <input type="datetime-local" id="nm-inq-time">
+                </label>
+                <button class="primary" id="nm-addr-find" type="button">Find</button>
+                <button id="nm-addr-place" type="button" title="Click this, then click the map where the inquiry came from">Place Pin</button>
+                <button id="nm-addr-clear" type="button" style="display:none;">Clear</button>
+                <span id="nm-addr-status"></span>
+            </div>
+            <div id="nm-addr-matches"></div>
+
+            <div class="metrics">
+                <div class="metric-card"><div class="m-label">Aircraft noise events</div><div class="m-value" id="m-events">—</div><div class="m-sub" id="m-events-sub">&nbsp;</div></div>
+                <div class="metric-card warn"><div class="m-label">Limit exceedances</div><div class="m-value" id="m-over">—</div><div class="m-sub">Lmax or SENEL over limit</div></div>
+                <div class="metric-card hb"><div class="m-label">Hearing Board candidates</div><div class="m-value" id="m-hb">—</div><div class="m-sub">≥ 1.5 dB over a limit</div></div>
+                <div class="metric-card"><div class="m-label">Curfew departures</div><div class="m-value" id="m-curfew">—</div><div class="m-sub">Operations, all runways</div></div>
+                <div class="metric-card"><div class="m-label">Training violations</div><div class="m-value" id="m-tng">—</div><div class="m-sub">Prohibited, or outside permitted hours</div></div><!-- [OPERATIONS] sub-label -->
+                <div class="metric-card"><div class="m-label">Non-aircraft events</div><div class="m-value" id="m-comm">—</div><div class="m-sub">Not attributed to aircraft</div></div>
+            </div>
+
+            <div class="nm-grid">
+                <!-- Monitor map -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Noise monitors</h2>
+                        <span class="card-sub" id="nm-map-sub">Click a monitor to filter events</span>
+                    </div>
+                    <div id="nm-map"></div>
+                    <div class="nm-legend">
+                        <strong>CNEL (period):</strong>
+                        <span><span class="sw" style="background:#22c55e"></span>&lt; 55</span>
+                        <span><span class="sw" style="background:#eab308"></span>55–60</span>
+                        <span><span class="sw" style="background:#f97316"></span>60–65</span>
+                        <span><span class="sw" style="background:#dc2626"></span>≥ 65 dB</span>
+                        <span style="margin-left:auto;color:#999;">Track color = altitude</span>
+                    </div>
+                </div>
+
+                <!-- Event detail -->
+                <div class="card" id="nm-detail">
+                    <div class="card-header"><h2>Event detail</h2><span class="card-sub" id="nm-detail-id"></span></div>
+                    <div id="nm-detail-body">
+                        <div class="nm-empty">Select an event in the table below to see its noise curve,<br>the aircraft it was matched to, and its flight track on the map.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event table -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Noise events</h2>
+                    <span class="card-sub" id="nm-count"></span>
+                </div>
+                <div class="nm-table-wrap">
+                    <table class="nm-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="time">Time ▾</th>
+                                <th data-sort="monitor">Monitor</th>
+                                <th data-sort="lmax" style="text-align:right;">Lmax</th>
+                                <th data-sort="senel" style="text-align:right;">SENEL</th>
+                                <th style="text-align:right;">Dur.</th>
+                                <th>Aircraft</th>
+                                <th>Operation</th>
+                                <th>Match</th>
+                                <th>Flags</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nm-tbody">
+                            <tr><td colspan="9" class="nm-empty" style="cursor:default;">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="nm-more" id="nm-more" style="display:none;"><button id="nm-more-btn">Show more</button></div>
+            </div>
+
+            <!-- [OPERATIONS] runway operations classified from the recorded flight tracks -->
+            <div class="card" id="nm-ops-card">
+                <div class="card-header">
+                    <h2>Runway operations</h2>
+                    <span class="card-sub" id="nm-ops-count"></span>
+                </div>
+                <div class="nm-ops-chips" id="nm-ops-chips"></div>
+                <div class="nm-ops-grid">
+                    <div class="nm-ops-list">
+                        <table class="nm-table">
+                            <thead><tr><th>Time</th><th>Aircraft</th><th>Operation</th><th>Rwy</th><th>Evidence</th><th>Rules</th></tr></thead>
+                            <tbody id="nm-ops-tbody"><tr><td colspan="6" class="nm-empty" style="cursor:default;">Loading…</td></tr></tbody>
+                        </table>
+                    </div>
+                    <div id="nm-ops-detail">
+                        <div class="nm-empty">Select an operation to see how it was classified:<br>its height and speed over the runway, and its path on the map.</div>
+                    </div>
+                </div>
+                <div class="nm-note">
+                    Each operation is classified from the aircraft's recorded track.
+                    <b>Low approach</b>: never touches the runway. <b>Stop-and-go</b>: comes to a complete stop on the runway, then takes off from that stop.
+                    <b>Taxi-back</b>: lands and taxis without parking, then takes off again. <b>Touch-and-go</b>: touches down and takes off again in any other way.
+                    Torrance: touch-and-gos and stop-and-gos are prohibited at all times; taxi-backs and low approaches are permitted 10 AM–6 PM, Monday–Friday.
+                    Operations the track can't settle are marked <b>Needs review</b>. Helicopter operations are not shown here.
+                </div>
+            </div>
+
+            <!-- Daily summary -->
+            <div class="card">
+                <div class="card-header"><h2>Daily CNEL by monitor</h2><span class="card-sub">dB · hover a cell for detail</span></div>
+                <div class="nm-table-wrap card-body" style="padding-top:6px;padding-bottom:6px;">
+                    <table class="nm-matrix" id="nm-daily"></table>
+                </div>
+                <div class="nm-note">CNEL weights evening (7–10 PM) noise by +5 dB and night (10 PM–7 AM) by +10 dB.
+                    Cells outlined in orange are days when that monitor failed its daily calibration check; its data for that day is flagged for review. Exceedance is any event with Lmax > 82 dBA or SENEL > 88 dB</div>
+            </div>
+
+            <!-- Calibration log -->
+            <div class="card">
+                <div class="card-header"><h2>Daily remote calibration</h2><span class="card-sub">Deviation from the 114.0 dB reference · tolerance ±0.5 dB</span></div>
+                <div class="nm-table-wrap card-body" style="padding-top:6px;padding-bottom:6px;">
+                    <table class="nm-matrix" id="nm-cal"></table>
+                </div>
+            </div>
+        </div><!-- /main-content -->
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
+    </footer>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut }
+                                 from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+        import { getFirestore, collection, doc, getDoc, getDocs, query, where }
+                                 from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey:            "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+            authDomain:        "owd-data.firebaseapp.com",
+            projectId:         "owd-data",
+            storageBucket:     "owd-data.firebasestorage.app",
+            messagingSenderId: "912110224300",
+            appId:             "1:912110224300:web:ba2b8073871ec023817009",
+            measurementId:     "G-PHD4THC11M"
+        };
+        const app  = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db   = getFirestore(app);
+
+        // ── Demo configuration ──────────────────────────────────────────────
+        const COL = {
+            monitors: 'noise_monitors_demo', events: 'noise_events_demo', daily: 'noise_daily_demo',
+            calibration: 'noise_calibration_demo', tracks: 'tracks_pou', flights: 'flights_pou',
+        };
+        const SOURCE_AIRPORT = 'pou';                       // links to Noise Abatement / 3D Airspace use POU
+        const DEMO_FROM = '2026-10-19', DEMO_TO = '2026-10-25';
+        const MAP_CENTER = [41.6266, -73.8842];
+        const TZ = 'America/New_York';
+        const GEOID_OFFSET_FT = 105;                        // same correction as generate_noise_demo.js
+        const PAGE_SIZE = 15;
+
+        // ── Helpers ─────────────────────────────────────────────────────────
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+        const $ = id => document.getElementById(id);
+        const DTF = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        function tzParts(ms) { const o = {}; DTF.formatToParts(new Date(ms)).forEach(p => { o[p.type] = p.value; }); return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour, mi: +o.minute, s: +o.second }; }
+        function tzLocalToMs(ymd, hms) {
+            const guess = Date.parse(ymd + 'T' + hms + 'Z');
+            const offsetAt = ms => { const p = tzParts(ms); return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000; };
+            return guess - offsetAt(guess - offsetAt(guess));
+        }
+        function addDaysYMD(ymd, n) { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+        function fmtClock(ms) { const p = tzParts(ms); return `${p.h % 12 || 12}:${String(p.mi).padStart(2, '0')}:${String(p.s).padStart(2, '0')} ${p.h >= 12 ? 'PM' : 'AM'}`; }
+        function fmtDay(ymd) { const [y, m, d] = ymd.split('-'); return `${+m}/${+d}`; }
+        function fmtDow(ymd) { return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }); }
+        function isCurfew(ms) {                              // 2200–0700 Mon–Fri, 2200–0800 Sat/Sun (same rule as the generator)
+            const p = tzParts(ms), dow = new Date(Date.UTC(p.y, p.mo - 1, p.d)).getUTCDay();
+            return p.h >= 22 || p.h < ((dow === 0 || dow === 6) ? 8 : 7);
+        }
+        const energyAvg = arr => arr.length ? 10 * Math.log10(arr.reduce((s, v) => s + Math.pow(10, v / 10), 0) / arr.length) : null;
+        function cnelColor(v) { if (v == null) return '#cbd5e1'; if (v < 55) return '#22c55e'; if (v < 60) return '#eab308'; if (v < 65) return '#f97316'; return '#dc2626'; }
+        function cnelBg(v) { if (v == null) return ''; if (v < 55) return '#dcfce7'; if (v < 60) return '#fef9c3'; if (v < 65) return '#ffedd5'; return '#fee2e2'; }
+        function altColor(ft) { if (ft < 500) return '#dc2626'; if (ft < 1000) return '#f59e0b'; if (ft < 2000) return '#84cc16'; if (ft < 3500) return '#22c55e'; return '#3b82f6'; }
+        const trackAlt = p => Number.isFinite(p.ag) ? p.ag + GEOID_OFFSET_FT : p.alt;   // GPS altitude where the logger has it
+        const monShort = id => id.replace('NMT', 'NMT ');
+        const typeOf = reg => (typeof typeCodeRegistry !== 'undefined' && reg && typeCodeRegistry[reg.toUpperCase()]) || '';
+
+        // ── State ───────────────────────────────────────────────────────────
+        let monitors = [], events = [], daily = [], calibration = [], flights = [];
+        let monitorById = {};
+        let filtered = [], shown = PAGE_SIZE, selectedId = null;
+        let sortKey = 'time', sortDir = -1;
+        let map, monitorLayer, trackLayer, curveChart = null;
+        const trackCache = new Map();
+
+        // ── Auth ────────────────────────────────────────────────────────────
+        window._authSignIn = async () => {
+            const errEl = $('auth-error');
+            errEl.style.color = '#dc2626'; errEl.textContent = '';
+            try { await signInWithEmailAndPassword(auth, $('auth-email').value.trim(), $('auth-password').value); }
+            catch (e) { errEl.textContent = 'Invalid email or password.'; }
+        };
+        window._forgotPassword = async () => {
+            const email = $('auth-email').value.trim(), errEl = $('auth-error');
+            if (!email) { errEl.style.color = '#dc2626'; errEl.textContent = 'Enter your email above first, then click "Forgot password?"'; return; }
+            try {
+                await sendPasswordResetEmail(auth, email, { url: 'https://fl-technologies-data.com/portal.html', handleCodeInApp: false });
+                errEl.style.color = '#166534'; errEl.textContent = 'Password reset email sent — check your inbox.';
+            } catch (e) { errEl.style.color = '#dc2626'; errEl.textContent = 'Could not send reset email. Check the address and try again.'; }
+        };
+        window._authSignOut = async () => { await signOut(auth); };
+        function showAuth() { $('auth-screen').style.display = 'flex'; $('main-content').style.display = 'none'; }
+        function hideAuth() { $('auth-screen').style.display = 'none'; $('main-content').style.display = 'block'; }
+
+        let started = false;
+        onAuthStateChanged(auth, async user => {
+            if (!user) { showAuth(); return; }
+            try {
+                const snap = await getDoc(doc(db, 'Users', user.uid));
+                if (!snap.exists()) { showAuth(); $('auth-error').textContent = 'Account not configured.'; return; }
+                hideAuth();
+                if (window.toaDemoNav) toaDemoNav(snap.data().airport);   // [TOA DEMO] Noise dropdown
+                if (!started) { started = true; await init(); }
+            } catch (e) { console.error('[auth]', e); }
+        });
+
+        // ── Init ────────────────────────────────────────────────────────────
+        async function init() {
+            ['nm-from', 'nm-to'].forEach(id => { $(id).min = DEMO_FROM; $(id).max = DEMO_TO; });
+            $('nm-from').value = DEMO_FROM; $('nm-to').value = DEMO_TO;
+
+            map = L.map('nm-map', { center: MAP_CENTER, zoom: 12 });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap contributors' }).addTo(map);
+            L.circleMarker(MAP_CENTER, { radius: 5, color: '#0057ff', fillColor: '#0057ff', fillOpacity: 1, weight: 2 })
+                .bindTooltip('POU — Hudson Valley Regional').addTo(map);
+            trackLayer = L.layerGroup().addTo(map);
+            monitorLayer = L.layerGroup().addTo(map);
+            initAddressLookup();   // [ADDRESS]
+
+            const mSnap = await getDocs(collection(db, COL.monitors));
+            monitors = mSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+            monitorById = Object.fromEntries(monitors.map(m => [m.id, m]));
+            $('nm-monitor').innerHTML = '<option value="all">All monitors</option>' +
+                monitors.map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+
+            $('nm-load').addEventListener('click', loadRange);
+            $('nm-monitor').addEventListener('change', () => { render(); });
+            $('nm-show').addEventListener('change', () => { render(); });
+            $('nm-reg').addEventListener('input', () => { render(); });
+            $('nm-more-btn').addEventListener('click', () => { shown += PAGE_SIZE; renderTable(); });
+            $('nm-csv').addEventListener('click', exportCsv);
+            document.querySelectorAll('.nm-table th[data-sort]').forEach(th => th.addEventListener('click', () => {
+                const k = th.dataset.sort;
+                if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = (k === 'monitor') ? 1 : -1; }
+                document.querySelectorAll('.nm-table th[data-sort]').forEach(h => h.textContent = h.textContent.replace(/ [▾▴]$/, ''));
+                th.textContent += sortDir < 0 ? ' ▾' : ' ▴';
+                renderTable();
+            }));
+
+            await loadRange();
+        }
+
+        // ── Load a date range ───────────────────────────────────────────────
+        async function loadRange() {
+            let from = $('nm-from').value || DEMO_FROM, to = $('nm-to').value || DEMO_TO;
+            if (from > to) [from, to] = [to, from];
+            const fromISO = new Date(tzLocalToMs(from, '00:00:00')).toISOString();
+            const toISO   = new Date(tzLocalToMs(addDaysYMD(to, 1), '00:00:00') - 1).toISOString();
+            $('nm-status').innerHTML = '<span class="spinner"></span>Loading…';
+            $('nm-load').disabled = true;
+            try {
+                const [eS, dS, cS, fS] = await Promise.all([
+                    getDocs(query(collection(db, COL.events),      where('timestamp', '>=', fromISO), where('timestamp', '<=', toISO))),
+                    getDocs(query(collection(db, COL.daily),       where('dateISO', '>=', from), where('dateISO', '<=', to))),
+                    getDocs(query(collection(db, COL.calibration), where('dateISO', '>=', from), where('dateISO', '<=', to))),
+                    getDocs(query(collection(db, COL.flights),     where('timestamp', '>=', fromISO), where('timestamp', '<=', toISO))),
+                ]);
+                events      = eS.docs.map(d => ({ id: d.id, ...d.data() }));
+                daily       = dS.docs.map(d => d.data());
+                calibration = cS.docs.map(d => d.data());
+                flights     = fS.docs.map(d => ({ id: d.id, ...d.data() }));
+                operations  = await loadOperations(fromISO, toISO);   // [OPERATIONS]
+                applyOperationsToEvents();                           // [OPERATIONS] operation labels + training / curfew flags on noise events
+                window._nmRange = { from, to };
+                $('nm-status').textContent = '';
+                if (selectedId && !events.some(e => e.id === selectedId)) clearDetail();
+                if (addrPin) await addrEnsureTracks();   // [ADDRESS] flight tracks for the new dates
+                shown = PAGE_SIZE;
+                render();
+            } catch (err) {
+                console.error('[loadRange]', err);
+                $('nm-status').textContent = 'Error loading data — check the console.';
+            } finally {
+                $('nm-load').disabled = false;
+            }
+        }
+
+        // ── Filtering ───────────────────────────────────────────────────────
+        function scopeEvents() {                              // date range + monitor (used for the metrics)
+            const mon = $('nm-monitor').value;
+            return events.filter(e => (mon === 'all' || e.monitorId === mon) && addressKeepEvent(e));   // [ADDRESS] + inquiry address / time
+        }
+        function applyFilters() {
+            const show = $('nm-show').value, reg = $('nm-reg').value.trim().toUpperCase();
+            filtered = scopeEvents().filter(e => {
+                if (show === 'aircraft'  && e.source !== 'aircraft') return false;
+                if (show === 'flagged'   && !e.exceedsLimit) return false;
+                if (show === 'hb'        && !(e.ruleFlags || []).includes('hearing-board-candidate')) return false;
+                if (show === 'community' && e.source === 'aircraft') return false;
+                if (reg && !(e.registration || '').toUpperCase().includes(reg)) return false;
+                return true;
+            });
+        }
+
+        function render() {
+            applyFilters();
+            renderMetrics();
+            renderMonitors();
+            renderTable();
+            renderDaily();
+            renderCalibration();
+            syncDetailToMonitor();   // [NOISE MONITORING DEMO] keep Event Detail on the selected monitor
+            addrUpdateStatus();      // [ADDRESS]
+            renderOperations();      // [OPERATIONS]
+        }
+
+        // ── Metrics ─────────────────────────────────────────────────────────
+        function renderMetrics() {
+            const sc = scopeEvents(), ac = sc.filter(e => e.source === 'aircraft');
+            $('m-events').textContent = ac.length.toLocaleString();
+            $('m-events-sub').textContent = `${new Set(ac.map(e => e.registration).filter(Boolean)).size} aircraft`;
+            $('m-over').textContent   = ac.filter(e => e.exceedsLimit).length;
+            $('m-hb').textContent     = ac.filter(e => (e.ruleFlags || []).includes('hearing-board-candidate')).length;
+            $('m-comm').textContent   = sc.filter(e => e.source !== 'aircraft').length;
+            // Operation-based rules are counted per operation from flights_pou, not per noise event
+            $('m-curfew').textContent = opsScoped().filter(o => (o.ruleFlags || []).includes('curfew-departure')).length;                 // [OPERATIONS] classified operations (+ address scope)
+            $('m-tng').textContent    = opsScoped().filter(o => (o.ruleFlags || []).some(f => f.startsWith('training'))).length;        // [OPERATIONS]
+        }
+
+        // ── Monitor map ─────────────────────────────────────────────────────
+        function renderMonitors() {
+            monitorLayer.clearLayers();
+            const sel = $('nm-monitor').value;
+            monitors.forEach(m => {
+                const days = daily.filter(d => d.monitorId === m.id);
+                const cnel = energyAvg(days.map(d => d.cnel));
+                const evs  = events.filter(e => e.monitorId === m.id && e.source === 'aircraft');
+                const over = evs.filter(e => e.exceedsLimit).length;
+                const calFails = calibration.filter(c => c.monitorId === m.id && c.result === 'fail').length;
+                const isSel = sel === m.id;
+                const mk = L.circleMarker([m.lat, m.lon], {
+                    radius: isSel ? 12 : 9, color: isSel ? '#0057ff' : '#fff', weight: isSel ? 4 : 2,
+                    fillColor: cnelColor(cnel), fillOpacity: 0.95,
+                });
+                mk.bindTooltip(monShort(m.id), { permanent: true, direction: 'right', offset: [10, 0], className: 'nm-mon-label' });
+                mk.bindPopup(
+                    `<b>${esc(m.name)}</b><br>` +
+                    `CNEL (period): <b>${cnel != null ? cnel.toFixed(1) + ' dB' : '—'}</b><br>` +
+                    `Aircraft events: ${evs.length} · Exceedances: <b style="color:#b91c1c">${over}</b><br>` +
+                    (calFails ? `<span style="color:#c2410c">Calibration check failed on ${calFails} day${calFails > 1 ? 's' : ''}</span>` : 'Calibration: all checks passed') +
+                    `<br><span style="color:#999">${esc(m.instrument || '')}</span>`
+                );
+                mk.on('click', () => { $('nm-monitor').value = isSel ? 'all' : m.id; render(); });
+                monitorLayer.addLayer(mk);
+            });
+            $('nm-map-sub').textContent = sel === 'all' ? 'Click a monitor to filter events' : `Filtered to ${monShort(sel)} — click it again to clear`;
+        }
+
+        // ── Event table ─────────────────────────────────────────────────────
+        function flagBadges(e) {
+            const f = e.ruleFlags || [], out = [];
+            if (f.includes('hearing-board-candidate')) out.push('<span class="badge b-hb">Hearing Board</span>');
+            if (f.includes('noise-lmax'))       out.push('<span class="badge b-lmax">Lmax</span>');
+            if (f.includes('noise-senel'))      out.push('<span class="badge b-senel">SENEL</span>');
+            if (f.includes('curfew-departure')) out.push('<span class="badge b-curfew">Curfew dep.</span>');
+            if (f.includes('training-tng'))     out.push('<span class="badge b-tng">Training</span>');
+            if (e.dataQuality && e.dataQuality !== 'ok') out.push('<span class="badge b-cal" title="Monitor failed its daily calibration check">Cal. check</span>');
+            return out.join(' ');
+        }
+        function matchBadge(e) {
+            if (e.source !== 'aircraft') return '<span class="badge b-none">Non-aircraft</span>';
+            return e.confidence === 'high' ? '<span class="badge b-high">High</span>' : '<span class="badge b-review">Review</span>';
+        }
+        function sortRows(rows) {
+            const key = { time: e => e.lmaxTimestamp, monitor: e => e.monitorId, lmax: e => e.lmax, senel: e => e.senel,
+                          dist: e => addrEventDist(e) }[sortKey];   // [ADDRESS] dist = closest pass to the pin
+            return [...rows].sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * sortDir; });
+        }
+        function renderTable() {
+            const rows = sortRows(filtered);
+            $('nm-count').textContent = `${rows.length.toLocaleString()} event${rows.length === 1 ? '' : 's'}`;
+            const body = $('nm-tbody');
+            if (!rows.length) {
+                body.innerHTML = '<tr><td colspan="9" class="nm-empty" style="cursor:default;">No events match these filters.</td></tr>';
+                $('nm-more').style.display = 'none';
+                return;
+            }
+            body.innerHTML = rows.slice(0, shown).map(e => {
+                const lOver = (e.ruleFlags || []).includes('noise-lmax'), sOver = (e.ruleFlags || []).includes('noise-senel');
+                const ac = e.source === 'aircraft'
+                    ? `<span class="nm-reg">${esc(e.registration || 'Unknown')}</span> <span class="nm-dim">${esc(e.icaoType || '')}</span><br><span class="nm-dim" style="font-size:12px;">${esc(e.noiseCategoryLabel || '')}</span>`
+                    : '<span class="nm-dim">—</span>';
+                const op = e.source === 'aircraft' ? `${esc(e.operation || '')}${e.runway ? ` <span class="nm-dim">Rwy ${esc(e.runway)}</span>` : ''}` : '<span class="nm-dim">—</span>';
+                return `<tr data-id="${esc(e.id)}" class="${e.id === selectedId ? 'selected' : ''}">
+                    <td style="white-space:nowrap;">${esc(e.date)}<br><span class="nm-dim">${esc(e.time)}</span></td>
+                    <td>${esc(monShort(e.monitorId))}</td>
+                    <td class="num ${lOver ? 'over' : ''}">${e.lmax.toFixed(1)}</td>
+                    <td class="num ${sOver ? 'over' : ''}">${e.senel.toFixed(1)}</td>
+                    <td class="num">${e.durationS}s</td>
+                    <td>${ac}${addressRowNote(e)}</td>
+                    <td>${op}</td>
+                    <td>${matchBadge(e)}</td>
+                    <td>${flagBadges(e)}</td>
+                </tr>`;
+            }).join('');
+            body.querySelectorAll('tr[data-id]').forEach(tr => tr.addEventListener('click', () => selectEvent(tr.dataset.id)));
+            $('nm-more').style.display = rows.length > shown ? '' : 'none';
+            $('nm-more-btn').textContent = `Show more (${(rows.length - shown).toLocaleString()} remaining)`;
+        }
+
+        // ── [NOISE MONITORING DEMO] Event Detail follows the monitor selected on the map ──
+        // Each monitor stores its own event for a flight. When the monitor filter changes, show the same flight's
+        // event at the new monitor (same trackId, closest Lmax time). If the flight didn't register there, say so.
+        function syncDetailToMonitor() {
+            if (!selectedId) return;
+            const cur = events.find(x => x.id === selectedId);
+            if (!cur) return;
+            const mon = $('nm-monitor').value;
+            const miss = $('nm-miss');
+            if (mon === 'all' || cur.monitorId === mon) { if (miss) selectEvent(cur.id); return; }
+            if (miss && miss.dataset.mon === mon) return;
+
+            const t = Date.parse(cur.lmaxTimestamp);
+            const near = list => list.sort((a, b) => Math.abs(Date.parse(a.lmaxTimestamp) - t) - Math.abs(Date.parse(b.lmaxTimestamp) - t));
+            const match = cur.trackId ? near(events.filter(x => x.monitorId === mon && x.trackId === cur.trackId))[0] : null;
+            if (match) { selectEvent(match.id); return; }
+
+            // Not recorded at this monitor
+            if (curveChart) { curveChart.destroy(); curveChart = null; }
+            trackLayer.eachLayer(l => { if (l instanceof L.CircleMarker || (l.options && l.options.dashArray)) trackLayer.removeLayer(l); });
+            const m = monitorById[mon] || {};
+            const others = cur.trackId ? near(events.filter(x => x.trackId === cur.trackId)) : [cur];
+            const head = cur.source === 'aircraft'
+                ? `<div class="nm-detail-title">${esc(cur.registration || 'Unknown')} <span class="nm-dim" style="font-weight:400;">${esc(cur.icaoType || '')} · ${esc(cur.noiseCategoryLabel || '')}</span></div>
+                   <div class="nm-detail-meta">${esc(cur.operation || '')}${cur.runway ? ' · Runway ' + esc(cur.runway) : ''} · ${esc(m.name || mon)}</div>`
+                : `<div class="nm-detail-title">Non-aircraft noise event</div><div class="nm-detail-meta">${esc(m.name || mon)}</div>`;
+            const what = cur.source === 'aircraft' ? 'This flight' : 'This event';
+            $('nm-detail-id').textContent = monShort(mon);
+            $('nm-detail-body').innerHTML = `
+                <div class="card-body" id="nm-miss" data-mon="${esc(mon)}">
+                    ${head}
+                    <div class="nm-empty" style="padding:28px 8px 16px;">${what} was <b>not recorded at ${esc(monShort(mon))}</b> —
+                        it did not stay above the ${cur.thresholdDb} dBA event threshold long enough there to register as a noise event.</div>
+                    <div style="font-size:13px;color:#555;margin-bottom:8px;">Recorded at:</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                        ${others.map(o => `<button class="nm-link nm-goto" data-mon="${esc(o.monitorId)}" style="cursor:pointer;">${esc(monShort(o.monitorId))} · ${o.lmax.toFixed(1)} dBA Lmax</button>`).join('')}
+                    </div>
+                </div>`;
+            $('nm-detail-body').querySelectorAll('.nm-goto').forEach(b => b.addEventListener('click', () => { $('nm-monitor').value = b.dataset.mon; render(); }));
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // [ADDRESS] Inquiry address lookup (adapted from noiseabatement.html).
+        //  • Find (or Place Pin) drops a pin with a 0.5 / 1 / 2 mi radius. The event table, metric cards and CSV keep
+        //    only flights that passed within the radius, closest first; each row shows the flight's closest pass
+        //    (distance, height above the ground at the pin, time).
+        //  • Time of Inquiry (optional) keeps flights within ±15 min of that time — the closest-pass time when a pin
+        //    is set, otherwise the event's Lmax time.
+        //  • The status line names the nearest monitor. No noise level is estimated at the address: only monitors measure.
+        //  • Lookup: US Census geocoder first, then OpenStreetMap Nominatim (searches only when Find is pressed,
+        //    at most one a second). Ground height from the AWS elevation tiles. Nothing about the address is stored.
+        // ════════════════════════════════════════════════════════════════════
+        const ADDR_COLOR = '#7c3aed';
+        const ADDR_MAX_GAP_S = 20;            // points further apart than this are not joined when finding the closest pass
+        const ADDR_FAR_MI = 2;                // largest radius offered; tracks whose box is further than this are skipped quickly
+        const INQ_WINDOW_MIN = 15;            // ± minutes around the time of inquiry
+        const FIELD_ELEV_FT = 165;            // POU; the logger stores field elevation for aircraft on the ground
+        const MI_M = 1609.344, FT_PER_M = 3.28084;
+        let addrPin = null;                   // { lat, lon, label }
+        let addrGroundFt = null, addrGroundOk = false;
+        let addrMarker = null, addrCircle = null, addrPassLayer = null;
+        let addrPasses = new Map();           // trackId -> closest pass for the current pin (or null)
+        let addrTracks = null, addrTracksKey = '', addrTracksLoading = null;   // trackId -> track doc, for the loaded dates
+        let addrPlacing = false, addrSearchGen = 0, addrLastNominatim = 0;
+        const addrGeoCache = new Map();
+        const addrRadiusMi = () => Number($('nm-addr-radius').value) || 0.5;
+        const addrMiText = m => (m / MI_M).toFixed(2) + ' mi';
+        const addrYmd = ms => { const p = tzParts(ms); return `${p.y}-${String(p.mo).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`; };
+        function addrStatus(text, isError) { const el = $('nm-addr-status'); el.textContent = text || ''; el.classList.toggle('nm-addr-err', !!isError); }
+        function inquiryMs() {                // "YYYY-MM-DDTHH:MM" in airport local time -> UTC ms
+            const v = $('nm-inq-time').value;
+            if (!v) return null;
+            const [d, t] = v.split('T');
+            return tzLocalToMs(d, t.length === 5 ? t + ':00' : t);
+        }
+        const addrActive = () => !!addrPin || inquiryMs() != null;
+
+        // ── Flight tracks for the loaded dates (needed to see which flights passed near the pin) ──
+        async function addrEnsureTracks() {
+            const { from, to } = window._nmRange || { from: DEMO_FROM, to: DEMO_TO };
+            const key = from + '|' + to;
+            if (addrTracks && addrTracksKey === key) return;
+            if (addrTracksLoading && addrTracksKey === key) return addrTracksLoading;
+            addrTracksKey = key;
+            addrTracksLoading = (async () => {
+                const fromISO = new Date(tzLocalToMs(from, '00:00:00') - 3600000).toISOString();   // an hour early: flights that began before midnight
+                const toISO   = new Date(tzLocalToMs(addDaysYMD(to, 1), '00:00:00')).toISOString();
+                const snap = await getDocs(query(collection(db, COL.tracks), where('timestamp', '>=', fromISO), where('timestamp', '<=', toISO)));
+                const m = new Map();
+                snap.docs.forEach(d => { const t = d.data(); m.set(d.id, t); trackCache.set(d.id, t); });
+                if (addrTracksKey === key) { addrTracks = m; addrPasses = new Map(); }
+            })();
+            try { await addrTracksLoading; } finally { addrTracksLoading = null; }
+        }
+
+        // ── Closest pass of one flight to the pin ──
+        function addrClosestPass(trackId) {
+            if (!addrPin || !trackId) return null;
+            if (addrPasses.has(trackId)) return addrPasses.get(trackId);
+            const doc = (addrTracks && addrTracks.get(trackId)) || trackCache.get(trackId);
+            if (!doc || !Array.isArray(doc.track) || !doc.track.length) return null;
+            const k = Math.PI / 180, R = 6371008.8, lat0 = addrPin.lat, lon0 = addrPin.lon, cx = Math.cos(lat0 * k);
+            const X = p => (p.lon - lon0) * k * cx * R, Y = p => (p.lat - lat0) * k * R;
+            let out = null;
+            const b = doc.bbox;
+            if (b && [b.minLat, b.maxLat, b.minLon, b.maxLon].every(v => typeof v === 'number')) {   // quick skip for flights nowhere near
+                const nx = X({ lon: Math.min(Math.max(lon0, b.minLon), b.maxLon) }), ny = Y({ lat: Math.min(Math.max(lat0, b.minLat), b.maxLat) });
+                if (Math.hypot(nx, ny) > ADDR_FAR_MI * MI_M * 1.05) { addrPasses.set(trackId, out); return out; }
+            }
+            const pts = doc.track, startMs = Date.parse(doc.start || doc.timestamp);
+            const ok = p => p && typeof p.lat === 'number' && typeof p.lon === 'number' && typeof p.alt === 'number';
+            const keep = (d, a, n, u) => {
+                if (out && d >= out.distM) return;
+                const lerp = (x, y) => x + u * (y - x);
+                out = { distM: d, timeMs: startMs + lerp(a.t, n.t) * 1000, altFt: lerp(trackAlt(a), trackAlt(n)),
+                        lat: lerp(a.lat, n.lat), lon: lerp(a.lon, n.lon),
+                        onGround: a.alt <= FIELD_ELEV_FT + 10 && n.alt <= FIELD_ELEV_FT + 10 };
+            };
+            for (let i = 0; i < pts.length; i++) {
+                const a = pts[i];
+                if (!ok(a)) continue;
+                const ax = X(a), ay = Y(a);
+                keep(Math.hypot(ax, ay), a, a, 0);
+                const n = pts[i + 1];
+                if (!ok(n) || n.t - a.t > ADDR_MAX_GAP_S) continue;
+                const dx = X(n) - ax, dy = Y(n) - ay, len2 = dx * dx + dy * dy;
+                if (!len2) continue;
+                const u = -(ax * dx + ay * dy) / len2;
+                if (u > 0 && u < 1) keep(Math.hypot(ax + u * dx, ay + u * dy), a, n, u);   // between two recorded points
+            }
+            addrPasses.set(trackId, out);
+            return out;
+        }
+        function addrHeightText(pass) {
+            if (pass.onGround) return 'on the ground';
+            if (addrGroundFt == null) return 'height …';
+            return `${Math.max(0, Math.round(pass.altFt - addrGroundFt)).toLocaleString()} ft above`;
+        }
+        const addrPassText = pass => `${addrMiText(pass.distM)} · ${addrHeightText(pass)} · ${fmtClock(pass.timeMs)}`;
+
+        // flights within the radius (and the time window, if set), closest first
+        function addrNearTracks() {
+            if (!addrPin || !addrTracks) return [];
+            const rM = addrRadiusMi() * MI_M, tq = inquiryMs(), win = INQ_WINDOW_MIN * 60000, out = [];
+            addrTracks.forEach((t, id) => {
+                const p = addrClosestPass(id);
+                if (p && p.distM <= rM && (tq == null || Math.abs(p.timeMs - tq) <= win)) out.push({ id, t, pass: p });
+            });
+            return out.sort((a, b) => a.pass.distM - b.pass.distM);
+        }
+        function addrNearestMonitor() {
+            let best = null;
+            monitors.forEach(m => { const d = map.distance([addrPin.lat, addrPin.lon], [m.lat, m.lon]); if (!best || d < best.d) best = { m, d }; });
+            return best;
+        }
+
+        // ── Hooks used by the existing filter, table, detail and CSV code ──
+        function addressKeepEvent(e) {
+            const tq = inquiryMs(), win = INQ_WINDOW_MIN * 60000;
+            if (addrPin) {
+                const p = addrClosestPass(e.trackId);
+                if (!p || p.distM > addrRadiusMi() * MI_M) return false;
+                return tq == null || Math.abs(p.timeMs - tq) <= win;
+            }
+            if (tq != null) return Math.abs(Date.parse(e.lmaxTimestamp) - tq) <= win;
+            return true;
+        }
+        function addressScopeFlights(list) {   // operations (curfew departures, touch-and-goes) for the metric cards and CSV
+            const tq = inquiryMs(), win = INQ_WINDOW_MIN * 60000;
+            if (addrPin) {
+                const near = addrNearTracks();
+                return list.filter(f => {
+                    const reg = (f.registration || '').toUpperCase(), ts = f.timestamp;
+                    return near.some(n => (n.t.registration || '').toUpperCase() === reg && ts >= (n.t.start || n.t.timestamp) && ts <= (n.t.end || n.t.timestamp));
+                });
+            }
+            if (tq != null) return list.filter(f => Math.abs(Date.parse(f.timestamp) - tq) <= win);
+            return list;
+        }
+        function addrEventDist(e) { const p = addrClosestPass(e.trackId); return p ? p.distM : Infinity; }
+        function addressRowNote(e) {
+            if (!addrPin) return '';
+            const p = addrClosestPass(e.trackId);
+            return p ? `<br><span class="nm-addr-note">Closest pass ${esc(addrPassText(p))}</span>` : '';
+        }
+        function addrFactHtml(e) {
+            const p = addrPin && addrClosestPass(e.trackId);
+            return p ? `${addrMiText(p.distM)} <small>· ${esc(addrHeightText(p))} · ${fmtClock(p.timeMs)}</small>` : '';
+        }
+        function addressFacts(e) {
+            const html = addrFactHtml(e);
+            return html ? [['Closest pass to inquiry address', `<span id="nm-addr-fact">${html}</span>`]] : [];
+        }
+        function addressShowPass(e) {   // dashed line from the pin to the selected flight's closest pass
+            if (addrPassLayer) { addrPassLayer.remove(); addrPassLayer = null; }
+            if (!addrPin || !e || !map) return;
+            const p = addrClosestPass(e.trackId);
+            if (!p) return;
+            addrPassLayer = L.layerGroup().addTo(map);
+            L.polyline([[addrPin.lat, addrPin.lon], [p.lat, p.lon]], { color: ADDR_COLOR, weight: 2, dashArray: '2,6', interactive: false }).addTo(addrPassLayer);
+            L.circleMarker([p.lat, p.lon], { radius: 5, color: '#fff', weight: 2, fillColor: ADDR_COLOR, fillOpacity: 1, interactive: false })
+                .bindTooltip('Closest pass: ' + addrPassText(p), { permanent: true, direction: 'bottom', offset: [0, 8], className: 'nm-addr-label' })
+                .addTo(addrPassLayer);
+            try { const bb = map.getBounds(); if (!bb.contains([addrPin.lat, addrPin.lon])) map.fitBounds(bb.extend([addrPin.lat, addrPin.lon]).pad(0.1)); } catch (err) {}
+        }
+        function addrUpdateDetail() {   // refresh the closest-pass fact and map line for the event already open
+            if (!selectedId || $('nm-miss')) { if (!addrPin && addrPassLayer) { addrPassLayer.remove(); addrPassLayer = null; } return; }
+            const e = events.find(x => x.id === selectedId);
+            if (!e) return;
+            const html = addrFactHtml(e), el = $('nm-addr-fact');
+            if (!html) { if (el) el.closest('.nm-fact').remove(); }
+            else if (el) el.innerHTML = html;
+            else {
+                const facts = document.querySelector('#nm-detail-body .nm-facts');
+                if (facts) facts.insertAdjacentHTML('beforeend', `<div class="nm-fact"><div class="l">Closest pass to inquiry address</div><div class="v"><span id="nm-addr-fact">${html}</span></div></div>`);
+            }
+            addressShowPass(e);
+        }
+        function addrUpdateStatus() {
+            $('nm-addr-clear').style.display = addrActive() ? '' : 'none';
+            if (!addrActive()) return;
+            const tq = inquiryMs();
+            const { from, to } = window._nmRange || { from: DEMO_FROM, to: DEMO_TO };
+            const outside = tq != null && (addrYmd(tq) < from || addrYmd(tq) > to);
+            const warn = outside ? ' · the time of inquiry is outside the loaded dates' : '';
+            const hm = ms => { const p = tzParts(ms); return `${p.h % 12 || 12}:${String(p.mi).padStart(2, '0')} ${p.h >= 12 ? 'PM' : 'AM'}`; };
+            const tText = tq != null ? ` between ${hm(tq - INQ_WINDOW_MIN * 60000)} and ${hm(tq + INQ_WINDOW_MIN * 60000)} on ${fmtDay(addrYmd(tq))}` : '';
+            if (!addrPin) { addrStatus(`Showing events${tText}${warn}`, outside); return; }
+            if (!addrTracks) return;   // still loading
+            const farMi = map.distance([addrPin.lat, addrPin.lon], MAP_CENTER) / MI_M;   // a long way off usually means the wrong town
+            if (farMi > 25) { addrStatus(`${addrPin.label} · this is ${Math.round(farMi)} mi from the airport. Check the town or state.`, true); return; }
+            const near = addrNearTracks(), ids = new Set(near.map(n => n.id));
+            const recorded = new Set(events.filter(e => ids.has(e.trackId)).map(e => e.trackId)).size;
+            const nm = addrNearestMonitor();
+            addrStatus(`${addrPin.label} · ${near.length} flight${near.length === 1 ? '' : 's'} passed within ${addrRadiusMi()} mi${tText}` +
+                       ` (${recorded} recorded at a monitor)` + (nm ? ` · nearest monitor ${monShort(nm.m.id)}, ${addrMiText(nm.d)} away` : '') + warn, outside);
+        }
+        function addrSortClosestFirst(on) {
+            const heads = document.querySelectorAll('.nm-table th[data-sort]');
+            if (on) { sortKey = 'dist'; sortDir = 1; heads.forEach(h => h.textContent = h.textContent.replace(/ [▾▴]$/, '')); }
+            else if (sortKey === 'dist') {
+                sortKey = 'time'; sortDir = -1;
+                const th = document.querySelector('.nm-table th[data-sort="time"]');
+                if (th && !/[▾▴]$/.test(th.textContent)) th.textContent += ' ▾';
+            }
+        }
+        function addrRefresh() { shown = PAGE_SIZE; render(); addrUpdateDetail(); }
+
+        // ── Address lookup ──
+        // US Census Bureau geocoder, called the way its documentation describes (format=jsonp with a callback)
+        function addrCensus(q) {
+            return new Promise(resolve => {
+                const cb = 'nmCensus' + Date.now() + Math.floor(Math.random() * 1e6);
+                const tag = document.createElement('script');
+                let timer = null;
+                const done = v => { clearTimeout(timer); try { delete window[cb]; } catch (e) { window[cb] = undefined; } tag.remove(); resolve(v); };
+                timer = setTimeout(() => done(null), 10000);
+                window[cb] = data => {
+                    const m = (data && data.result && Array.isArray(data.result.addressMatches)) ? data.result.addressMatches : [];
+                    done(m.filter(x => x && x.coordinates).map(x => ({ lat: Number(x.coordinates.y), lon: Number(x.coordinates.x), label: String(x.matchedAddress || q) })));
+                };
+                tag.onerror = () => done(null);
+                tag.src = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?' +
+                    new URLSearchParams({ address: q, benchmark: 'Public_AR_Current', format: 'jsonp', callback: cb }).toString();
+                document.head.appendChild(tag);
+            });
+        }
+        // OpenStreetMap Nominatim, preferring results near the airport
+        async function addrNominatim(q) {
+            const wait = 1100 - (Date.now() - addrLastNominatim);   // at most one search a second
+            if (wait > 0) await new Promise(r => setTimeout(r, wait));
+            addrLastNominatim = Date.now();
+            const [la, lo] = MAP_CENTER;
+            const params = new URLSearchParams({ q, format: 'jsonv2', addressdetails: '1', limit: '5', countrycodes: 'us',
+                viewbox: `${lo - 0.35},${la + 0.25},${lo + 0.35},${la - 0.25}`, bounded: '0' });
+            const res = await fetch('https://nominatim.openstreetmap.org/search?' + params.toString(), { headers: { Accept: 'application/json' } });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const list = await res.json();
+            return (Array.isArray(list) ? list : []).map(r => {
+                const a = r.address || {};
+                const street = [a.house_number, a.road].filter(Boolean).join(' ');
+                const town = a.city || a.town || a.village || a.hamlet || a.suburb || a.county || '';
+                const parts = [r.name && r.name !== a.road ? r.name : '', street, town, a.state].filter(Boolean);
+                return { lat: Number(r.lat), lon: Number(r.lon), label: parts.length >= 2 ? parts.join(', ') : String(r.display_name || q) };
+            }).filter(m => isFinite(m.lat) && isFinite(m.lon));
+        }
+        async function addrLookup(q) {   // -> { matches, failed: true when neither service answered }
+            const key = q.trim().toLowerCase();
+            if (addrGeoCache.has(key)) return addrGeoCache.get(key);
+            const census = await addrCensus(q);
+            let matches = census || [], osmFailed = false;
+            if (!matches.length) {
+                try { matches = await addrNominatim(q); }
+                catch (err) { console.warn('[ADDRESS] Nominatim lookup failed:', err); osmFailed = true; }
+            }
+            const out = { matches, failed: !matches.length && census === null && osmFailed };
+            if (!out.failed) addrGeoCache.set(key, out);
+            return out;
+        }
+        async function addressFind() {
+            const q = $('nm-addr').value.trim();
+            const box = $('nm-addr-matches');
+            box.style.display = 'none'; box.innerHTML = '';
+            if (!q) { addrStatus('Type the address the inquiry came from.', true); return; }
+            const gen = ++addrSearchGen;
+            addrStatus('Looking up the address…');
+            const found = await addrLookup(q);
+            if (gen !== addrSearchGen) return;
+            if (found.failed) { addrStatus('The address lookup is not answering right now. Try again, or click "Place Pin" and click where it is.', true); return; }
+            const matches = found.matches;
+            if (!matches.length) { addrStatus('Address not found. Check the town, or click "Place Pin" and click where it is.', true); return; }
+            if (matches.length === 1) { addressSetPin(matches[0], true); return; }
+            const note = document.createElement('div');
+            note.textContent = 'More than one match. Pick the right one:';
+            note.style.color = '#555';
+            box.appendChild(note);
+            matches.slice(0, 5).forEach(m => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = m.label;
+                b.addEventListener('click', () => { box.style.display = 'none'; box.innerHTML = ''; addressSetPin(m, true); });
+                box.appendChild(b);
+            });
+            box.style.display = 'flex';
+            addrStatus('');
+        }
+
+        // ── Ground elevation at the pin (ft MSL) from the AWS terrain tiles ──
+        async function addrGroundElevationFt(lat, lon) {
+            const z = 14, n = 2 ** z, latR = lat * Math.PI / 180;
+            const xf = (lon + 180) / 360 * n, yf = (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n;
+            const x = Math.floor(xf), y = Math.floor(yf);
+            const res = await fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const blob = await res.blob();
+            let bmp;
+            try { bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); }
+            catch (e) { bmp = await createImageBitmap(blob); }
+            const c = document.createElement('canvas');
+            c.width = bmp.width; c.height = bmp.height;
+            const ctx = c.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(bmp, 0, 0);
+            const S = bmp.width, px = ctx.getImageData(0, 0, S, S).data;
+            const h = (i, j) => { const o = (j * S + i) * 4; return px[o] * 256 + px[o + 1] + px[o + 2] / 256 - 32768; };   // metres above sea level
+            const fx = Math.min(Math.max((xf - x) * S - 0.5, 0), S - 1), fy = Math.min(Math.max((yf - y) * S - 0.5, 0), S - 1);
+            const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = Math.min(x0 + 1, S - 1), y1 = Math.min(y0 + 1, S - 1), tx = fx - x0, ty = fy - y0;
+            const m = (h(x0, y0) * (1 - tx) + h(x1, y0) * tx) * (1 - ty) + (h(x0, y1) * (1 - tx) + h(x1, y1) * tx) * ty;
+            return m * FT_PER_M;
+        }
+
+        // ── Pin ──
+        async function addressSetPin(pin, fit) {
+            if (!map) return;
+            addrPin = { lat: pin.lat, lon: pin.lon, label: pin.label || 'Pin' };
+            addrPasses = new Map();
+            addrGroundFt = null; addrGroundOk = false;
+            const ll = [addrPin.lat, addrPin.lon];
+            if (!addrMarker) {
+                addrMarker = L.marker(ll, { draggable: true, keyboard: false, zIndexOffset: 1000,
+                    icon: L.divIcon({ className: '', html: '<div class="nm-addr-pin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }) })
+                    .bindTooltip('', { direction: 'top', offset: [0, -10] });
+                addrMarker.on('dragend', () => {
+                    const p = addrMarker.getLatLng();
+                    addressSetPin({ lat: p.lat, lon: p.lng, label: `Pin placed by hand (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})` }, false);
+                });
+                addrCircle = L.circle(ll, { radius: addrRadiusMi() * MI_M, color: ADDR_COLOR, weight: 1.5, fillColor: ADDR_COLOR, fillOpacity: 0.05, dashArray: '4,4', interactive: false });
+            }
+            addrMarker.setLatLng(ll).setTooltipContent(addrPin.label).addTo(map);
+            addrCircle.setLatLng(ll).setRadius(addrRadiusMi() * MI_M).addTo(map);
+            $('nm-addr-clear').style.display = '';
+            if (fit) { try { map.fitBounds(addrCircle.getBounds().pad(0.25)); } catch (e) {} }
+            addrSortClosestFirst(true);
+            const mine = addrPin;
+            if (!addrTracks) addrStatus('Loading flight tracks for the selected dates…');
+            try { await addrEnsureTracks(); }
+            catch (err) { console.error('[ADDRESS] tracks', err); if (addrPin === mine) addrStatus('Could not load flight tracks — check the console.', true); return; }
+            if (addrPin !== mine) return;
+            addrRefresh();
+            addrGroundElevationFt(mine.lat, mine.lon)
+                .then(ft => { if (addrPin === mine) { addrGroundFt = ft; addrGroundOk = true; addrRefresh(); } })
+                .catch(err => {
+                    console.warn('[ADDRESS] ground elevation unavailable, using field elevation:', err);
+                    if (addrPin === mine) { addrGroundFt = FIELD_ELEV_FT; addrGroundOk = false; addrRefresh(); }
+                });
+        }
+        function addressClear() {
+            addrPin = null; addrPasses = new Map(); addrPlacing = false;
+            addrSearchGen++;
+            if (addrMarker) addrMarker.remove();
+            if (addrCircle) addrCircle.remove();
+            if (addrPassLayer) { addrPassLayer.remove(); addrPassLayer = null; }
+            if (map) map.getContainer().style.cursor = '';
+            $('nm-addr').value = '';
+            $('nm-inq-time').value = '';
+            $('nm-addr-matches').style.display = 'none';
+            addrStatus('');
+            addrSortClosestFirst(false);
+            addrRefresh();
+        }
+        function initAddressLookup() {
+            $('nm-inq-time').min = `${DEMO_FROM}T00:00`;
+            $('nm-inq-time').max = `${DEMO_TO}T23:59`;
+            $('nm-addr-find').addEventListener('click', addressFind);
+            $('nm-addr').addEventListener('keydown', e => { if (e.key === 'Enter') addressFind(); });
+            $('nm-addr-clear').addEventListener('click', addressClear);
+            $('nm-addr-radius').addEventListener('change', () => { if (addrPin && addrCircle) addrCircle.setRadius(addrRadiusMi() * MI_M); addrRefresh(); });
+            $('nm-inq-time').addEventListener('change', () => { if (!$('nm-inq-time').value && !addrPin) addrStatus(''); addrRefresh(); });
+            $('nm-addr-place').addEventListener('click', () => {
+                addrPlacing = !addrPlacing;
+                map.getContainer().style.cursor = addrPlacing ? 'crosshair' : '';
+                addrStatus(addrPlacing ? 'Click the map where the inquiry came from.' : '');
+            });
+            map.on('click', ev => {
+                if (!addrPlacing) return;
+                addrPlacing = false;
+                map.getContainer().style.cursor = '';
+                addressSetPin({ lat: ev.latlng.lat, lon: ev.latlng.lng, label: `Pin placed by hand (${ev.latlng.lat.toFixed(5)}, ${ev.latlng.lng.toFixed(5)})` }, false);
+            });
+        }
+
+        // ── Event detail ────────────────────────────────────────────────────
+        function clearDetail() {
+            selectedId = null;
+            if (curveChart) { curveChart.destroy(); curveChart = null; }
+            trackLayer.clearLayers();
+            $('nm-detail-id').textContent = '';
+            $('nm-detail-body').innerHTML = '<div class="nm-empty">Select an event in the table below to see its noise curve,<br>the aircraft it was matched to, and its flight track on the map.</div>';
+        }
+
+        async function selectEvent(id) {
+            const e = events.find(x => x.id === id);
+            if (!e) return;
+            selectedId = id;
+            document.querySelectorAll('#nm-tbody tr').forEach(tr => tr.classList.toggle('selected', tr.dataset.id === id));
+            const mon = monitorById[e.monitorId] || {};
+            const f = e.ruleFlags || [];
+            const lOver = f.includes('noise-lmax'), sOver = f.includes('noise-senel');
+            const periodLabel = e.period === 'curfew' ? 'Curfew hours' : 'Standard hours';
+
+            const head = e.source === 'aircraft'
+                ? `<div class="nm-detail-title">${esc(e.registration || 'Unknown')} <span class="nm-dim" style="font-weight:400;">${esc(e.icaoType || '')} · ${esc(e.noiseCategoryLabel || '')}</span></div>
+                   <div class="nm-detail-meta">${esc(e.operation || '')}${e.runway ? ' · Runway ' + esc(e.runway) : ''} · ${esc(mon.name || e.monitorId)}</div>`
+                : `<div class="nm-detail-title">Non-aircraft noise event</div>
+                   <div class="nm-detail-meta">${esc(mon.name || e.monitorId)} · no aircraft within range at the time of the peak</div>`;
+
+            const facts = [
+                ['Time of Lmax', `${esc(e.date)} ${esc(e.time)}`],
+                ['Lmax', `<span class="${lOver ? 'over' : ''}">${e.lmax.toFixed(1)}</span> <small>/ ${e.lmaxLimitDb} dBA limit</small>`, lOver],
+                ['SENEL', `<span class="${sOver ? 'over' : ''}">${e.senel.toFixed(1)}</span> <small>/ ${e.senelLimitDb} dB limit</small>`, sOver],
+                ['Duration', `${e.durationS} s <small>above ${e.thresholdDb} dBA</small>`],
+                ['Period', periodLabel],
+            ];
+            if (e.source === 'aircraft') {
+                facts.push(['Altitude at Lmax', `${(e.altAtLmaxMSL ?? 0).toLocaleString()} ft <small>MSL</small>`]);
+                facts.push(['Slant distance', `${(e.slantAtLmaxFt ?? 0).toLocaleString()} ft`]);
+                facts.push(['Match confidence', e.confidence === 'high' ? 'High' : 'Needs review']);
+            }
+            if (e.dataQuality && e.dataQuality !== 'ok') facts.push(['Data quality', '<span style="color:#c2410c">Calibration check failed</span>']);
+            facts.push(...addressFacts(e));   // [ADDRESS] closest pass to the inquiry address
+
+            const alts = (e.alternates || []).length
+                ? `<div class="nm-alts"><b>Other aircraft nearby:</b> ${e.alternates.map(a => esc(a.registration || 'Unknown')).join(', ')} — confirm the match before using this event.</div>` : '';
+
+            let links = '';
+            if (e.trackId) {
+                const day = (e.dateISO || '');
+                const naParams = new URLSearchParams({ airport: SOURCE_AIRPORT, track: e.trackId, 'date-from': day, 'date-to': day, 'time-from': '00:00', 'time-to': '23:59' });
+                const ad3 = new URLSearchParams({ airport: 'demo_toa', track: e.trackId, event: e.id });   // [NOISE DEMO] 3D opens just before this event's peak, with noise shown
+                links = `<div class="nm-links">
+                    <a class="nm-link" href="noiseabatement.html?${naParams}" target="_blank" rel="noopener">Open track in Noise Abatement</a>
+                    <a class="nm-link" href="3Dairspace.html?${ad3}" target="_blank" rel="noopener">View in 3D Airspace</a>
+                </div>`;
+            }
+
+            $('nm-detail-id').textContent = monShort(e.monitorId);
+            $('nm-detail-body').innerHTML = `
+                <div class="card-body" style="padding-bottom:6px;">
+                    ${head}
+                    <div class="nm-detail-flags">${matchBadge(e)} ${flagBadges(e)}</div>
+                    <div id="nm-curve-wrap" style="margin-top:12px;"><canvas id="nm-curve" role="img" aria-label="Noise level over time for this event"></canvas></div>
+                </div>
+                <div class="nm-facts">${facts.map(([l, v, over]) => `<div class="nm-fact"><div class="l">${l}</div><div class="v ${over ? 'over' : ''}">${v}</div></div>`).join('')}</div>
+                ${alts}${links}`;
+            renderCurve(e);
+            // Bring the map + detail panel into view (they sit above the table)
+            const grid = document.querySelector('.nm-grid'), r = grid.getBoundingClientRect();
+            if (r.top < 0 || r.top > window.innerHeight * 0.5) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            await drawEventTrack(e, mon);
+            if (selectedId === e.id) addressShowPass(e);   // [ADDRESS] pin → closest pass on the map
+        }
+
+        function renderCurve(e) {
+            if (curveChart) { curveChart.destroy(); curveChart = null; }
+            const th = e.timeHistory || { values: [] };
+            const t0 = Date.parse(th.startTimestamp);
+            const vals = th.values || [];
+            const idx = iso => Math.round((Date.parse(iso) - t0) / 1000);
+            const s = idx(e.timestamp), en = idx(e.endTimestamp), lm = idx(e.lmaxTimestamp);
+            const windowPlugin = {
+                id: 'nmEventWindow',
+                beforeDatasetsDraw(chart) {
+                    const x = chart.scales.x, { top, bottom } = chart.chartArea, ctx = chart.ctx;
+                    ctx.save();
+                    ctx.fillStyle = 'rgba(245, 158, 11, 0.10)';
+                    const x0 = x.getPixelForValue(Math.max(0, s)), x1 = x.getPixelForValue(Math.min(vals.length - 1, en));
+                    ctx.fillRect(x0, top, x1 - x0, bottom - top);
+                    ctx.restore();
+                }
+            };
+            curveChart = new Chart($('nm-curve'), {
+                type: 'line',
+                plugins: [windowPlugin],
+                data: {
+                    labels: vals.map((_, i) => fmtClock(t0 + i * 1000)),
+                    datasets: [
+                        { label: 'Sound level', data: vals, borderColor: '#0057ff', backgroundColor: 'rgba(0,87,255,0.08)', fill: true, borderWidth: 2, tension: 0.25,
+                          pointRadius: vals.map((_, i) => i === lm ? 4 : 0), pointBackgroundColor: '#0057ff' },
+                        { label: `Lmax limit (${e.lmaxLimitDb} dBA)`, data: vals.map(() => e.lmaxLimitDb), borderColor: '#dc2626', borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: `Event threshold (${e.thresholdDb} dBA)`, data: vals.map(() => e.thresholdDb), borderColor: '#9ca3af', borderDash: [3, 3], borderWidth: 1, pointRadius: 0, fill: false },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } },
+                        tooltip: { filter: c => c.datasetIndex === 0, callbacks: { label: c => `${c.parsed.y.toFixed(1)} dBA` } },
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 10 } } },
+                        y: { suggestedMin: 40, suggestedMax: Math.max(e.lmaxLimitDb + 4, e.lmax + 3), grid: { color: 'rgba(0,0,0,0.06)' },
+                             title: { display: true, text: 'dBA', font: { size: 11 } } },
+                    },
+                },
+            });
+        }
+
+        async function drawEventTrack(e, mon) {
+            trackLayer.clearLayers();
+            const monLL = [mon.lat, mon.lon];
+            if (!e.trackId) { map.setView(monLL, 13); return; }
+            let tr = trackCache.get(e.trackId);
+            if (!tr) {
+                try {
+                    const snap = await getDoc(doc(db, COL.tracks, e.trackId));
+                    tr = snap.exists() ? snap.data() : null;
+                    trackCache.set(e.trackId, tr);
+                } catch (err) { console.error('[track]', err); tr = null; }
+            }
+            if (selectedId !== e.id) return;                 // another event was picked while loading
+            const pts = (tr && Array.isArray(tr.track)) ? tr.track.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon)) : [];
+            if (pts.length < 2) { map.setView(monLL, 13); return; }
+
+            for (let i = 0; i < pts.length - 1; i++) {
+                L.polyline([[pts[i].lat, pts[i].lon], [pts[i + 1].lat, pts[i + 1].lon]],
+                    { color: altColor(trackAlt(pts[i])), weight: 3.5, opacity: 0.9, lineCap: 'round', interactive: false }).addTo(trackLayer);
+            }
+            // Aircraft position at the moment of Lmax
+            const tl = (Date.parse(e.lmaxTimestamp) - Date.parse(tr.start || tr.timestamp)) / 1000;
+            let pos = null;
+            for (let i = 0; i < pts.length - 1; i++) {
+                if (pts[i].t <= tl && pts[i + 1].t >= tl) {
+                    const u = (tl - pts[i].t) / ((pts[i + 1].t - pts[i].t) || 1);
+                    pos = [pts[i].lat + u * (pts[i + 1].lat - pts[i].lat), pts[i].lon + u * (pts[i + 1].lon - pts[i].lon)];
+                    break;
+                }
+            }
+            if (pos) {
+                L.polyline([monLL, pos], { color: '#6d28d9', weight: 2, dashArray: '6,5', interactive: false }).addTo(trackLayer);
+                L.circleMarker(pos, { radius: 6, color: '#fff', weight: 2, fillColor: '#6d28d9', fillOpacity: 1 })
+                    .bindTooltip(`Lmax ${e.lmax.toFixed(1)} dBA · ${(e.altAtLmaxMSL ?? 0).toLocaleString()} ft MSL · ${(e.slantAtLmaxFt ?? 0).toLocaleString()} ft away`,
+                                 { permanent: true, direction: 'top', offset: [0, -8], className: 'nm-mon-label' })
+                    .addTo(trackLayer);
+            }
+            try { map.fitBounds(L.latLngBounds(pts.map(p => [p.lat, p.lon]).concat([monLL])).pad(0.15)); } catch (err) {}
+        }
+
+        // ── Daily CNEL matrix ───────────────────────────────────────────────
+        function rangeDays() {
+            const { from, to } = window._nmRange || { from: DEMO_FROM, to: DEMO_TO };
+            const out = []; for (let d = from; d <= to; d = addDaysYMD(d, 1)) out.push(d); return out;
+        }
+        function renderDaily() {
+            const days = rangeDays();
+            const head = `<tr><th>Monitor</th>${days.map(d => `<th>${fmtDow(d)} ${fmtDay(d)}</th>`).join('')}<th class="tot">Period Avg.</th><th class="tot">Events</th><th class="tot">Exceed.</th></tr>`;
+            const rows = monitors.map(m => {
+                const cells = days.map(d => {
+                    const r = daily.find(x => x.monitorId === m.id && x.dateISO === d);
+                    if (!r) return '<td class="nm-dim">—</td>';
+                    const tip = `${m.name} · ${d}\nCNEL ${r.cnel} dB · Leq(24) ${r.leq24} dBA\n${r.aircraftEventCount} aircraft events · ${r.exceedanceCount} exceedances` +
+                                (r.dataQuality !== 'ok' ? '\nCalibration check failed — data flagged for review' : '');
+                    return `<td class="c ${r.dataQuality !== 'ok' ? 'calfail' : ''}" style="background:${cnelBg(r.cnel)}" title="${esc(tip)}">${r.cnel.toFixed(1)}</td>`;
+                }).join('');
+                const mine = daily.filter(x => x.monitorId === m.id);
+                const per = energyAvg(mine.map(x => x.cnel));
+                const ev = mine.reduce((s, x) => s + x.aircraftEventCount, 0), ex = mine.reduce((s, x) => s + x.exceedanceCount, 0);
+                return `<tr><td><b>${esc(monShort(m.id))}</b> <span class="nm-dim">${esc((m.name || '').split('—')[1] || '')}</span></td>${cells}
+                        <td class="c tot" style="background:${cnelBg(per)}">${per != null ? per.toFixed(1) : '—'}</td>
+                        <td class="tot">${ev}</td><td class="tot" style="color:${ex ? '#b91c1c' : ''}">${ex}</td></tr>`;
+            }).join('');
+            $('nm-daily').innerHTML = `<thead>${head}</thead><tbody>${rows}</tbody>`;
+        }
+
+        // ── Calibration matrix ──────────────────────────────────────────────
+        function renderCalibration() {
+            const days = rangeDays();
+            const head = `<tr><th>Monitor</th>${days.map(d => `<th>${fmtDow(d)} ${fmtDay(d)}</th>`).join('')}</tr>`;
+            const rows = monitors.map(m => `<tr><td><b>${esc(monShort(m.id))}</b></td>${days.map(d => {
+                const c = calibration.find(x => x.monitorId === m.id && x.dateISO === d);
+                if (!c) return '<td class="nm-dim">—</td>';
+                const dev = (c.deviationDb > 0 ? '+' : '') + c.deviationDb.toFixed(1);
+                const tip = `${m.name} · ${c.date} ${c.time}\nMeasured ${c.measuredDb.toFixed(1)} dB vs ${c.referenceDb.toFixed(1)} dB reference (${dev} dB)`;
+                return c.result === 'pass'
+                    ? `<td class="pass" title="${esc(tip)}">✓ ${dev}</td>`
+                    : `<td class="fail" title="${esc(tip)}">FAIL ${dev}</td>`;
+            }).join('')}</tr>`).join('');
+            $('nm-cal').innerHTML = `<thead>${head}</thead><tbody>${rows}</tbody>`;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // [OPERATIONS] Runway operations classified from the recorded flight tracks (classify_operations_demo.js
+        // writes noise_operations_demo). Each document carries the type, the evidence, a plain-language reason,
+        // the Torrance rule result and a short height / speed series for the evidence chart.
+        //  • Noise events take their operation label, and their training / curfew flags, from these operations.
+        //  • The Curfew departures and Training violations cards count these operations.
+        //  • Follows the Registration filter and the inquiry address / time; not the Monitor or Show filters.
+        // ════════════════════════════════════════════════════════════════════
+        const OPS_COL = 'noise_operations_demo';
+        const OP_EVENT_MAX_S = 180;           // a noise event takes the operation of its flight within this many seconds
+        const OP_TYPES = ['takeoff', 'landing', 'touch-and-go', 'stop-and-go', 'taxi-back', 'low-approach', 'review'];
+        const OP_NAMES = { 'takeoff': 'Takeoff', 'landing': 'Landing', 'touch-and-go': 'Touch-and-go', 'stop-and-go': 'Stop-and-go',
+                           'taxi-back': 'Taxi-back', 'low-approach': 'Low approach', 'review': 'Needs review' };
+        const OP_KEY_LABEL = { 'takeoff': 'Liftoff', 'landing': 'Touchdown', 'touch-and-go': 'Touchdown', 'stop-and-go': 'Stop',
+                               'taxi-back': 'Touchdown', 'low-approach': 'Lowest point', 'review': 'Lowest point' };
+        let operations = [];
+        let opFilter = 'all', opSelectedId = null, opChart = null, opMap = null, opsWired = false;
+
+        async function loadOperations(fromISO, toISO) {
+            const snap = await getDocs(query(collection(db, OPS_COL), where('timestamp', '>=', fromISO), where('timestamp', '<=', toISO)));
+            return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+        }
+
+        // Noise events: operation label and training / curfew flags from the operation of the same flight
+        function applyOperationsToEvents() {
+            const byTrack = new Map();
+            operations.forEach(o => { if (!byTrack.has(o.trackId)) byTrack.set(o.trackId, []); byTrack.get(o.trackId).push(o); });
+            events.forEach(e => {
+                if (e.source !== 'aircraft') return;
+                const t = Date.parse(e.lmaxTimestamp);
+                let best = null, bestD = Infinity;
+                (byTrack.get(e.trackId) || []).forEach(o => {
+                    const s = Date.parse(o.startTimestamp), en = Date.parse(o.endTimestamp);
+                    const d = t < s ? s - t : t > en ? t - en : 0;
+                    if (d < bestD) { bestD = d; best = o; }
+                });
+                const flags = (e.ruleFlags || []).filter(f => f !== 'training-tng' && f !== 'curfew-departure');
+                if (best && bestD <= OP_EVENT_MAX_S * 1000) {
+                    e.operation = best.type === 'review' ? 'Runway operation (review)' : best.label;
+                    e.runway = best.runway;
+                    e.opId = best.id;
+                    if ((best.ruleFlags || []).some(f => f.startsWith('training'))) flags.push('training-tng');
+                    if ((best.ruleFlags || []).includes('curfew-departure')) flags.push('curfew-departure');
+                } else {
+                    e.operation = /^heli/.test(e.noiseCategory || '') ? 'Helicopter' : 'Overflight';
+                    e.runway = null;
+                    e.opId = null;
+                }
+                e.ruleFlags = flags;
+            });
+        }
+
+        // Registration filter + inquiry address / time of inquiry
+        function opsScoped() {
+            const reg = $('nm-reg').value.trim().toUpperCase();
+            const tq = inquiryMs(), win = INQ_WINDOW_MIN * 60000;
+            const near = addrPin ? new Set(addrNearTracks().map(n => n.id)) : null;
+            return operations.filter(o => {
+                if (reg && !(o.registration || '').toUpperCase().includes(reg)) return false;
+                if (near && !near.has(o.trackId)) return false;
+                if (tq != null && Math.abs(Date.parse(o.timestamp) - tq) > win) return false;
+                return true;
+            });
+        }
+        function opCsvType(o) {
+            const f = o.ruleFlags || [];
+            if (f.includes('training-prohibited')) return `Training — ${o.label.toLowerCase()} (prohibited)`;
+            if (f.includes('training-hours'))      return `Training — ${o.label.toLowerCase()} (outside permitted hours)`;
+            if (f.includes('curfew-departure'))    return 'Curfew departure';
+            return o.label;
+        }
+        const opBadge = o => `<span class="op op-${esc(o.type)}">${esc(o.type === 'review' ? 'Needs review' : o.label)}</span>`;
+        function opRuleBadges(o) {
+            const f = o.ruleFlags || [], out = [];
+            if (f.includes('training-prohibited')) out.push('<span class="badge b-prohib">Prohibited</span>');
+            if (f.includes('training-hours'))      out.push('<span class="badge b-hours">Outside permitted hours</span>');
+            if (f.includes('curfew-departure'))    out.push('<span class="badge b-curfew">Curfew dep.</span>');
+            if (o.needsReview && o.type !== 'review') out.push('<span class="badge b-none">Review</span>');
+            return out.join(' ');
+        }
+        function opEvidenceText(o) {
+            const ev = o.evidence || {};
+            switch (o.type) {
+                case 'low-approach': return `Lowest ${ev.lowestHeightFt} ft · no touchdown`;
+                case 'touch-and-go': return `Slowest ${ev.slowestKt} kt · no stop`;
+                case 'stop-and-go':  return `Stopped ${ev.longestStopS} s on the runway`;
+                case 'taxi-back':    return ev.exitedRunway ? `Taxied · longest stop ${ev.longestStopS} s` : 'Back-taxied on the runway';
+                case 'landing':      return 'Touched down · slowed to taxi speed';
+                case 'takeoff':      return 'Takeoff roll · climbed away';
+                case 'review':       return `Lowest ${ev.lowestHeightFt} ft · no ground report`;
+            }
+            return '';
+        }
+
+        function renderOperations() {
+            if (!opsWired) {
+                opsWired = true;
+                $('nm-ops-chips').addEventListener('click', ev => {
+                    const b = ev.target.closest('button[data-f]');
+                    if (!b) return;
+                    opFilter = b.dataset.f;
+                    renderOperations();
+                });
+            }
+            const scoped = opsScoped();
+            const n = f => scoped.filter(f).length;
+            const chips = [['all', 'All', n(() => true)]]
+                .concat(OP_TYPES.filter(t => t !== 'review').map(t => [t, OP_NAMES[t], n(o => o.type === t)]))
+                .concat([['flagged', 'Rule flags', n(o => (o.ruleFlags || []).length)], ['review', 'Needs review', n(o => o.needsReview)]]);
+            $('nm-ops-chips').innerHTML = chips.map(([f, label, c]) =>
+                `<button type="button" data-f="${f}" class="${opFilter === f ? 'active' : ''}">${esc(label)}<span class="n">${c}</span></button>`).join('');
+            const rows = scoped.filter(o =>
+                opFilter === 'all' ? true : opFilter === 'flagged' ? (o.ruleFlags || []).length : opFilter === 'review' ? o.needsReview : o.type === opFilter);
+            $('nm-ops-count').textContent = `${rows.length.toLocaleString()} operation${rows.length === 1 ? '' : 's'}`;
+            const body = $('nm-ops-tbody');
+            if (!rows.length) {
+                body.innerHTML = `<tr><td colspan="6" class="nm-empty" style="cursor:default;">${operations.length ? 'No operations match these filters.' : 'No classified operations for these dates.'}</td></tr>`;
+                return;
+            }
+            body.innerHTML = rows.map(o => `
+                <tr data-op="${esc(o.id)}" class="${o.id === opSelectedId ? 'selected' : ''}">
+                    <td style="white-space:nowrap;">${esc(o.date)}<br><span class="nm-dim">${esc(o.time)}</span></td>
+                    <td><span class="nm-reg">${esc(o.registration || 'Unknown')}</span> <span class="nm-dim">${esc(o.icaoType || '')}</span></td>
+                    <td>${opBadge(o)}</td>
+                    <td>${esc(o.runway || '')}</td>
+                    <td class="nm-dim" style="font-size:12px;">${esc(opEvidenceText(o))}</td>
+                    <td>${opRuleBadges(o)}</td>
+                </tr>`).join('');
+            body.querySelectorAll('tr[data-op]').forEach(tr => tr.addEventListener('click', () => selectOperation(tr.dataset.op)));
+        }
+
+        function selectOperation(id) {
+            const o = operations.find(x => x.id === id);
+            if (!o) return;
+            opSelectedId = id;
+            document.querySelectorAll('#nm-ops-tbody tr').forEach(tr => tr.classList.toggle('selected', tr.dataset.op === id));
+            const ev = o.evidence || {};
+            const srcText = { ground: 'ground report', gps: 'GPS altitude', baro: 'barometric altitude, corrected' }[ev.lowestHeightSource] || '';
+            const rules = (o.ruleNotes || []).map(t => {
+                const cls = /prohibited|only|curfew/i.test(t) ? (/prohibited/i.test(t) ? 'bad' : 'warn') : 'ok';
+                return `<li class="${cls}">${esc(t)}</li>`;
+            });
+            if (o.needsReview && o.reviewReason && o.type !== 'review') rules.push(`<li class="warn">${esc(o.reviewReason)}</li>`);
+            const facts = [
+                ['Lowest over the runway', `${ev.lowestHeightFt} ft <small>above field · ${esc(srcText)}</small>`],
+                ['Slowest on runway', ev.slowestKt != null ? `${ev.slowestKt} kt` : '—'],
+                ['Longest stop', ev.longestStopS ? `${ev.longestStopS} s` : 'None'],
+                ['Touched down', ev.touched ? (ev.groundReport ? 'Yes <small>· ground report</small>' : 'Yes') : 'No'],
+            ];
+            if (o.type === 'taxi-back') facts.push(['How it taxied', ev.exitedRunway ? 'Left the runway' : 'Turned around on the runway']);
+            $('nm-ops-detail').innerHTML = `
+                <div class="card-body">
+                    <div class="nm-op-title">${esc(o.registration || 'Unknown')} <span class="nm-dim" style="font-weight:400;">${esc(o.icaoType || '')}</span> ${opBadge(o)}</div>
+                    <div class="nm-op-meta">Runway ${esc(o.runway || '—')}${o.departRunway && o.departRunway !== o.runway ? ' → ' + esc(o.departRunway) : ''} · ${esc(o.date)} ${esc(o.time)}</div>
+                    <div class="nm-op-reason">${esc(o.reason || '')}</div>
+                    ${rules.length ? `<ul class="nm-op-rules">${rules.join('')}</ul>` : ''}
+                    <div id="nm-op-chart-wrap"><canvas id="nm-op-chart" role="img" aria-label="Height and ground speed during this operation"></canvas></div>
+                    <div id="nm-op-map"></div>
+                </div>
+                <div class="nm-facts" style="margin-top:0;grid-template-columns:repeat(2, minmax(0, 1fr));">${facts.map(([l, v], k) =>
+                    `<div class="nm-fact"${k === facts.length - 1 && facts.length % 2 ? ' style="grid-column:1 / -1;"' : ''}><div class="l">${l}</div><div class="v">${v}</div></div>`).join('')}</div>`;
+            renderOpChart(o);
+            renderOpMap(o);
+        }
+
+        function renderOpChart(o) {
+            if (opChart) { opChart.destroy(); opChart = null; }
+            const s = o.series;
+            if (!s || !s.t || !s.t.length) return;
+            const t0 = Date.parse(s.startTimestamp);
+            // Stationary periods aren't recorded on the ground: show them at 0 kt and shade them
+            const T = [], H = [], G = [], RW = [], stops = [];
+            for (let k = 0; k < s.t.length; k++) {
+                T.push(s.t[k]); H.push(s.h[k]); G.push(s.gs[k]); RW.push(s.rw[k]);
+                const nt = s.t[k + 1];
+                if (nt != null && nt - s.t[k] >= 6 && s.g[k] && s.g[k + 1] && s.gs[k] <= 15 && s.gs[k + 1] <= 15) {
+                    const a = T.length;
+                    T.push(s.t[k] + 1, nt - 1); H.push(0, 0); G.push(0, 0); RW.push(s.rw[k], s.rw[k + 1]);
+                    stops.push([a, a + 1]);
+                }
+            }
+            const keyT = (Date.parse(o.timestamp) - t0) / 1000;
+            let keyIdx = 0; T.forEach((t, k) => { if (Math.abs(t - keyT) < Math.abs(T[keyIdx] - keyT)) keyIdx = k; });
+            const bands = {
+                id: 'nmOpBands',
+                beforeDatasetsDraw(chart) {
+                    const x = chart.scales.x, { top, bottom } = chart.chartArea, ctx = chart.ctx;
+                    ctx.save();
+                    let a = null;
+                    for (let k = 0; k <= RW.length; k++) {              // on the runway
+                        if (RW[k] && a === null) a = k;
+                        if ((!RW[k] || k === RW.length) && a !== null) {
+                            const x0 = x.getPixelForValue(a), x1 = x.getPixelForValue(Math.min(k, RW.length) - 1);
+                            ctx.fillStyle = 'rgba(100,116,139,0.10)'; ctx.fillRect(x0, top, Math.max(2, x1 - x0), bottom - top);
+                            a = null;
+                        }
+                    }
+                    stops.forEach(([p, q]) => {                         // stopped
+                        const x0 = x.getPixelForValue(p - 1), x1 = x.getPixelForValue(q + 1);
+                        ctx.fillStyle = 'rgba(220,38,38,0.12)'; ctx.fillRect(x0, top, x1 - x0, bottom - top);
+                        ctx.fillStyle = '#b91c1c'; ctx.font = '600 10px DM Sans, sans-serif'; ctx.textAlign = 'center';
+                        ctx.fillText('Stopped', (x0 + x1) / 2, top + 11);
+                    });
+                    const kx = x.getPixelForValue(keyIdx);                // key moment
+                    ctx.strokeStyle = '#111'; ctx.setLineDash([4, 3]); ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(kx, top); ctx.lineTo(kx, bottom); ctx.stroke(); ctx.setLineDash([]);
+                    ctx.fillStyle = '#111'; ctx.font = '600 10px DM Sans, sans-serif'; ctx.textAlign = 'left';
+                    ctx.fillText(OP_KEY_LABEL[o.type] || '', kx + 4, bottom - 6);
+                    ctx.restore();
+                }
+            };
+            opChart = new Chart($('nm-op-chart'), {
+                type: 'line',
+                plugins: [bands],
+                data: {
+                    labels: T.map(t => fmtClock(t0 + t * 1000)),
+                    datasets: [
+                        { label: 'Height above field (ft)', data: H, yAxisID: 'y', borderColor: '#0057ff', backgroundColor: 'rgba(0,87,255,0.06)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.2 },
+                        { label: 'Ground speed (kt)', data: G, yAxisID: 'y1', borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, tension: 0.2, fill: false },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 10 } } },
+                        y: { position: 'left', beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, title: { display: true, text: 'ft above field', font: { size: 11 } } },
+                        y1: { position: 'right', beginAtZero: true, grid: { display: false }, title: { display: true, text: 'kt', font: { size: 11 } } },
+                    },
+                },
+            });
+        }
+
+        function renderOpMap(o) {
+            if (opMap) { opMap.remove(); opMap = null; }
+            const s = o.series;
+            if (!s || !s.lat || s.lat.length < 2) return;
+            opMap = L.map('nm-op-map', { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap contributors' }).addTo(opMap);
+            const ll = s.lat.map((la, k) => [la, s.lon[k]]);
+            L.polyline(ll, { color: '#0057ff', weight: 2.5, opacity: 0.8 }).addTo(opMap);
+            for (let k = 0; k < ll.length - 1; k++) {              // the part on the runway, heavier
+                if (s.rw[k] && s.rw[k + 1]) L.polyline([ll[k], ll[k + 1]], { color: '#111', weight: 5, opacity: 0.85, lineCap: 'round' }).addTo(opMap);
+            }
+            const t0 = Date.parse(s.startTimestamp), keyT = (Date.parse(o.timestamp) - t0) / 1000;
+            let kk = 0; s.t.forEach((t, k) => { if (Math.abs(t - keyT) < Math.abs(s.t[kk] - keyT)) kk = k; });
+            L.circleMarker(ll[kk], { radius: 6, color: '#fff', weight: 2, fillColor: '#111', fillOpacity: 1 })
+                .bindTooltip(OP_KEY_LABEL[o.type] || '', { permanent: true, direction: 'top', offset: [0, -6], className: 'nm-mon-label' }).addTo(opMap);
+            L.circleMarker(ll[0], { radius: 4, color: '#0057ff', weight: 2, fillColor: '#fff', fillOpacity: 1 }).bindTooltip('Start').addTo(opMap);
+            try { opMap.fitBounds(L.latLngBounds(ll).pad(0.15)); } catch (err) {}
+        }
+
+        // ── CSV export: violation candidates for the loaded range ───────────
+        function csvCell(v) { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+        function exportCsv() {
+            const header = ['Type', 'Date', 'Time', 'Registration', 'ICAO Type', 'Operation', 'Runway', 'Monitor',
+                            'Lmax (dBA)', 'Lmax Limit', 'SENEL (dB)', 'SENEL Limit', 'Period', 'Flags', 'Match Confidence', 'Data Quality'];
+            const mon = $('nm-monitor').value;
+            const noise = scopeEvents().filter(e => e.source === 'aircraft' && e.exceedsLimit)
+                .sort((a, b) => a.lmaxTimestamp.localeCompare(b.lmaxTimestamp))
+                .map(e => ['Noise exceedance', e.date, e.time, e.registration, e.icaoType, e.operation, e.runway, monShort(e.monitorId),
+                           e.lmax.toFixed(1), e.lmaxLimitDb, e.senel.toFixed(1), e.senelLimitDb, e.period,
+                           (e.ruleFlags || []).join(' '), e.confidence, e.dataQuality]);
+            const ops = mon !== 'all' ? [] : opsScoped().filter(o => (o.ruleFlags || []).length)   // [OPERATIONS] classified runway operations with a rule flag
+                .map(o => [opCsvType(o), o.date, o.time, o.registration, o.icaoType || typeOf(o.registration), o.label, o.runway, '',
+                           '', '', '', '', o.ruleFlags.includes('curfew-departure') ? 'curfew' : '',
+                           o.ruleFlags.join(' '), o.needsReview ? 'review' : 'classified from track', '']);
+            const lines = [header, ...noise, ...ops].map(r => r.map(csvCell).join(','));
+            lines.unshift(csvCell('SIMULATED NOISE DATA — demonstration only (POU traffic evaluated against Torrance limits)'));
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            const { from, to } = window._nmRange || { from: DEMO_FROM, to: DEMO_TO };
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `violation_candidates_${from}_to_${to}${mon !== 'all' ? '_' + mon : ''}.csv`;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }
+    </script>
+</body>
+</html>

@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <script src="main.js"></script>
+    <script src="toa-demo-nav.js"></script>   <!-- [TOA DEMO] Noise dropdown -->
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -255,6 +256,9 @@
         /* ── Admin airport selector (added for PNS; same look as dashboard.html) ── */
         #airport-selector { display: none; align-items: center; gap: 10px; margin-bottom: 1rem; font-size: 14px; }
         #airport-selector select { font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+
+        /* [TOA DEMO] larger Torrance logo, top-aligned with the title so the navbar doesn't cover it */
+        #page-airport-logo[src$="toa-logo.png"] { height: 72px; top: 6px; transform: none; }
     </style>
 </head>
 
@@ -486,9 +490,17 @@
                 return;
             }
             const profile = snap.data();
+            if (window.toaDemoNav) toaDemoNav(profile.airport);   // [TOA DEMO] Noise dropdown, demo_toa only
             // PNS (non-admin): show the empty, formatted page with the contact message
             if (profile.role !== 'admin' && profile.airport === 'pns') {
                 showFeeScheduleNotConfigured();
+                hideAuth();
+                return;
+            }
+            // [TOA DEMO] demo_toa (non-admin): same empty page + contact message as PNS, with the Torrance logo
+            if (profile.role !== 'admin' && profile.airport === 'demo_toa') {
+                showFeeScheduleNotConfigured();
+                document.getElementById('page-airport-logo').src = 'toa-logo.png';
                 hideAuth();
                 return;
             }

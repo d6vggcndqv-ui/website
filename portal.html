@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <script src="main.js"></script>
+    <script src="toa-demo-nav.js"></script>   <!-- [TOA DEMO] Noise dropdown -->
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
     <style>
         /* ── Auth gate (same pattern as dashboard.html) ───────────────── */
@@ -114,6 +115,12 @@
             .portal-hero-overlay { left: 12px; bottom: 12px; padding: 8px 14px; gap: 10px; }
             .portal-hero-overlay img { height: 34px; }
             .portal-map-section iframe { height: 320px; }
+        }
+
+                /* [TOA DEMO] larger Torrance logo in the hero overlay */
+        #portal-logo-img[src$="toa-logo.png"] { height: 80px; }
+        @media (max-width: 768px) {
+            #portal-logo-img[src$="toa-logo.png"] { height: 52px; }
         }
 
         /* ── Admin airport selector (same look as dashboard.html) ── */
@@ -241,6 +248,14 @@
                 mapUrl: 'https://map.fl-technologies-data.com/tar1090/?lat=30.4727&lon=-87.1866&zoom=12', // shared map, centered on PNS,   // shared map — PNS feed is merged into the same tar1090 instance
                 since: 'Since 10/28/2026'
             },
+                        // [TOA DEMO] demo_toa account: Torrance branding, no data of its own
+            demo_toa: {
+                name: 'TOA — Torrance Municipal (Demo)',
+                hero: 'toa-hero3.jpg',
+                logo: 'toa-logo.png',
+                mapUrl: 'https://map.fl-technologies-data.com/tar1090/?lat=33.8034&lon=-118.3397&zoom=12', // shared map, centered on TOA (no receiver there, so it will be empty)
+                since: ''
+            },
         };
 
         // Matches the collection naming convention used in dashboard.html / flighthistory.html
@@ -302,6 +317,7 @@
             const snap = await getDoc(doc(db, 'Users', user.uid));
             if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
             const profile = snap.data();
+               if (window.toaDemoNav) toaDemoNav(profile.airport);   // [TOA DEMO] Noise dropdown, demo_toa only
 
             let airport = profile.airport || 'pou';
             if (profile.role === 'admin') {

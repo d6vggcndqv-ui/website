@@ -14,6 +14,7 @@
          to upgrade, change 1.145.0 in BOTH lines below. No Cesium ion account or token is used. -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css">
     <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js"></script>
+    <script src="toa-demo-nav.js"></script>   <!-- [TOA DEMO] Noise dropdown -->
     <!-- [AIRCRAFT ICONS] your FAA type-code registry (same file landingfees.html uses); loads without blocking the page -->
     <script defer src="icaocodeRegistry.js"></script>
 
@@ -248,6 +249,10 @@
                 feedUrl: AIRCRAFT_FEED   // PNS feed is being merged into this same tar1090 instance
             }
         };
+
+        // [NOISE DEMO] Torrance demo account (Users doc airport: "demo_toa"): same field, feed and recorded tracks as POU,
+        // under its own code, with the simulated noise layer turned on. No other airport has noise: true.
+        AIRPORT_3D.demo_toa = Object.assign({}, AIRPORT_3D.pou, { name: 'Runway Vision Demo — Hudson Valley Regional traffic', noise: true });
 
         // ── Display settings ────────────────────────────────────────────
         const POLL_MS = 2000;           // matches the feed cadence
@@ -1638,6 +1643,7 @@
             owd: { collection: 'tracks_owd', tz: 'America/New_York' },
             pns: { collection: 'tracks_pns', tz: 'America/Chicago' }
         };
+        HISTORY_SOURCES.demo_toa = { collection: 'tracks_pou', tz: 'America/New_York' };   // [NOISE DEMO] replays POU's recorded tracks
         const HISTORY_LOOKBACK_MIN = 180;   // also fetch visits that started up to this long before the window (they may still be flying in it)
         const HISTORY_MAX_FLIGHTS = 150;    // most visits drawn at once
         const HISTORY_KEPT_DAYS = 30;       // how long the logger keeps tracks (TRACK_RETENTION_DAYS); only used in messages
@@ -2533,6 +2539,285 @@
             });
         }
 
+        // ════════════════════════════════════════════════════════════════
+        // [NOISE DEMO] Simulated noise on the History replay — only for an airport set up with noise: true
+        // (the Torrance demo account, airport "demo_toa"). Every other airport is unchanged.
+        //  • The seven noise monitors sit on the ground. During replay each shows the sound level at that
+        //    moment, read second by second from its recorded event curve; between events, that hour's
+        //    average level in grey.
+        //  • While a monitor is recording an aircraft noise event, a dashed line joins it to the aircraft.
+        //  • Select a flight: its noise peaks are marked on its path ("Lmax 85.3 dBA · NMT 4") with a line to
+        //    the monitor, and its info panel lists its noise events and its classified runway operations.
+        //  • Link from Noise Monitoring: 3Dairspace.html?airport=demo_toa&track=<id>&event=<event id> opens that
+        //    flight at the start of its path (like any track link), with that event's monitor highlighted.
+        //  • Opening the demo account without a link loads ND_DEFAULT in History.
+        //  Reads noise_monitors_demo, noise_events_demo, noise_hourly_demo, noise_operations_demo. Writes nothing.
+        //  Nothing in the existing code is changed: once a frame this looks at what is showing and adds,
+        //  updates or removes its own drawing to match (same approach as [TRAIL STYLE]).
+        // ════════════════════════════════════════════════════════════════
+        const ND_COL = { monitors: 'noise_monitors_demo', events: 'noise_events_demo', hourly: 'noise_hourly_demo', ops: 'noise_operations_demo' };
+        const ND_DEFAULT = { date: '2026-10-21', time: '11:00', window: '60' };   // a busy weekday hour in the demo week
+        const ND_BG = { quiet: '#475569', below: '#334155', event: '#d97706', over: '#dc2626', hb: '#7c3aed' };
+        const ND_PIN_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="#ffffff" stroke="#0f172a" stroke-width="3"/><circle cx="12" cy="12" r="3" fill="#0f172a"/></svg>');
+        let ndReady = false, ndShown = false, ndWinSeen = null, ndGen = 0, ndDataVer = 0, ndSeatEpoch = -1, ndSeated = false;
+        let ndMonitors = [];                  // { id, name, lat, lon, groundPos, pin, line }
+        let ndEventsByMon = new Map(), ndEventsByTrack = new Map(), ndOpsByTrack = new Map(), ndHourly = new Map();
+        let ndMarkers = [], ndMarkerKey = '', ndHighlight = null, ndPending = null;
+        const ndShort = id => String(id).replace('NMT', 'NMT ');
+        const ndOn = () => !!(cfg && cfg.noise && historyOn);
+        const ndColor = (css, a) => Cesium.Color.fromCssColorString(css).withAlpha(a == null ? 1 : a);
+        const ndEventCss = e => (e.ruleFlags || []).includes('hearing-board-candidate') ? ND_BG.hb : e.exceedsLimit ? ND_BG.over : ND_BG.event;
+        const ndEsc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+        function ndGroundPos(lon, lat, liftM) {
+            const k = Math.PI / 180;
+            let g = curtainGroundM(lon * k, lat * k);
+            const known = g !== undefined;
+            if (!known) g = (cfg.fieldElevFt + cfg.geoidFt) * FT;
+            return { pos: Cesium.Cartesian3.fromDegrees(lon, lat, g + liftM), known };
+        }
+
+        // Sound level at a monitor at time ms: from an event's 1-second curve, else that hour's average
+        function ndLevelAt(monId, ms) {
+            const list = ndEventsByMon.get(monId) || [];
+            let lo = 0, hi = list.length - 1, idx = -1;
+            while (lo <= hi) { const mid = (lo + hi) >> 1; if (list[mid].thStart <= ms) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+            for (let k = idx; k >= 0 && k >= idx - 3; k--) {
+                const e = list[k], i = Math.floor((ms - e.thStart) / 1000);
+                if (i >= 0 && i < e.th.length) return { db: e.th[i], ev: e, recording: ms >= e.startMs && ms <= e.endMs };
+            }
+            const h = ndHourly.get(monId + '|' + Math.floor(ms / 3600000));
+            return h != null ? { db: h, hourly: true } : null;
+        }
+        function ndLevelCss(lv) {
+            if (!lv || lv.hourly) return ND_BG.quiet;
+            if (lv.db >= lv.ev.lmaxLimitDb) return ND_BG.over;
+            if (lv.db >= lv.ev.thresholdDb) return ND_BG.event;
+            return ND_BG.below;
+        }
+
+        function ndBuildMonitors(list) {
+            ndMonitors.forEach(m => { viewer.entities.remove(m.pin); viewer.entities.remove(m.line); });
+            ndMonitors = list.map(d => {
+                const m = { id: d.monitorId || d.id, name: d.name || d.id, lat: d.lat, lon: d.lon, groundPos: null };
+                m.groundPos = ndGroundPos(m.lon, m.lat, 2).pos;
+                const lvAt = time => ndLevelAt(m.id, histMsOf(time));
+                m.pin = viewer.entities.add({
+                    name: m.name,
+                    position: new Cesium.CallbackProperty(() => m.groundPos, false),
+                    billboard: {
+                        image: ND_PIN_ICON, width: 22, height: 22, disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                        scale: new Cesium.CallbackProperty(time => {
+                            const lv = lvAt(time);
+                            const s = lv && !lv.hourly ? 1 + Math.min(0.9, Math.max(0, (lv.db - 60) / 30)) : 1;
+                            return ndHighlight === m.id ? Math.max(1.5, s) : s;
+                        }, false)
+                    },
+                    label: {
+                        text: new Cesium.CallbackProperty(time => {
+                            const lv = lvAt(time);
+                            if (!lv) return ndShort(m.id);
+                            return `${ndShort(m.id)} · ${lv.hourly ? Math.round(lv.db) + ' dBA (hour avg)' : lv.db.toFixed(1) + ' dBA'}`;
+                        }, false),
+                        font: '600 13px "DM Sans", sans-serif', fillColor: Cesium.Color.WHITE, showBackground: true,
+                        backgroundColor: new Cesium.CallbackProperty(time => ndColor(ndLevelCss(lvAt(time)), ndHighlight === m.id ? 1 : 0.88), false),
+                        backgroundPadding: new Cesium.Cartesian2(7, 4), verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                        pixelOffset: new Cesium.Cartesian2(0, -16), disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    }
+                });
+                // while the monitor is recording an aircraft event: dashed line to that aircraft
+                const activeAc = time => {
+                    const lv = lvAt(time);
+                    if (!lv || lv.hourly || !lv.recording || !lv.ev.trackId) return null;
+                    const tr = tracks[lv.ev.trackId], ms = histMsOf(time);
+                    if (!tr || !tr.hist || ms < tr.hist.startMs || ms > tr.hist.endMs) return null;
+                    const p = tr.entity.position.getValue(time);
+                    return p ? { p, ev: lv.ev } : null;
+                };
+                m.line = viewer.entities.add({
+                    polyline: {
+                        show: new Cesium.CallbackProperty(time => !!activeAc(time), false),
+                        positions: new Cesium.CallbackProperty(time => { const a = activeAc(time); return a ? [m.groundPos, a.p] : [m.groundPos, m.groundPos]; }, false),
+                        width: 2.5, arcType: Cesium.ArcType.NONE,
+                        material: new Cesium.PolylineDashMaterialProperty({
+                            color: new Cesium.CallbackProperty(time => { const a = activeAc(time); return ndColor(a ? ndEventCss(a.ev) : ND_BG.event, 0.95); }, false),
+                            dashLength: 12 })
+                    }
+                });
+                return m;
+            });
+            ndSeatEpoch = -1; ndSeated = false;
+        }
+
+        async function ndLoad(win) {
+            const gen = ++ndGen;
+            const from = new Date(win.startMs - HISTORY_LOOKBACK_MIN * 60000).toISOString(), to = new Date(win.endMs).toISOString();
+            const hourFrom = new Date(Math.floor(win.startMs / 3600000) * 3600000 - 3600000).toISOString();
+            try {
+                const [mS, eS, hS, oS] = await Promise.all([
+                    ndMonitors.length ? null : getDocs(collection(db, ND_COL.monitors)),
+                    getDocs(query(collection(db, ND_COL.events), where('timestamp', '>=', from), where('timestamp', '<=', to))),
+                    getDocs(query(collection(db, ND_COL.hourly), where('timestamp', '>=', hourFrom), where('timestamp', '<=', to))),
+                    getDocs(query(collection(db, ND_COL.ops), where('timestamp', '>=', from), where('timestamp', '<=', to))),
+                ]);
+                if (gen !== ndGen) return;
+                if (mS) ndBuildMonitors(mS.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true })));
+                ndEventsByMon = new Map(); ndEventsByTrack = new Map(); ndOpsByTrack = new Map(); ndHourly = new Map();
+                eS.docs.forEach(d => {
+                    const e = { id: d.id, ...d.data() };
+                    const th = e.timeHistory || {};
+                    e.th = th.values || []; e.thStart = Date.parse(th.startTimestamp);
+                    e.startMs = Date.parse(e.timestamp); e.endMs = Date.parse(e.endTimestamp); e.lmaxMs = Date.parse(e.lmaxTimestamp);
+                    if (!ndEventsByMon.has(e.monitorId)) ndEventsByMon.set(e.monitorId, []);
+                    ndEventsByMon.get(e.monitorId).push(e);
+                    if (e.trackId) { if (!ndEventsByTrack.has(e.trackId)) ndEventsByTrack.set(e.trackId, []); ndEventsByTrack.get(e.trackId).push(e); }
+                });
+                ndEventsByMon.forEach(l => l.sort((a, b) => a.thStart - b.thStart));
+                ndEventsByTrack.forEach(l => l.sort((a, b) => a.lmaxMs - b.lmaxMs));
+                hS.docs.forEach(d => { const h = d.data(); ndHourly.set(h.monitorId + '|' + Math.floor(Date.parse(h.timestamp) / 3600000), h.leq); });
+                oS.docs.forEach(d => { const o = d.data(); if (!ndOpsByTrack.has(o.trackId)) ndOpsByTrack.set(o.trackId, []); ndOpsByTrack.get(o.trackId).push(o); });
+                ndOpsByTrack.forEach(l => l.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp))));
+                ndDataVer++;
+            } catch (err) {
+                console.error('[NOISE DEMO] load failed:', err);
+            }
+        }
+
+        // Selected flight: its noise peaks on the path, with a line to the monitor that measured each one
+        function ndRebuildMarkers() {
+            ndMarkers.forEach(e => viewer.entities.remove(e));
+            ndMarkers = [];
+            const id = focusHex, tr = id && tracks[id];
+            if (!ndOn() || !tr || !tr.hist) return;
+            const evs = ndEventsByTrack.get(id) || [];
+            const loudest = new Map();   // one label per monitor, at this flight's loudest peak there (circuits repeat over the same spots)
+            evs.forEach(e => { const b = loudest.get(e.monitorId); if (!b || e.lmax > b.lmax) loudest.set(e.monitorId, e); });
+            for (const e of evs) {
+                const m = ndMonitors.find(x => x.id === e.monitorId);
+                if (!m) continue;
+                const jd = Cesium.JulianDate.fromDate(new Date(e.lmaxMs));
+                const at = () => (tracks[id] ? tracks[id].entity.position.getValue(jd) : undefined);
+                const col = ndColor(ndEventCss(e));
+                const n = evs.filter(x => x.monitorId === e.monitorId).length;
+                const marker = viewer.entities.add({
+                    position: new Cesium.CallbackProperty(at, false),
+                    point: { pixelSize: 10, color: col, outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                    label: loudest.get(e.monitorId) !== e ? undefined : {
+                        text: n > 1 ? `${ndShort(e.monitorId)} · max ${e.lmax.toFixed(1)} dBA (${n} events)` : `${ndShort(e.monitorId)} · Lmax ${e.lmax.toFixed(1)} dBA`,
+                        font: '600 11px "DM Sans", sans-serif',
+                        fillColor: Cesium.Color.WHITE, showBackground: true, backgroundColor: col.withAlpha(0.88),
+                        backgroundPadding: new Cesium.Cartesian2(6, 3), verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                        pixelOffset: new Cesium.Cartesian2(0, -12), disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    }
+                });
+                marker._a3dHex = id;   // clicking a peak keeps this flight selected
+                const line = viewer.entities.add({
+                    polyline: {
+                        positions: new Cesium.CallbackProperty(() => { const p = at(); return p ? [m.groundPos, p] : [m.groundPos, m.groundPos]; }, false),
+                        width: 1.5, arcType: Cesium.ArcType.NONE,
+                        material: new Cesium.PolylineDashMaterialProperty({ color: col.withAlpha(0.7), dashLength: 8 })
+                    }
+                });
+                line._a3dHex = id;
+                ndMarkers.push(marker, line);
+            }
+        }
+
+        // Info panel: the flight's noise events and runway operations, added below the existing rows
+        function ndInfoHtml(id) {
+            const evs = ndEventsByTrack.get(id) || [], ops = (ndOpsByTrack.get(id) || []).filter(o => o.type !== 'review');
+            if (!evs.length && !ops.length) return '';
+            const head = t => `<div style="padding:7px 6px 2px;font-size:11px;font-weight:700;letter-spacing:0.03em;color:#c4b5fd;text-transform:uppercase;">${t}</div>`;
+            let html = '';
+            if (evs.length) {
+                html += head('Noise at monitors (simulated)') + '<table class="cesium-infoBox-defaultTable"><tbody>' + evs.map(e => {
+                    const f = e.ruleFlags || [];
+                    const tag = f.includes('hearing-board-candidate') ? ' · <b style="color:#c4b5fd">Hearing Board</b>' : e.exceedsLimit ? ' · <b style="color:#fca5a5">over limit</b>' : '';
+                    return `<tr><th>${ndShort(e.monitorId)} · ${histClock(e.lmaxMs, true)}</th><td>${e.lmax.toFixed(1)} / ${e.senel.toFixed(1)} dB${tag}</td></tr>`;
+                }).join('') + '</tbody></table><div style="padding:0 6px;font-size:10.5px;color:#b8c4c4;">Lmax / SENEL</div>';
+            }
+            if (ops.length) {
+                html += head('Runway operations') + '<table class="cesium-infoBox-defaultTable"><tbody>' + ops.map(o => {
+                    const f = o.ruleFlags || [];
+                    const rule = f.includes('training-prohibited') ? ' · <b style="color:#fca5a5">Prohibited</b>'
+                               : f.includes('training-hours') ? ' · <b style="color:#fcd34d">Outside hours</b>'
+                               : f.includes('curfew-departure') ? ' · <b style="color:#fca5a5">Curfew</b>' : '';
+                    return `<tr><th>${ndEsc(o.label)}</th><td>Rwy ${ndEsc(o.runway)} · ${histClock(Date.parse(o.timestamp))}${rule}</td></tr>`;
+                }).join('') + '</tbody></table>';
+            }
+            return html;
+        }
+        function ndWrapInfo(tr) {
+            const orig = tr.entity.description;
+            tr.entity.description = new Cesium.CallbackProperty(time => {
+                let d = orig && orig.getValue ? orig.getValue(time) : orig;
+                d = typeof d === 'string' ? d : '';
+                const extra = ndOn() ? ndInfoHtml(tr.hex) : '';
+                if (!extra) return d;
+                return d.endsWith(SMOOTH_NOTE) ? d.slice(0, -SMOOTH_NOTE.length) + extra + SMOOTH_NOTE : d + extra;
+            }, false);
+            tr.ndWrapped = true;
+        }
+
+        function ndLegend() {
+            const el = document.getElementById('a3d-legend');
+            if (!el || el.querySelector('.nd-legend')) return;
+            const s = document.createElement('span');
+            s.className = 'nd-legend';
+            s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:6px;padding-left:10px;border-left:1px solid rgba(255,255,255,0.3);';
+            s.innerHTML = 'Noise (simulated):' +
+                [['Quiet', ND_BG.quiet], ['Event', ND_BG.event], ['Over limit', ND_BG.over], ['Hearing Board', ND_BG.hb]]
+                    .map(([t, c]) => `<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:${c};display:inline-block;"></span>${t}</span>`).join('');
+            el.appendChild(s);
+        }
+
+        function initNoiseDemo() {
+            if (ndReady || !viewer) return;
+            ndReady = true;
+            const qp = new URLSearchParams(location.search);
+            const evId = qp.get('event');
+            if (evId) getDoc(doc(db, ND_COL.events, evId)).then(s => { if (s.exists()) ndPending = { id: evId, ...s.data() }; }).catch(() => {});
+
+            // the demo account opens in History on a busy hour of the demo week (unless a link says otherwise)
+            if (cfg && cfg.noise && !qp.get('track') && !qp.get('date')) {
+                enterHistory(false);
+                histEl('hist-date').value = ND_DEFAULT.date;
+                histEl('hist-time').value = ND_DEFAULT.time;
+                if ([...histEl('hist-window').options].some(o => o.value === ND_DEFAULT.window)) histEl('hist-window').value = ND_DEFAULT.window;
+                histLoadFromPanel();
+            }
+
+            viewer.scene.preUpdate.addEventListener(() => {
+                const on = ndOn();
+                if (on !== ndShown) {                                   // on / off with History and the airport
+                    ndShown = on;
+                    ndMonitors.forEach(m => { m.pin.show = on; m.line.show = on; });
+                    if (on) ndLegend();
+                    const lg = document.querySelector('#a3d-legend .nd-legend');
+                    if (lg) lg.style.display = on ? 'inline-flex' : 'none';
+                    if (!on) { ndRebuildMarkers(); ndMarkerKey = ''; }
+                }
+                if (!on) return;
+                if (histWin && histWin !== ndWinSeen) { ndWinSeen = histWin; ndLoad(histWin); }
+                if (!ndSeated && ndMonitors.length && ndSeatEpoch !== curtainEpoch) {   // put the monitors on the ground as elevation tiles arrive
+                    ndSeatEpoch = curtainEpoch;
+                    let all = true;
+                    ndMonitors.forEach(m => { const g = ndGroundPos(m.lon, m.lat, 2); m.groundPos = g.pos; if (!g.known) all = false; });
+                    ndSeated = all;
+                }
+                for (const id in tracks) { const t = tracks[id]; if (t.hist && !t.ndWrapped) ndWrapInfo(t); }
+                const key = `${focusHex || ''}|${ndDataVer}`;
+                if (key !== ndMarkerKey) { ndMarkerKey = key; ndRebuildMarkers(); }
+                // a link to one event: the flight opens at the start of its path as usual; highlight the monitor
+                if (ndPending && ndDataVer && tracks[ndPending.trackId] && tracks[ndPending.trackId].hist && histWin) {
+                    const p = ndPending; ndPending = null;
+                    ndHighlight = p.monitorId;
+                    setStatus(`History · ${tracks[p.trackId].hist.reg} · noise event at ${ndShort(p.monitorId)}, peak ${histClock(Date.parse(p.lmaxTimestamp), true)} (simulated)`);
+                }
+            });
+        }
+
         // ── Auth (same pattern as portal.html) ──────────────────────────
         function showAuth() {
             document.getElementById('auth-screen').style.display = 'flex';
@@ -2547,6 +2832,7 @@
             const snap = await getDoc(doc(db, 'Users', user.uid));
             if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
             const profile = snap.data();
+            if (window.toaDemoNav) toaDemoNav(profile.airport);   // [TOA DEMO] Noise dropdown, demo_toa only
 
             hideAuth();
             initViewer();
@@ -2570,6 +2856,7 @@
             initSmoothPath();    // [SMOOTH PATH] (before the curtain, so the curtain is drawn at the smoothed height in the same frame)
             initReportPin();     // [REPORT PIN]
             initTrailStyle();    // [TRAIL STYLE]
+            initNoiseDemo();     // [NOISE DEMO] does nothing unless the airport is set up with noise: true
         }
 
         window._authSignIn = async () => {

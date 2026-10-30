@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports</title>
+    <!-- [REPORTS] new page — every report available to the account, generated here as PDF or CSV.
+         Demo account (demo_toa) only for now. Reads noise_*_demo + noise_operations_demo (simulated noise)
+         and tracks_pou / flights_pou (read-only). Writes nothing. -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="main.js"></script>
+    <script src="toa-demo-nav.js"></script>   <!-- [TOA DEMO] Noise dropdown + Reports link -->
+    <script src="icaocodeRegistry.js"></script>
+    <link rel="icon" href="/favicon1.ico" type="image/x-icon">
+    <style>
+        .page-header-row { position:relative; text-align:center; margin-bottom:0.5rem; }
+        .page-header-row h1 { margin:0; }
+        #page-airport-logo { position:absolute; right:0; top:6px; height:72px; width:auto; display:block; }
+        .rp-intro { text-align:center; color:#666; font-size:14px; margin:0 auto 1.5rem; max-width:760px; line-height:1.5; }
+
+        .rp-banner {
+            background:#fffbeb; border:1px solid #fcd34d; color:#78350f;
+            border-radius:8px; padding:10px 14px; font-size:13px; line-height:1.5; margin-bottom:1.5rem;
+        }
+        .rp-banner strong { color:#92400e; }
+
+        .rp-section-title { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#0057ff; margin:1.75rem 0 0.75rem; }
+        .rp-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:18px; }
+
+        .rp-card { background:#fff; border:1px solid #e5e5e5; border-radius:10px; padding:16px 18px; display:flex; flex-direction:column; gap:10px; }
+        .rp-card h3 { margin:0; font-size:16px; font-weight:700; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .rp-card p { margin:0; font-size:13px; color:#555; line-height:1.5; }
+        .rp-tag { font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; padding:2px 7px; border-radius:99px; background:#eef4ff; color:#0057ff; }
+        .rp-tag.csv { background:#f0fdf4; color:#166534; }
+
+        .rp-fields { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-top:2px; }
+        .rp-fields label { display:flex; flex-direction:column; font-size:12px; color:#666; gap:4px; }
+        .rp-fields input, .rp-fields select {
+            font-family:'DM Sans',sans-serif; font-size:14px; padding:7px 9px; border:1px solid #ccc; border-radius:6px; background:#fff; color:#111;
+        }
+        .rp-fields label:has(select.wide) { flex:1 1 100%; min-width:0; }
+        .rp-fields select.wide { width:100%; min-width:0; }
+        .rp-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:auto; padding-top:4px; }
+        .rp-actions button {
+            font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; padding:8px 16px; border:1px solid #0057ff; border-radius:6px;
+            background:#0057ff; color:#fff; cursor:pointer; transition:background 0.15s;
+        }
+        .rp-actions button:hover { background:#0040cc; }
+        .rp-actions button.secondary { background:#fff; color:#0057ff; }
+        .rp-actions button.secondary:hover { background:#eef4ff; }
+        .rp-actions button:disabled { opacity:0.5; cursor:wait; }
+        .rp-status { font-size:12.5px; color:#666; }
+        .rp-status.err { color:#b91c1c; }
+        .rp-card.disabled { background:#fafafa; }
+        .rp-card.disabled h3 { color:#888; }
+
+        .spinner { display:inline-block; width:13px; height:13px; border:2px solid #e0e0e0; border-top-color:#0057ff; border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; margin-right:6px; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        #rp-unavailable { display:none; text-align:center; color:#666; font-size:15px; margin:4rem auto; max-width:520px; line-height:1.6; }
+
+        /* ── Auth (matches other portal pages) ─────────────────────── */
+        #auth-screen { display:none; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; }
+        #auth-screen h2 { font-size:1.5rem; font-weight:600; margin-bottom:1.5rem; }
+        #auth-form { display:flex; flex-direction:column; gap:14px; width:100%; max-width:360px; }
+        #auth-form input { font-family:'DM Sans',sans-serif; font-size:14px; padding:10px 12px; border:1px solid #ccc; border-radius:6px; outline:none; }
+        #auth-form input:focus { border-color:#0057ff; }
+        #auth-form button { font-family:'DM Sans',sans-serif; font-size:14px; padding:10px; background:#0057ff; color:#fff; border:none; border-radius:6px; cursor:pointer; }
+        #auth-form button:hover { background:#0040cc; }
+        #auth-error { font-size:13px; color:#dc2626; text-align:center; min-height:18px; }
+        .forgot-link { font-size:12px; color:#0057ff; text-decoration:none; }
+        .forgot-link:hover { text-decoration:underline; }
+
+        main { width:100%; max-width:1200px; margin:0 auto; padding:0 24px; box-sizing:border-box; }
+        @media (max-width: 768px) { #page-airport-logo { position:static; margin:6px auto 0; height:56px; } }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-logo">
+            <a href="https://www.fl-technologies.com" target="_blank">
+                <img src="logo.png" alt="Logo">
+            </a>
+        </div>
+
+        <!-- PORTAL NAV — keep identical across portal.html, dashboard.html, flighthistory.html, landingfees.html, noiseabatement.html, 3Dairspace.html -->
+        <ul class="nav-links">
+            <li><a href="portal.html">Home</a></li>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="flighthistory.html">Flight History</a></li>
+            <li><a href="landingfees.html">Landing Fees</a></li>
+            <li><a href="noiseabatement.html">Noise Abatement</a></li>
+            <li><a href="3Dairspace.html">3D Airspace</a></li>
+        </ul>
+        <a class="nav-btn-secondary" href="#" onclick="if(window._authSignOut){window._authSignOut();} window.location.href='index.html'; return false;">Logout</a>
+    </nav>
+
+    <main>
+        <!-- Auth screen -->
+        <div id="auth-screen">
+            <h2>Sign-In</h2>
+            <form id="auth-form" onsubmit="return false;">
+                <input type="email" id="auth-email" placeholder="Email" required autocomplete="email">
+                <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
+                <button type="button" id="auth-submit" onclick="window._authSignIn()">Sign-In</button>
+                <div id="auth-error"></div>
+            </form>
+            <p style="text-align:center;font-size:13px;color:#666;margin-top:16px;">
+                Don't have an account? <a href="register.html?from=reports.html" style="color:#0057ff;text-decoration:none;font-weight:500;">Create one</a>
+            </p>
+            <p style="text-align:center;margin-top:8px;">
+                <a href="#" class="forgot-link" onclick="window._forgotPassword(); return false;">Forgot password?</a>
+            </p>
+        </div>
+
+        <div id="rp-unavailable">Reports aren't set up for this account yet.<br>Contact
+            <a href="mailto:will@fl-technologies.com" style="color:#0057ff;text-decoration:none;font-weight:500;">will@fl-technologies.com</a> to get started.</div>
+
+        <!-- Main content (hidden until authenticated) -->
+        <div id="main-content" style="display:none;">
+            <div class="page-header-row">
+                <h1>Reports</h1>
+                <img id="page-airport-logo" src="toa-logo.png" alt="Torrance Municipal Airport logo" onerror="this.style.display='none';">
+            </div>
+            <p class="rp-intro">Generate any of the airport's reports as a PDF or spreadsheet (CSV). Pick the date or period, then press the button.</p>
+
+            <div class="rp-banner">
+                <strong>Demonstration data.</strong> Aircraft movements are real ADS-B tracks recorded at Hudson Valley Regional Airport (POU).
+                Noise levels (October 19–25, 2026) are <strong>simulated</strong> at seven virtual monitors and evaluated against Torrance Municipal Airport's
+                published limits. Violation flags are candidates for staff review, not findings. Owner contact details in violation letters are sample data.
+            </div>
+
+            <!-- ── Noise monitoring ─────────────────────────────────────── -->
+            <div class="rp-section-title">Noise monitoring &amp; enforcement</div>
+            <div class="rp-grid">
+
+                <div class="rp-card">
+                    <h3>Daily Verified Violation List <span class="rp-tag">PDF</span><span class="rp-tag csv">CSV</span></h3>
+                    <p>Every candidate violation for one day, by N-number: noise over the Lmax or SENEL limit, curfew departures, and training operations. Each row has a box for staff verification.</p>
+                    <div class="rp-fields">
+                        <label>Date <input type="date" id="dv-date"></label>
+                    </div>
+                    <div class="rp-actions">
+                        <button id="dv-pdf">Generate PDF</button>
+                        <button id="dv-csv" class="secondary">Download CSV</button>
+                        <span class="rp-status" id="dv-status"></span>
+                    </div>
+                </div>
+
+                <div class="rp-card">
+                    <h3>Monthly / Quarterly Noise Report <span class="rp-tag">PDF</span></h3>
+                    <p>CNEL by monitor against the 65 dB benchmark, noise events and violations by type, runway operations, the aircraft with the most violations, and the calibration record.</p>
+                    <div class="rp-fields">
+                        <label>Period
+                            <select id="pr-preset">
+                                <option value="month">Month</option>
+                                <option value="quarter">Quarter</option>
+                                <option value="custom">Custom range</option>
+                            </select>
+                        </label>
+                        <label id="pr-month-wrap">Month <input type="month" id="pr-month"></label>
+                        <label id="pr-quarter-wrap" style="display:none;">Quarter
+                            <select id="pr-quarter"></select>
+                        </label>
+                        <label id="pr-from-wrap" style="display:none;">From <input type="date" id="pr-from"></label>
+                        <label id="pr-to-wrap" style="display:none;">To <input type="date" id="pr-to"></label>
+                    </div>
+                    <div class="rp-actions">
+                        <button id="pr-pdf">Generate PDF</button>
+                        <span class="rp-status" id="pr-status"></span>
+                    </div>
+                </div>
+
+                <div class="rp-card">
+                    <h3>Hearing Board Case Packet <span class="rp-tag">PDF</span></h3>
+                    <p>For one noise event at least 1.5 dB over a limit: the noise curve, the flight track past the monitor, how the operation was classified, the monitor's calibration that day, and the aircraft's other events.</p>
+                    <div class="rp-fields">
+                        <label>Date <input type="date" id="hb-date"></label>
+                        <label>Event <select id="hb-event" class="wide"><option value="">Pick a date first</option></select></label>
+                    </div>
+                    <div class="rp-actions">
+                        <button id="hb-pdf">Generate PDF</button>
+                        <span class="rp-status" id="hb-status"></span>
+                    </div>
+                </div>
+
+                <div class="rp-card">
+                    <h3>Violation Letter <span class="rp-tag">PDF</span></h3>
+                    <p>A draft notice to the aircraft's registered owner for one violation, filled in with the event details, ready for staff review before it is sent.</p>
+                    <div class="rp-fields">
+                        <label>Date <input type="date" id="vl-date"></label>
+                        <label>Violation <select id="vl-violation" class="wide"><option value="">Pick a date first</option></select></label>
+                    </div>
+                    <div class="rp-actions">
+                        <button id="vl-pdf">Generate PDF</button>
+                        <span class="rp-status" id="vl-status"></span>
+                    </div>
+                </div>
+
+                <div class="rp-card">
+                    <h3>Violation Candidates <span class="rp-tag csv">CSV</span></h3>
+                    <p>The same export as the Noise Monitoring page: every noise exceedance event and every flagged runway operation for a date range, one row each.</p>
+                    <div class="rp-fields">
+                        <label>From <input type="date" id="vc-from"></label>
+                        <label>To <input type="date" id="vc-to"></label>
+                    </div>
+                    <div class="rp-actions">
+                        <button id="vc-csv">Download CSV</button>
+                        <span class="rp-status" id="vc-status"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Operations ───────────────────────────────────────────── -->
+            <div class="rp-section-title">Airport operations</div>
+            <div class="rp-grid">
+
+                <div class="rp-card">
+                    <h3>Operations Summary <span class="rp-tag">PDF</span></h3>
+                    <p>The Dashboard report: total operations, takeoffs, landings and touch-and-gos, with operations by day, hour, runway, class and AAC/ADG.</p>
+                    <div class="rp-fields">
+                        <label>From <input type="date" id="os-from"></label>
+                        <label>To <input type="date" id="os-to"></label>
+                    </div>
+                    <div class="rp-actions">
+                        <button id="os-pdf">Generate PDF</button>
+                        <span class="rp-status" id="os-status"></span>
+                    </div>
+                </div>
+
+                <div class="rp-card">
+                    <h3>Flight History <span class="rp-tag csv">CSV</span></h3>
+                    <p>The Flight History export: every logged operation with date, time, registration, operation, runway, AAC/ADG, category and class.</p>
+                    <div class="rp-fields">
+                        <label>From <input type="date" id="fh-from"></label>
+                        <label>To <input type="date" id="fh-to"></label>
+                        <label>Registration <input type="text" id="fh-reg" placeholder="optional" style="width:110px;"></label>
+                        <label>Operation
+                            <select id="fh-event">
+                                <option value="">All</option>
+                                <option value="Takeoff">Takeoff</option>
+                                <option value="Landing">Landing</option>
+                                <option value="Touch and Go">Touch and Go</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="rp-actions">
+                        <button id="fh-csv">Download CSV</button>
+                        <span class="rp-status" id="fh-status"></span>
+                    </div>
+                </div>
+
+                <div class="rp-card">
+                    <h3>Flight Track Report <span class="rp-tag">PDF</span></h3>
+                    <p>The Noise Abatement report for one flight: aircraft, times, altitude and speed, and the flight path on a map colored by altitude.</p>
+                    <div class="rp-fields">
+                        <label>Date <input type="date" id="tr-date"></label>
+                        <label>Registration <input type="text" id="tr-reg" placeholder="optional" style="width:110px;"></label>
+                        <label>Flight <select id="tr-track" class="wide"><option value="">Pick a date first</option></select></label>
+                    </div>
+                    <div class="rp-actions">
+                        <button id="tr-pdf">Generate PDF</button>
+                        <span class="rp-status" id="tr-status"></span>
+                    </div>
+                </div>
+
+                <div class="rp-card disabled">
+                    <h3>Landing Fees <span class="rp-tag csv">CSV</span></h3>
+                    <p>Transient landings with fee tier and amount owed. To set up this report with your fee schedule contact
+                        <a href="mailto:will@fl-technologies.com" style="color:#0057ff;text-decoration:none;font-weight:500;">will@fl-technologies.com</a></p>
+                </div>
+            </div>
+        </div><!-- /main-content -->
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 FlightLevel Technologies. All rights reserved.</p>
+    </footer>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut }
+                                 from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+        import { getFirestore, collection, doc, getDoc, getDocs, query, where }
+                                 from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey:            "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
+            authDomain:        "owd-data.firebaseapp.com",
+            projectId:         "owd-data",
+            storageBucket:     "owd-data.firebasestorage.app",
+            messagingSenderId: "912110224300",
+            appId:             "1:912110224300:web:ba2b8073871ec023817009",
+            measurementId:     "G-PHD4THC11M"
+        };
+        const app  = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db   = getFirestore(app);
+
+        // ════════════════════════════════════════════════════════════════════
+        // Configuration
+        // ════════════════════════════════════════════════════════════════════
+        const REPORT_ACCOUNTS = ['demo_toa'];             // accounts that get this page (demo only for now)
+        const COL = {
+            monitors: 'noise_monitors_demo', events: 'noise_events_demo', daily: 'noise_daily_demo',
+            calibration: 'noise_calibration_demo', ops: 'noise_operations_demo',
+            tracks: 'tracks_pou', flights: 'flights_pou',
+        };
+        const DEMO_FROM = '2026-10-19', DEMO_TO = '2026-10-25';   // dates with simulated noise data
+        const TZ = 'America/New_York';                             // the recorded traffic is POU's
+        const GEOID_OFFSET_FT = 105;                               // same correction as generate_noise_demo.js
+        const SOURCE_FIELD_ELEV_FT = 165;                          // POU field elevation, for the track report's pattern check
+        const SOURCE_COORD = [41.6266, -73.8842];
+        const AIRPORT = {
+            name:    'Torrance Municipal Airport',
+            sub:     'Zamperini Field · 3301 Airport Drive, Torrance, CA 90505',
+            office:  ['Airport Manager', 'Torrance Municipal Airport', '3301 Airport Drive', 'Torrance, CA 90505'],
+        };
+        const LIMITS_TEXT = '82 dBA Lmax / 88 dB SENEL (standard hours); 76 dBA Lmax / 82 dB SENEL during the departure curfew';
+        const CURFEW_TEXT = '10 PM–7 AM Monday–Friday, 10 PM–8 AM Saturday–Sunday';
+        const NOTE_NOISE  = 'Demonstration data: aircraft movements recorded at Hudson Valley Regional Airport (POU); noise levels simulated and evaluated against Torrance limits. Flags are candidates for staff review.';
+        const NOTE_OPS    = 'Demonstration data: aircraft operations recorded by ADS-B at Hudson Valley Regional Airport (POU).';
+        const OP_NAMES = { 'takeoff': 'Takeoff', 'landing': 'Landing', 'touch-and-go': 'Touch-and-go', 'stop-and-go': 'Stop-and-go',
+                           'taxi-back': 'Taxi-back', 'low-approach': 'Low approach', 'review': 'Needs review' };
+        const OP_EVENT_MAX_S = 180;           // same as noisemonitoring.html: a noise event takes its flight's operation within this many seconds
+        const PASS_GAP_S = 240;               // noise events of one flight within this gap are one pass (one violation)
+
+        // ════════════════════════════════════════════════════════════════════
+        // Small helpers
+        // ════════════════════════════════════════════════════════════════════
+        const $ = id => document.getElementById(id);
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+        const DTF = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        function tzParts(ms) { const o = {}; DTF.formatToParts(new Date(ms)).forEach(p => { o[p.type] = p.value; }); return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour, mi: +o.minute, s: +o.second }; }
+        function tzLocalToMs(ymd, hms) {
+            const guess = Date.parse(ymd + 'T' + hms + 'Z');
+            const offsetAt = ms => { const p = tzParts(ms); return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000; };
+            return guess - offsetAt(guess - offsetAt(guess));
+        }
+        const pad2 = n => String(n).padStart(2, '0');
+        function addDaysYMD(ymd, n) { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+        function ymdOf(ms) { const p = tzParts(ms); return `${p.y}-${pad2(p.mo)}-${pad2(p.d)}`; }
+        function todayYMD() { return ymdOf(Date.now()); }
+        function daysBetween(from, to) { const out = []; for (let d = from; d <= to; d = addDaysYMD(d, 1)) out.push(d); return out; }
+        function rangeISO(from, to) {
+            return { fromISO: new Date(tzLocalToMs(from, '00:00:00')).toISOString(),
+                     toISO:   new Date(tzLocalToMs(addDaysYMD(to, 1), '00:00:00') - 1).toISOString() };
+        }
+        function fmtClock(ms)  { const p = tzParts(ms); return `${p.h % 12 || 12}:${pad2(p.mi)}:${pad2(p.s)} ${p.h >= 12 ? 'PM' : 'AM'}`; }
+        function fmtHM(ms)     { const p = tzParts(ms); return `${p.h % 12 || 12}:${pad2(p.mi)} ${p.h >= 12 ? 'PM' : 'AM'}`; }
+        function fmtMDY(ms)    { const p = tzParts(ms); return `${p.mo}/${p.d}/${p.y}`; }
+        function fmtYMDLong(ymd, weekday = true) {
+            return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', weekday: weekday ? 'long' : undefined, month: 'long', day: 'numeric', year: 'numeric' });
+        }
+        function fmtYMDShort(ymd) { return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }); }
+        function fmtRange(from, to) { return from === to ? fmtYMDLong(from) : `${fmtYMDShort(from)} – ${fmtYMDShort(to)}`; }
+        function generatedText() { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }); }
+        const energyAvg = arr => arr.length ? 10 * Math.log10(arr.reduce((s, v) => s + Math.pow(10, v / 10), 0) / arr.length) : null;
+        const monShort = id => String(id || '').replace('NMT', 'NMT ');
+        const typeOf = reg => (typeof typeCodeRegistry !== 'undefined' && reg && typeCodeRegistry[reg.toUpperCase()]) || '';
+        const trackAlt = p => Number.isFinite(p.ag) ? p.ag + GEOID_OFFSET_FT : p.alt;
+        function altColor(ft) { if (ft < 500) return '#dc2626'; if (ft < 1000) return '#f59e0b'; if (ft < 2000) return '#84cc16'; if (ft < 3500) return '#22c55e'; return '#3b82f6'; }
+        const signed = v => (v > 0 ? '+' : v < 0 ? '–' : '') + Math.abs(v).toFixed(1);
+        const plural = (n, w, pl) => `${n.toLocaleString()} ${n === 1 ? w : (pl || w + 's')}`;
+        // jsPDF's built-in fonts only cover Windows-1252, so swap the few characters they can't draw
+        const pdfSafe = s => String(s ?? '').replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/→/g, '->').replace(/±/g, '+/-').replace(/[✓✔]/g, 'OK').replace(/ /g, ' ');
+        function safeName(s) { return String(s).replace(/[^\w.-]+/g, '_'); }
+
+        function setStatus(id, html, isErr) { const el = $(id); if (!el) return; el.innerHTML = html || ''; el.classList.toggle('err', !!isErr); }
+        // Runs a report, with the button disabled and a spinner while it works
+        async function run(btnId, statusId, fn) {
+            const btn = $(btnId);
+            btn.disabled = true;
+            setStatus(statusId, '<span class="spinner"></span>Working…');
+            try {
+                const msg = await fn();
+                setStatus(statusId, msg || '');
+            } catch (err) {
+                console.error(`[${btnId}]`, err);
+                setStatus(statusId, err && err.userMessage ? err.userMessage : 'Something went wrong — see the browser console.', true);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        function userError(msg) { const e = new Error(msg); e.userMessage = msg; return e; }
+
+        function csvCell(v) { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+        function downloadCsv(lines, filename) {
+            const blob = new Blob(['﻿' + lines.map(r => r.map(csvCell).join(',')).join('\n')], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Auth
+        // ════════════════════════════════════════════════════════════════════
+        window._authSignIn = async () => {
+            const errEl = $('auth-error');
+            errEl.style.color = '#dc2626'; errEl.textContent = '';
+            try { await signInWithEmailAndPassword(auth, $('auth-email').value.trim(), $('auth-password').value); }
+            catch (e) { errEl.textContent = 'Invalid email or password.'; }
+        };
+        window._forgotPassword = async () => {
+            const email = $('auth-email').value.trim(), errEl = $('auth-error');
+            if (!email) { errEl.style.color = '#dc2626'; errEl.textContent = 'Enter your email above first, then click "Forgot password?"'; return; }
+            try {
+                await sendPasswordResetEmail(auth, email, { url: 'https://fl-technologies-data.com/portal.html', handleCodeInApp: false });
+                errEl.style.color = '#166534'; errEl.textContent = 'Password reset email sent — check your inbox.';
+            } catch (e) { errEl.style.color = '#dc2626'; errEl.textContent = 'Could not send reset email. Check the address and try again.'; }
+        };
+        window._authSignOut = async () => { await signOut(auth); };
+
+        let started = false;
+        onAuthStateChanged(auth, async user => {
+            if (!user) { $('auth-screen').style.display = 'flex'; $('main-content').style.display = 'none'; $('rp-unavailable').style.display = 'none'; return; }
+            try {
+                const snap = await getDoc(doc(db, 'Users', user.uid));
+                if (!snap.exists()) { $('auth-screen').style.display = 'flex'; $('auth-error').textContent = 'Account not configured.'; return; }
+                const profile = snap.data();
+                if (window.toaDemoNav) toaDemoNav(profile.airport);   // [TOA DEMO] Noise dropdown + Reports link
+                $('auth-screen').style.display = 'none';
+                if (!REPORT_ACCOUNTS.includes(profile.airport)) { $('rp-unavailable').style.display = 'block'; return; }
+                $('main-content').style.display = 'block';
+                if (!started) { started = true; init(); }
+            } catch (e) { console.error('[auth]', e); }
+        });
+
+        // ════════════════════════════════════════════════════════════════════
+        // Data
+        // ════════════════════════════════════════════════════════════════════
+        const cache = new Map();
+        async function rangeQuery(col, field, lo, hi) {
+            const key = `${col}|${field}|${lo}|${hi}`;
+            if (!cache.has(key)) {
+                cache.set(key, getDocs(query(collection(db, col), where(field, '>=', lo), where(field, '<=', hi)))
+                    .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })))
+                    .catch(e => { cache.delete(key); throw e; }));
+            }
+            return cache.get(key);
+        }
+        let monitorsP = null;
+        function loadMonitors() {
+            if (!monitorsP) monitorsP = getDocs(collection(db, COL.monitors))
+                .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })))
+                .catch(e => { monitorsP = null; throw e; });
+            return monitorsP;
+        }
+        const trackCache = new Map();
+        async function loadTrack(id) {
+            if (!id) return null;
+            if (!trackCache.has(id)) trackCache.set(id, getDoc(doc(db, COL.tracks, id)).then(s => s.exists() ? { id: s.id, ...s.data() } : null).catch(() => null));
+            return trackCache.get(id);
+        }
+
+        // Everything the noise reports need for a date range. Operations give the noise events their
+        // operation label and training / curfew flags — the same rule as the Noise Monitoring page.
+        async function loadNoise(from, to) {
+            const { fromISO, toISO } = rangeISO(from, to);
+            const [monitors, events, daily, calibration, ops] = await Promise.all([
+                loadMonitors(),
+                rangeQuery(COL.events, 'timestamp', fromISO, toISO),
+                rangeQuery(COL.daily, 'dateISO', from, to),
+                rangeQuery(COL.calibration, 'dateISO', from, to),
+                rangeQuery(COL.ops, 'timestamp', fromISO, toISO),
+            ]);
+            const opsSorted = [...ops].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+            const evs = events.map(e => ({ ...e, ruleFlags: [...(e.ruleFlags || [])] }));
+            applyOperationsToEvents(evs, opsSorted);
+            return { from, to, monitors, monitorById: Object.fromEntries(monitors.map(m => [m.id, m])), events: evs, daily, calibration, ops: opsSorted };
+        }
+
+        function applyOperationsToEvents(events, operations) {
+            const byTrack = new Map();
+            operations.forEach(o => { if (!byTrack.has(o.trackId)) byTrack.set(o.trackId, []); byTrack.get(o.trackId).push(o); });
+            events.forEach(e => {
+                if (e.source !== 'aircraft') return;
+                const t = Date.parse(e.lmaxTimestamp);
+                let best = null, bestD = Infinity;
+                (byTrack.get(e.trackId) || []).forEach(o => {
+                    const s = Date.parse(o.startTimestamp), en = Date.parse(o.endTimestamp);
+                    const d = t < s ? s - t : t > en ? t - en : 0;
+                    if (d < bestD) { bestD = d; best = o; }
+                });
+                const flags = (e.ruleFlags || []).filter(f => f !== 'training-tng' && f !== 'curfew-departure');
+                if (best && bestD <= OP_EVENT_MAX_S * 1000) {
+                    e.operation = best.type === 'review' ? 'Runway operation (review)' : best.label;
+                    e.runway = best.runway;
+                    e.opId = best.id;
+                    if ((best.ruleFlags || []).some(f => f.startsWith('training'))) flags.push('training-tng');
+                    if ((best.ruleFlags || []).includes('curfew-departure')) flags.push('curfew-departure');
+                } else {
+                    e.operation = /^heli/.test(e.noiseCategory || '') ? 'Helicopter' : 'Overflight';
+                    e.runway = null;
+                    e.opId = null;
+                }
+                e.ruleFlags = flags;
+            });
+        }
+
+        // ── Violations ──────────────────────────────────────────────────────
+        // One row per violation:
+        //   noise    — one aircraft pass over the Lmax or SENEL limit (its monitors grouped; the worst one leads)
+        //   training — a touch-and-go / stop-and-go (prohibited), or a taxi-back / low approach outside 10 AM–6 PM Mon–Fri
+        //   curfew   — a departure during the curfew
+        function buildViolations(N) {
+            const out = [];
+            const over = N.events.filter(e => e.source === 'aircraft' && e.exceedsLimit)
+                .sort((a, b) => a.lmaxTimestamp.localeCompare(b.lmaxTimestamp));
+            const groups = [];
+            const lastByTrack = new Map();
+            over.forEach(e => {
+                const t = Date.parse(e.lmaxTimestamp), key = e.trackId || e.id;
+                const g = lastByTrack.get(key);
+                if (g && t - g.lastMs <= PASS_GAP_S * 1000) { g.events.push(e); g.lastMs = t; }
+                else { const ng = { events: [e], lastMs: t }; groups.push(ng); lastByTrack.set(key, ng); }
+            });
+            groups.forEach(g => {
+                const margin = e => Math.max(e.lmax - e.lmaxLimitDb, e.senel - e.senelLimitDb);
+                const worst = g.events.reduce((a, b) => margin(b) > margin(a) ? b : a);
+                const ms = Date.parse(worst.lmaxTimestamp);
+                const hb = g.events.some(e => (e.ruleFlags || []).includes('hearing-board-candidate'));
+                const notes = [];
+                if (g.events.some(e => e.confidence !== 'high')) {
+                    const alts = [...new Set(g.events.flatMap(e => (e.alternates || []).map(a => a.registration || 'Unknown')))];
+                    notes.push('Aircraft match needs confirmation' + (alts.length ? ` (also nearby: ${alts.join(', ')})` : ''));
+                }
+                const badCal = [...new Set(g.events.filter(e => e.dataQuality && e.dataQuality !== 'ok').map(e => monShort(e.monitorId)))];
+                if (badCal.length) notes.push(`${badCal.join(', ')} failed its calibration check that day`);
+                const parts = [];
+                const wf = worst.ruleFlags || [];
+                if (wf.includes('noise-lmax'))  parts.push(`Lmax ${worst.lmax.toFixed(1)} dBA vs ${worst.lmaxLimitDb} limit (${signed(worst.lmax - worst.lmaxLimitDb)} dB)`);
+                if (wf.includes('noise-senel')) parts.push(`SENEL ${worst.senel.toFixed(1)} dB vs ${worst.senelLimitDb} limit (${signed(worst.senel - worst.senelLimitDb)} dB)`);
+                if (!parts.length) parts.push(`Lmax ${worst.lmax.toFixed(1)} dBA / SENEL ${worst.senel.toFixed(1)} dB, at the limit`);
+                const others = g.events.filter(e => e !== worst).map(e => monShort(e.monitorId));
+                out.push({
+                    id: 'N:' + worst.id, kind: 'noise', ms, dateISO: ymdOf(ms),
+                    registration: worst.registration || 'Unknown', icaoType: worst.icaoType || typeOf(worst.registration),
+                    operation: worst.operation || '', runway: worst.runway || '',
+                    violation: `Noise over ${worst.period === 'curfew' ? 'curfew ' : ''}limit` + (hb ? ' (Hearing Board candidate)' : ''),
+                    short: 'Noise over limit',
+                    details: parts.join('; ') + ` at ${monShort(worst.monitorId)}` + (others.length ? `; also over at ${others.join(', ')}` : ''),
+                    monitors: [worst.monitorId, ...g.events.filter(e => e !== worst).map(e => e.monitorId)],
+                    hb, needsReview: notes.length > 0, notes: notes.join('; '),
+                    event: worst, events: g.events, trackId: worst.trackId, opId: worst.opId,
+                });
+            });
+            N.ops.forEach(o => {
+                const f = o.ruleFlags || [], ms = Date.parse(o.timestamp);
+                const base = {
+                    ms, dateISO: ymdOf(ms), registration: o.registration || 'Unknown', icaoType: o.icaoType || typeOf(o.registration),
+                    operation: o.label, runway: o.runway || '', monitors: [], hb: false,
+                    needsReview: !!o.needsReview, notes: o.needsReview ? (o.reviewReason || 'Classification needs review') : '',
+                    op: o, trackId: o.trackId, opId: o.id,
+                };
+                if (f.includes('training-prohibited') || f.includes('training-hours')) {
+                    const prohibited = f.includes('training-prohibited');
+                    out.push({ ...base, id: 'T:' + o.id, kind: 'training',
+                        violation: `${o.label} — ${prohibited ? 'prohibited' : 'outside permitted hours'}`,
+                        short: prohibited ? `${o.label} (prohibited)` : `${o.label} (outside hours)`,
+                        details: `${opEvidenceText(o)}. ${prohibited ? 'Touch-and-gos and stop-and-gos are prohibited at all times.' : 'Permitted only 10 AM–6 PM, Monday–Friday.'}` });
+                }
+                if (f.includes('curfew-departure')) {
+                    out.push({ ...base, id: 'C:' + o.id, kind: 'curfew',
+                        violation: 'Departure during curfew', short: 'Curfew departure',
+                        details: `${o.label}${o.departRunway || o.runway ? ', runway ' + (o.departRunway || o.runway) : ''}, during the curfew (${CURFEW_TEXT}).` });
+                }
+            });
+            return out.sort((a, b) => a.ms - b.ms);
+        }
+        function opEvidenceText(o) {
+            const ev = o.evidence || {};
+            switch (o.type) {
+                case 'low-approach': return `Lowest ${ev.lowestHeightFt} ft above the field, no touchdown`;
+                case 'touch-and-go': return `Touched down, slowest ${ev.slowestKt} kt, no stop`;
+                case 'stop-and-go':  return `Stopped ${ev.longestStopS} s on the runway, then took off`;
+                case 'taxi-back':    return ev.exitedRunway ? `Landed and taxied back, longest stop ${ev.longestStopS} s` : 'Landed and back-taxied on the runway';
+                case 'landing':      return 'Touched down and slowed to taxi speed';
+                case 'takeoff':      return 'Takeoff roll and climb-out';
+                case 'review':       return `Lowest ${ev.lowestHeightFt} ft above the field, no ground report`;
+            }
+            return o.label || '';
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // PDF building blocks (jsPDF, A4, millimetres)
+        // ════════════════════════════════════════════════════════════════════
+        const C = { blue: [0, 87, 255], ink: [17, 24, 39], text: [55, 65, 81], dim: [120, 120, 120], line: [220, 224, 230],
+                    head: [241, 245, 249], stripe: [249, 250, 251], red: [185, 28, 28], redBg: [254, 226, 226], amber: [146, 64, 14],
+                    amberBg: [254, 243, 199], purple: [91, 33, 182], purpleBg: [237, 233, 254], green: [22, 101, 52], greenBg: [220, 252, 231] };
+        const MM_PER_PT = 0.3528;
+
+        let logoP = null;
+        function loadLogo() {
+            if (!logoP) logoP = new Promise(resolve => {
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const c = document.createElement('canvas');
+                        c.width = img.naturalWidth; c.height = img.naturalHeight;
+                        c.getContext('2d').drawImage(img, 0, 0);
+                        resolve({ data: c.toDataURL('image/png'), w: img.naturalWidth, h: img.naturalHeight });
+                    } catch (e) { resolve(null); }
+                };
+                img.onerror = () => resolve(null);
+                img.src = 'toa-logo.png';
+            });
+            return logoP;
+        }
+
+        function newDoc(orientation = 'portrait') {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+            const D = { pdf, pw: pdf.internal.pageSize.getWidth(), ph: pdf.internal.pageSize.getHeight(), mg: 14, top: 14, bottom: 16, y: 14 };
+            pdf.setFont('helvetica', 'normal');
+            pdf.setLineHeightFactor(1.25);
+            return D;
+        }
+        function setText(D, size, style = 'normal', color = C.text) { D.pdf.setFont('helvetica', style); D.pdf.setFontSize(size); D.pdf.setTextColor(...color); }
+        function lh(size) { return size * MM_PER_PT * 1.25; }
+        function newPage(D) { D.pdf.addPage(); D.y = D.top; }
+        function ensure(D, h) { if (D.y + h > D.ph - D.bottom) { newPage(D); return true; } return false; }
+        function para(D, text, { size = 9, style = 'normal', color = C.text, width, x, gap = 2 } = {}) {
+            setText(D, size, style, color);
+            const w = width || (D.pw - D.mg * 2);
+            const lines = D.pdf.splitTextToSize(pdfSafe(text), w);
+            lines.forEach(line => { ensure(D, lh(size)); D.pdf.text(line, x ?? D.mg, D.y + lh(size) * 0.8); D.y += lh(size); });
+            D.y += gap;
+        }
+
+        // Report header: logo, airport, title, period on the left; generated time on the right; blue rule
+        async function header(D, title, period, extra) {
+            const logo = await loadLogo();
+            const { pdf, pw, mg } = D;
+            let x = mg;
+            if (logo) {
+                const h = 15, w = h * logo.w / logo.h;
+                pdf.addImage(logo.data, 'PNG', mg, D.y, w, h);
+                x = mg + w + 5;
+            }
+            setText(D, 8.5, 'normal', C.dim);
+            pdf.text(pdfSafe(AIRPORT.name + ' · Noise and Operations Monitoring'), x, D.y + 3.5);
+            setText(D, 15, 'bold', C.ink);
+            pdf.text(pdfSafe(title), x, D.y + 9.5);
+            setText(D, 9.5, 'normal', C.text);
+            pdf.text(pdfSafe(period), x, D.y + 14.5);
+            setText(D, 7.5, 'normal', C.dim);
+            pdf.text('Generated ' + pdfSafe(generatedText()), pw - mg, D.y + 3.5, { align: 'right' });
+            if (extra) pdf.text(pdfSafe(extra), pw - mg, D.y + 7.5, { align: 'right' });
+            D.y += 18;
+            pdf.setDrawColor(...C.blue); pdf.setLineWidth(0.6);
+            pdf.line(mg, D.y, pw - mg, D.y);
+            D.y += 5;
+        }
+        // Footer on every page: data note on the left, page number on the right
+        function footers(D, note) {
+            const n = D.pdf.getNumberOfPages();
+            for (let i = 1; i <= n; i++) {
+                D.pdf.setPage(i);
+                setText(D, 6.8, 'normal', [150, 150, 150]);
+                D.pdf.setDrawColor(...C.line); D.pdf.setLineWidth(0.2);
+                D.pdf.line(D.mg, D.ph - 11, D.pw - D.mg, D.ph - 11);
+                const lines = D.pdf.splitTextToSize(pdfSafe(note), D.pw - D.mg * 2 - 30);
+                D.pdf.text(lines.slice(0, 2), D.mg, D.ph - 8);
+                D.pdf.text(`Page ${i} of ${n}`, D.pw - D.mg, D.ph - 8, { align: 'right' });
+                D.pdf.text('FlightLevel Technologies', D.pw - D.mg, D.ph - 5, { align: 'right' });
+            }
+        }
+        // keep: mm of content that must fit under the heading on the same page (so a heading never ends a page)
+        function sectionTitle(D, text, sub, keep = 20) {
+            ensure(D, 11 + keep);
+            D.y += 2;
+            setText(D, 11, 'bold', C.ink);
+            D.pdf.text(pdfSafe(text), D.mg, D.y + 4);
+            if (sub) { setText(D, 8, 'normal', C.dim); D.pdf.text(pdfSafe(sub), D.pw - D.mg, D.y + 4, { align: 'right' }); }
+            D.y += 6;
+            D.pdf.setDrawColor(...C.line); D.pdf.setLineWidth(0.3);
+            D.pdf.line(D.mg, D.y, D.pw - D.mg, D.y);
+            D.y += 3;
+        }
+        // Row of metric boxes: [{ label, value, color }]
+        function metricBoxes(D, items) {
+            const gap = 3, w = (D.pw - D.mg * 2 - gap * (items.length - 1)) / items.length, h = 16;
+            ensure(D, h + 3);
+            items.forEach((it, i) => {
+                const x = D.mg + i * (w + gap);
+                D.pdf.setFillColor(245, 245, 245); D.pdf.roundedRect(x, D.y, w, h, 1.5, 1.5, 'F');
+                setText(D, 7.2, 'normal', [102, 102, 102]);
+                D.pdf.text(D.pdf.splitTextToSize(pdfSafe(it.label), w - 5)[0], x + 2.5, D.y + 4.5);
+                setText(D, 15, 'bold', it.color || C.ink);
+                D.pdf.text(pdfSafe(String(it.value)), x + 2.5, D.y + 12);
+            });
+            D.y += h + 4;
+        }
+        // Label / value pairs in a grid
+        function kvGrid(D, pairs, cols = 2) {
+            const gapX = 4, colW = (D.pw - D.mg * 2 - gapX * (cols - 1)) / cols;
+            for (let i = 0; i < pairs.length; i += cols) {
+                const row = pairs.slice(i, i + cols);
+                const heights = row.map(([l, v]) => {
+                    setText(D, 9, 'normal');
+                    return Math.max(1, D.pdf.splitTextToSize(pdfSafe(v), colW - 42).length) * lh(9) + 2.6;
+                });
+                const h = Math.max(...heights);
+                ensure(D, h);
+                row.forEach(([label, value, color], k) => {
+                    const x = D.mg + k * (colW + gapX);
+                    if ((i / cols) % 2 === 0) { D.pdf.setFillColor(...C.stripe); D.pdf.rect(x, D.y, colW, h, 'F'); }
+                    setText(D, 8, 'bold', [100, 100, 100]);
+                    D.pdf.text(pdfSafe(label), x + 2, D.y + 4.2);
+                    setText(D, 9, 'normal', color || C.ink);
+                    D.pdf.text(D.pdf.splitTextToSize(pdfSafe(value), colW - 42), x + 40, D.y + 4.2);
+                });
+                D.y += h;
+            }
+            D.y += 3;
+        }
+        // Table with wrapping cells, striped rows and the header repeated on each page.
+        // cols: [{ h, w (relative), align }]; cells: string or { t, color, bold, fill, box }
+        function table(D, cols, rows, { size = 8, headSize, rowFill, minRowH = 0 } = {}) {
+            const pdf = D.pdf, totalW = D.pw - D.mg * 2, wsum = cols.reduce((s, c) => s + c.w, 0);
+            const widths = cols.map(c => c.w / wsum * totalW), padX = 1.6, padY = 1.5;
+            const hs = headSize || size;
+            const drawHead = () => {
+                setText(D, hs, 'bold', [71, 85, 105]);
+                const lines = cols.map((c, i) => pdf.splitTextToSize(pdfSafe(c.h), widths[i] - padX * 2));
+                const h = Math.max(...lines.map(l => l.length)) * lh(hs) + padY * 2;
+                pdf.setFillColor(...C.head); pdf.rect(D.mg, D.y, totalW, h, 'F');
+                let x = D.mg;
+                cols.forEach((c, i) => {
+                    const tx = c.align === 'right' ? x + widths[i] - padX : c.align === 'center' ? x + widths[i] / 2 : x + padX;
+                    pdf.text(lines[i], tx, D.y + padY + lh(hs) * 0.8, { align: c.align || 'left' });
+                    x += widths[i];
+                });
+                D.y += h;
+            };
+            ensure(D, 14);
+            drawHead();
+            rows.forEach((row, ri) => {
+                const cells = row.map(c => (c && typeof c === 'object') ? c : { t: c });
+                const lines = cells.map((c, i) => {
+                    setText(D, size, c.bold ? 'bold' : 'normal');
+                    return c.box ? [''] : pdf.splitTextToSize(pdfSafe(c.t ?? ''), widths[i] - padX * 2);
+                });
+                const h = Math.max(minRowH, Math.max(...lines.map(l => l.length)) * lh(size) + padY * 2);
+                if (D.y + h > D.ph - D.bottom) { newPage(D); drawHead(); }
+                const fill = (rowFill && rowFill(ri, row)) || (ri % 2 ? C.stripe : null);
+                if (fill) { pdf.setFillColor(...fill); pdf.rect(D.mg, D.y, totalW, h, 'F'); }
+                let x = D.mg;
+                cells.forEach((c, i) => {
+                    if (c.fill) { pdf.setFillColor(...c.fill); pdf.rect(x + 0.3, D.y + 0.3, widths[i] - 0.6, h - 0.6, 'F'); }
+                    if (c.box) {
+                        pdf.setDrawColor(120, 120, 120); pdf.setLineWidth(0.3);
+                        pdf.rect(x + widths[i] / 2 - 1.8, D.y + h / 2 - 1.8, 3.6, 3.6);
+                    } else {
+                        setText(D, size, c.bold ? 'bold' : 'normal', c.color || C.ink);
+                        const al = cols[i].align || 'left';
+                        const tx = al === 'right' ? x + widths[i] - padX : al === 'center' ? x + widths[i] / 2 : x + padX;
+                        pdf.text(lines[i], tx, D.y + padY + lh(size) * 0.8, { align: al });
+                    }
+                    x += widths[i];
+                });
+                pdf.setDrawColor(235, 235, 235); pdf.setLineWidth(0.15);
+                pdf.line(D.mg, D.y + h, D.mg + totalW, D.y + h);
+                D.y += h;
+            });
+            D.y += 4;
+        }
+        function addImageBlock(D, data, w, h, type = 'PNG') {
+            ensure(D, h + 2);
+            D.pdf.addImage(data, type, D.mg, D.y, w, h);
+            D.y += h + 3;
+        }
+        function signatureLines(D, labels) {
+            ensure(D, 16);
+            D.y += 6;
+            const w = (D.pw - D.mg * 2 - 10 * (labels.length - 1)) / labels.length;
+            labels.forEach((l, i) => {
+                const x = D.mg + i * (w + 10);
+                D.pdf.setDrawColor(150, 150, 150); D.pdf.setLineWidth(0.3);
+                D.pdf.line(x, D.y + 6, x + w, D.y + 6);
+                setText(D, 7.5, 'normal', C.dim);
+                D.pdf.text(pdfSafe(l), x, D.y + 9.5);
+            });
+            D.y += 13;
+        }
+
+        // ── Charts → images (Chart.js on an off-screen canvas) ──────────────
+        const whiteBg = { id: 'rpWhiteBg', beforeDraw(c) { const x = c.ctx; x.save(); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.restore(); } };
+        async function chartImage(config, wPx, hPx) {
+            const holder = document.createElement('div');
+            Object.assign(holder.style, { position: 'fixed', left: '-10000px', top: '0', width: wPx + 'px', height: hPx + 'px' });
+            const canvas = document.createElement('canvas');
+            canvas.width = wPx; canvas.height = hPx;
+            canvas.style.width = wPx + 'px'; canvas.style.height = hPx + 'px';
+            holder.appendChild(canvas);
+            document.body.appendChild(holder);
+            const cfg = { ...config, plugins: [whiteBg, ...(config.plugins || [])],
+                          options: { ...(config.options || {}), responsive: false, animation: false, devicePixelRatio: 2 } };
+            const chart = new Chart(canvas, cfg);
+            const url = canvas.toDataURL('image/png');
+            chart.destroy();
+            holder.remove();
+            return url;
+        }
+        const baseFont = { family: 'DM Sans, Helvetica, Arial, sans-serif', size: 12 };
+        Chart.defaults.font = { ...Chart.defaults.font, ...baseFont };
+
+        // ── Maps → images (off-screen Leaflet with a canvas renderer, same method as Noise Abatement's PDF) ──
+        // labels: [{ latlng, text, color }] — drawn on the finished image (the canvas renderer has no tooltips)
+        async function mapImage(draw, fitLatLngs, W = 900, H = 500, maxZoom = 15, labels = []) {
+            return new Promise((resolve) => {
+                const tmp = document.createElement('div');
+                Object.assign(tmp.style, { position: 'fixed', left: '-9999px', top: '0', width: W + 'px', height: H + 'px', zIndex: '-1' });
+                document.body.appendChild(tmp);
+                const renderer = L.canvas();
+                const offMap = L.map(tmp, { zoomControl: false, attributionControl: false, preferCanvas: true, renderer, fadeAnimation: false, zoomAnimation: false });
+                try { offMap.fitBounds(L.latLngBounds(fitLatLngs).pad(0.15), { maxZoom }); } catch (e) { offMap.setView(SOURCE_COORD, 12); }
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, crossOrigin: true }).addTo(offMap);
+                draw(offMap, renderer);
+                const start = Date.now(), TIMEOUT = 8000;
+                const finish = () => {
+                    let url = null;
+                    try {
+                        const out = document.createElement('canvas');
+                        out.width = W; out.height = H;
+                        const ctx = out.getContext('2d');
+                        ctx.fillStyle = '#e8ecef'; ctx.fillRect(0, 0, W, H);
+                        const c = tmp.getBoundingClientRect();
+                        tmp.querySelectorAll('img.leaflet-tile').forEach(img => {
+                            if (!img.complete || !img.naturalWidth) return;
+                            const r = img.getBoundingClientRect();
+                            try { ctx.drawImage(img, r.left - c.left, r.top - c.top, r.width, r.height); } catch (e) {}
+                        });
+                        tmp.querySelectorAll('canvas').forEach(lc => {
+                            const r = lc.getBoundingClientRect();
+                            ctx.drawImage(lc, r.left - c.left, r.top - c.top, r.width, r.height);
+                        });
+                        labels.forEach(({ latlng, text, color }) => {
+                            const p = offMap.latLngToContainerPoint(latlng);
+                            ctx.save(); ctx.font = 'bold 13px Helvetica, Arial, sans-serif';
+                            const w = ctx.measureText(text).width + 10;
+                            ctx.fillStyle = 'rgba(255,255,255,0.94)'; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+                            ctx.fillRect(p.x + 10, p.y - 10, w, 19); ctx.strokeRect(p.x + 10, p.y - 10, w, 19);
+                            ctx.fillStyle = '#111'; ctx.textAlign = 'left'; ctx.fillText(text, p.x + 15, p.y + 4);
+                            ctx.restore();
+                        });
+                        ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillRect(W - 150, H - 16, 150, 16);
+                        ctx.fillStyle = '#555'; ctx.font = '11px Helvetica, Arial, sans-serif'; ctx.textAlign = 'right';
+                        ctx.fillText('© OpenStreetMap contributors', W - 5, H - 4);
+                        url = out.toDataURL('image/jpeg', 0.9);
+                    } catch (e) { console.warn('[mapImage]', e); }
+                    offMap.remove(); tmp.remove();
+                    resolve(url);
+                };
+                const poll = () => {
+                    const imgs = [...tmp.querySelectorAll('img.leaflet-tile')];
+                    const done = imgs.length && imgs.every(im => im.complete);
+                    if (!done && Date.now() - start < TIMEOUT) { setTimeout(poll, 150); return; }
+                    setTimeout(finish, 120);
+                };
+                setTimeout(poll, 400);
+            });
+        }
+        // ════════════════════════════════════════════════════════════════════
+        // 1. Daily Verified Violation List
+        // ════════════════════════════════════════════════════════════════════
+        const KIND_LABEL = { noise: 'Noise', training: 'Training', curfew: 'Curfew' };
+        async function dailyViolations(day) {
+            const N = await loadNoise(day, day);
+            const list = buildViolations(N).filter(v => v.dateISO === day);
+            return { N, list };
+        }
+        async function dailyPdf() {
+            const day = $('dv-date').value;
+            if (!day) throw userError('Pick a date.');
+            const { N, list } = await dailyViolations(day);
+            const D = newDoc('landscape');
+            await header(D, 'Daily Verified Violation List', fmtYMDLong(day), `${plural(list.length, 'candidate violation')}`);
+            const count = k => list.filter(v => v.kind === k).length;
+            metricBoxes(D, [
+                { label: 'Noise violations (aircraft passes)', value: count('noise'), color: C.red },
+                { label: 'Hearing Board candidates', value: list.filter(v => v.hb).length, color: C.purple },
+                { label: 'Curfew departures', value: count('curfew') },
+                { label: 'Training violations', value: count('training'), color: C.amber },
+                { label: 'Need review before verifying', value: list.filter(v => v.needsReview).length },
+            ]);
+            para(D, `Limits: ${LIMITS_TEXT}. Curfew: ${CURFEW_TEXT}. Touch-and-gos and stop-and-gos are prohibited at all times; taxi-backs and low approaches are permitted 10 AM–6 PM, Monday–Friday. Hearing Board candidate: at least 1.5 dB over an applicable limit.`, { size: 7.8, color: C.dim });
+            if (!list.length) {
+                para(D, 'No candidate violations were recorded on this day.', { size: 10 });
+            } else {
+                table(D, [
+                    { h: '#', w: 4, align: 'right' }, { h: 'Time', w: 10 }, { h: 'Aircraft', w: 11 }, { h: 'Type', w: 9 },
+                    { h: 'Violation', w: 20 }, { h: 'Details', w: 44 }, { h: 'Operation / Rwy', w: 14 },
+                    { h: 'Review notes', w: 22 }, { h: 'Verified', w: 7, align: 'center' },
+                ], list.map((v, i) => [
+                    String(i + 1), fmtClock(v.ms), { t: v.registration, bold: true }, v.icaoType || '',
+                    { t: v.violation, color: v.kind === 'noise' ? C.red : v.kind === 'training' ? C.amber : C.ink, bold: true },
+                    v.details, `${v.operation}${v.runway ? ' · Rwy ' + v.runway : ''}`,
+                    { t: v.notes || '', color: C.amber }, { box: true },
+                ]), { size: 7.6, rowFill: (ri, row) => list[ri].hb ? [250, 245, 255] : null, minRowH: 7 });
+            }
+            sectionTitle(D, 'Monitor calibration', fmtYMDLong(day), 70);
+            const cal = N.monitors.map(m => {
+                const c = N.calibration.find(x => x.monitorId === m.id && x.dateISO === day);
+                return [monShort(m.id), (m.name || '').split('—')[1]?.trim() || '', c ? `${c.measuredDb.toFixed(1)} dB` : '—',
+                        c ? `${signed(c.deviationDb)} dB` : '—',
+                        c ? { t: c.result === 'pass' ? 'Pass' : 'FAIL — data for this day flagged for review', bold: true, color: c.result === 'pass' ? C.green : C.red } : 'No check recorded'];
+            });
+            table(D, [{ h: 'Monitor', w: 10 }, { h: 'Location', w: 34 }, { h: 'Measured (114.0 dB reference)', w: 22, align: 'right' },
+                      { h: 'Deviation (±0.5 dB tolerance)', w: 22, align: 'right' }, { h: 'Result', w: 40 }], cal, { size: 8 });
+            signatureLines(D, ['Verified by', 'Title', 'Date']);
+            footers(D, NOTE_NOISE);
+            D.pdf.save(`TOA_Daily_Violation_List_${day}.pdf`);
+            return `Saved · ${plural(list.length, 'violation')}`;
+        }
+        async function dailyCsv() {
+            const day = $('dv-date').value;
+            if (!day) throw userError('Pick a date.');
+            const { list } = await dailyViolations(day);
+            const rows = [['SIMULATED NOISE DATA — demonstration only (POU traffic evaluated against Torrance limits)'],
+                ['#', 'Date', 'Time', 'Registration', 'ICAO Type', 'Category', 'Violation', 'Details', 'Operation', 'Runway', 'Monitors',
+                 'Hearing Board Candidate', 'Needs Review', 'Review Notes', 'Verified (Y/N)', 'Verified By']];
+            list.forEach((v, i) => rows.push([i + 1, fmtMDY(v.ms), fmtClock(v.ms), v.registration, v.icaoType, KIND_LABEL[v.kind], v.violation,
+                v.details, v.operation, v.runway, v.monitors.map(monShort).join(' '), v.hb ? 'Yes' : '', v.needsReview ? 'Yes' : '', v.notes, '', '']));
+            downloadCsv(rows, `TOA_Daily_Violation_List_${day}.csv`);
+            return `Saved · ${plural(list.length, 'violation')}`;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // 2. Monthly / Quarterly Noise Report
+        // ════════════════════════════════════════════════════════════════════
+        function periodRange() {
+            const preset = $('pr-preset').value;
+            if (preset === 'month') {
+                const m = $('pr-month').value; if (!m) throw userError('Pick a month.');
+                const [y, mo] = m.split('-').map(Number);
+                const last = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+                const label = new Date(Date.UTC(y, mo - 1, 15)).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+                return { from: `${m}-01`, to: `${m}-${pad2(last)}`, title: 'Monthly Noise Report', label };
+            }
+            if (preset === 'quarter') {
+                const [y, q] = $('pr-quarter').value.split('-Q').map(Number);
+                const m0 = (q - 1) * 3 + 1, last = new Date(Date.UTC(y, m0 + 2, 0)).getUTCDate();
+                const mn = k => new Date(Date.UTC(y, k - 1, 15)).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long' });
+                return { from: `${y}-${pad2(m0)}-01`, to: `${y}-${pad2(m0 + 2)}-${pad2(last)}`, title: 'Quarterly Noise Report', label: `Q${q} ${y} (${mn(m0)} – ${mn(m0 + 2)})` };
+            }
+            let from = $('pr-from').value, to = $('pr-to').value;
+            if (!from || !to) throw userError('Pick both dates.');
+            if (from > to) [from, to] = [to, from];
+            return { from, to, title: 'Noise Report', label: fmtRange(from, to) };
+        }
+        async function periodPdf() {
+            const P = periodRange();
+            const N = await loadNoise(P.from, P.to);
+            const V = buildViolations(N);
+            const allDays = daysBetween(P.from, P.to);
+            const dataDays = [...new Set(N.daily.map(d => d.dateISO))].sort();
+            if (!dataDays.length) throw userError(`No noise monitoring data in ${P.label}. The demonstration data covers ${fmtRange(DEMO_FROM, DEMO_TO)}.`);
+            const ac = N.events.filter(e => e.source === 'aircraft');
+            const coverage = `Monitoring data for ${dataDays.length} of ${allDays.length} days (${fmtRange(dataDays[0], dataDays[dataDays.length - 1])})`;
+
+            const D = newDoc('portrait');
+            await header(D, P.title, P.label, coverage);
+            const cnt = k => V.filter(v => v.kind === k).length;
+            metricBoxes(D, [
+                { label: 'Aircraft noise events', value: ac.length.toLocaleString() },
+                { label: 'Events over a limit', value: ac.filter(e => e.exceedsLimit).length.toLocaleString(), color: C.red },
+                { label: 'Noise violations (passes)', value: cnt('noise').toLocaleString(), color: C.red },
+                { label: 'Hearing Board candidates', value: V.filter(v => v.hb).length.toLocaleString(), color: C.purple },
+            ]);
+            metricBoxes(D, [
+                { label: 'Curfew departures', value: cnt('curfew') },
+                { label: 'Training violations', value: cnt('training'), color: C.amber },
+                { label: 'Runway operations classified', value: N.ops.length.toLocaleString() },
+                { label: 'Non-aircraft noise events', value: N.events.filter(e => e.source !== 'aircraft').length.toLocaleString() },
+            ]);
+
+            // CNEL by monitor
+            sectionTitle(D, 'Community noise (CNEL) by monitor', '65 dB CNEL = California Title 21 benchmark', 60);
+            const monRows = N.monitors.map(m => {
+                const days = N.daily.filter(d => d.monitorId === m.id);
+                const per = energyAvg(days.map(d => d.cnel));
+                const max = days.length ? Math.max(...days.map(d => d.cnel)) : null;
+                const cal = N.calibration.filter(c => c.monitorId === m.id);
+                const fails = cal.filter(c => c.result !== 'pass').length;
+                const cnelCell = v => v == null ? '—' : { t: v.toFixed(1), bold: true, color: v >= 65 ? C.red : C.ink, fill: v >= 65 ? C.redBg : v >= 60 ? [255, 237, 213] : v >= 55 ? [254, 249, 195] : C.greenBg };
+                return [{ t: monShort(m.id), bold: true }, (m.name || '').split('—')[1]?.trim() || '', cnelCell(per), cnelCell(max),
+                        String(days.filter(d => d.cnel >= 65).length), days.reduce((s, d) => s + (d.aircraftEventCount || 0), 0).toLocaleString(),
+                        { t: days.reduce((s, d) => s + (d.exceedanceCount || 0), 0).toLocaleString(), color: C.red },
+                        { t: cal.length ? (fails ? `${cal.length - fails}/${cal.length} passed` : `All ${cal.length} passed`) : '—', color: fails ? C.red : C.green }];
+            });
+            table(D, [{ h: 'Monitor', w: 9 }, { h: 'Location', w: 30 }, { h: 'Period CNEL', w: 10, align: 'right' }, { h: 'Highest day', w: 10, align: 'right' },
+                      { h: 'Days >= 65', w: 9, align: 'right' }, { h: 'Aircraft events', w: 11, align: 'right' }, { h: 'Over limit', w: 9, align: 'right' },
+                      { h: 'Daily calibration', w: 14 }], monRows, { size: 8 });
+            const palette = ['#0057ff', '#dc2626', '#16a34a', '#f59e0b', '#7c3aed', '#0891b2', '#db2777'];
+            const cnelChart = await chartImage({
+                type: 'line',
+                data: {
+                    labels: dataDays.map(d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'numeric', day: 'numeric' })),
+                    datasets: N.monitors.map((m, i) => ({
+                        label: monShort(m.id), data: dataDays.map(d => (N.daily.find(x => x.monitorId === m.id && x.dateISO === d) || {}).cnel ?? null),
+                        borderColor: palette[i % palette.length], backgroundColor: palette[i % palette.length], borderWidth: 2, pointRadius: 3, tension: 0.2,
+                    })).concat([{ label: '65 dB benchmark', data: dataDays.map(() => 65), borderColor: '#991b1b', borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 }]),
+                },
+                options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }, title: { display: true, text: 'Daily CNEL by monitor (dB)', font: { size: 13, weight: '600' } } },
+                           scales: { y: { suggestedMin: 40, suggestedMax: 70, grid: { color: 'rgba(0,0,0,0.06)' } }, x: { grid: { display: false } } } },
+            }, 1100, 420);
+            const cw = D.pw - D.mg * 2;
+            addImageBlock(D, cnelChart, cw, cw * 420 / 1100);
+
+            // Violations by type and by day
+            sectionTitle(D, 'Violations', 'One row per aircraft pass or runway operation');
+            const kinds = [['Noise over limit (standard hours)', v => v.kind === 'noise' && v.event.period !== 'curfew'],
+                           ['Noise over limit (curfew hours)', v => v.kind === 'noise' && v.event.period === 'curfew'],
+                           ['  of which Hearing Board candidates', v => v.hb],
+                           ['Curfew departures', v => v.kind === 'curfew'],
+                           ['Touch-and-go / stop-and-go (prohibited)', v => v.kind === 'training' && (v.op.ruleFlags || []).includes('training-prohibited')],
+                           ['Taxi-back / low approach outside 10 AM–6 PM Mon–Fri', v => v.kind === 'training' && (v.op.ruleFlags || []).includes('training-hours')]];
+            table(D, [{ h: 'Violation type', w: 40 }, { h: 'Count', w: 8, align: 'right' }, { h: 'Aircraft', w: 8, align: 'right' }, { h: 'Need review', w: 9, align: 'right' }],
+                kinds.map(([label, f]) => { const s = V.filter(f); return [label, { t: String(s.length), bold: true }, String(new Set(s.map(v => v.registration)).size), String(s.filter(v => v.needsReview).length)]; }),
+                { size: 8.5 });
+            const byDay = await chartImage({
+                type: 'bar',
+                data: {
+                    labels: dataDays.map(d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'numeric', day: 'numeric' })),
+                    datasets: [['noise', 'Noise', '#dc2626'], ['training', 'Training', '#f59e0b'], ['curfew', 'Curfew', '#1e293b']].map(([k, l, c]) => ({
+                        label: l, data: dataDays.map(d => V.filter(v => v.kind === k && v.dateISO === d).length), backgroundColor: c, stack: 's' })),
+                },
+                options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } }, title: { display: true, text: 'Violations by day', font: { size: 13, weight: '600' } } },
+                           scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } } } },
+            }, 540, 300);
+            const hours = Array(24).fill(0);
+            V.forEach(v => { hours[tzParts(v.ms).h]++; });
+            const byHour = await chartImage({
+                type: 'bar',
+                data: { labels: hours.map((_, h) => `${h % 12 || 12}${h < 12 ? 'a' : 'p'}`), datasets: [{ label: 'Violations', data: hours, backgroundColor: '#6366f1' }] },
+                options: { plugins: { legend: { display: false }, title: { display: true, text: 'Violations by hour of day', font: { size: 13, weight: '600' } } },
+                           scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }, y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } } } },
+            }, 540, 300);
+            const half = (cw - 4) / 2, chh = half * 300 / 540;
+            ensure(D, chh + 3);
+            D.pdf.addImage(byDay, 'PNG', D.mg, D.y, half, chh);
+            D.pdf.addImage(byHour, 'PNG', D.mg + half + 4, D.y, half, chh);
+            D.y += chh + 4;
+
+            // Aircraft with the most violations
+            sectionTitle(D, 'Aircraft with the most violations', 'Top 15 by total');
+            const byReg = new Map();
+            V.forEach(v => {
+                const r = byReg.get(v.registration) || { reg: v.registration, type: v.icaoType, noise: 0, hb: 0, training: 0, curfew: 0, maxOver: null };
+                r[v.kind]++; if (v.hb) r.hb++;
+                if (v.kind === 'noise') { const m = Math.max(v.event.lmax - v.event.lmaxLimitDb, v.event.senel - v.event.senelLimitDb); r.maxOver = r.maxOver == null ? m : Math.max(r.maxOver, m); }
+                byReg.set(v.registration, r);
+            });
+            const top = [...byReg.values()].map(r => ({ ...r, total: r.noise + r.training + r.curfew })).sort((a, b) => b.total - a.total || b.hb - a.hb).slice(0, 15);
+            table(D, [{ h: 'Registration', w: 12 }, { h: 'Type', w: 9 }, { h: 'Noise', w: 8, align: 'right' }, { h: 'Hearing Board cand.', w: 12, align: 'right' },
+                      { h: 'Training', w: 8, align: 'right' }, { h: 'Curfew', w: 8, align: 'right' }, { h: 'Total', w: 8, align: 'right' }, { h: 'Most over a limit', w: 12, align: 'right' }],
+                top.map(r => [{ t: r.reg, bold: true }, r.type || '', String(r.noise), { t: String(r.hb), color: r.hb ? C.purple : C.ink }, String(r.training), String(r.curfew),
+                              { t: String(r.total), bold: true }, r.maxOver != null ? `${signed(r.maxOver)} dB` : '—']), { size: 8.2 });
+
+            // Runway operations
+            sectionTitle(D, 'Runway operations', 'Classified from the recorded flight tracks');
+            const opTypes = ['takeoff', 'landing', 'touch-and-go', 'stop-and-go', 'taxi-back', 'low-approach', 'review'];
+            const runways = [...new Set(N.ops.map(o => o.runway).filter(Boolean))].sort();
+            table(D, [{ h: 'Operation', w: 18 }, ...runways.map(r => ({ h: 'Rwy ' + r, w: 7, align: 'right' })), { h: 'Total', w: 8, align: 'right' }, { h: 'With a rule flag', w: 10, align: 'right' }],
+                opTypes.map(t => { const s = N.ops.filter(o => o.type === t); return [OP_NAMES[t], ...runways.map(r => String(s.filter(o => o.runway === r).length)),
+                    { t: String(s.length), bold: true }, String(s.filter(o => (o.ruleFlags || []).length).length)]; }), { size: 8.2 });
+
+            // Calibration record
+            sectionTitle(D, 'Daily remote calibration', 'Reference 114.0 dB · tolerance ±0.5 dB', 30);
+            const fails = N.calibration.filter(c => c.result !== 'pass').sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+            para(D, `${N.calibration.length.toLocaleString()} daily checks, ${N.calibration.length - fails.length} passed${fails.length ? `, ${fails.length} failed` : ''}.` +
+                    (fails.length ? ' Noise data from a monitor on a day it failed is flagged for review and is not used for enforcement until verified.' : ''), { size: 9 });
+            if (fails.length) table(D, [{ h: 'Date', w: 10 }, { h: 'Monitor', w: 22 }, { h: 'Measured', w: 9, align: 'right' }, { h: 'Deviation', w: 9, align: 'right' }, { h: 'Result', w: 8 }],
+                fails.map(c => [fmtYMDShort(c.dateISO), (N.monitorById[c.monitorId] || {}).name || c.monitorId, `${c.measuredDb.toFixed(1)} dB`, `${signed(c.deviationDb)} dB`, { t: 'FAIL', bold: true, color: C.red }]), { size: 8.2 });
+
+            sectionTitle(D, 'Definitions');
+            para(D, 'Lmax: the highest A-weighted sound level during an event (dBA). SENEL: Single Event Noise Exposure Level — the event\'s total sound energy compressed into one second (dB). CNEL: Community Noise Equivalent Level — the 24-hour energy average with evening (7–10 PM) noise weighted +5 dB and night (10 PM–7 AM) noise weighted +10 dB; 65 dB CNEL is the California Title 21 benchmark. ' +
+                    `Torrance limits: ${LIMITS_TEXT}. Hearing Board candidate: at least 1.5 dB over an applicable limit.`, { size: 8, color: C.text });
+            footers(D, NOTE_NOISE);
+            D.pdf.save(`TOA_${P.title.replace(/\s+/g, '_')}_${P.from}_to_${P.to}.pdf`);
+            return `Saved · ${coverage}`;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // 3. Hearing Board Case Packet
+        // ════════════════════════════════════════════════════════════════════
+        async function fillHbEvents() {
+            const day = $('hb-date').value, sel = $('hb-event');
+            if (!day) { sel.innerHTML = '<option value="">Pick a date first</option>'; return; }
+            sel.innerHTML = '<option value="">Loading…</option>';
+            try {
+                const N = await loadNoise(day, day);
+                const evs = N.events.filter(e => e.source === 'aircraft' && (e.ruleFlags || []).includes('hearing-board-candidate'))
+                    .sort((a, b) => a.lmaxTimestamp.localeCompare(b.lmaxTimestamp));
+                sel.innerHTML = evs.length
+                    ? evs.map(e => `<option value="${esc(e.id)}">${esc(fmtHM(Date.parse(e.lmaxTimestamp)))} · ${esc(e.registration || 'Unknown')} ${esc(e.icaoType || '')} · ${esc(monShort(e.monitorId))} · Lmax ${e.lmax.toFixed(1)} / SENEL ${e.senel.toFixed(1)}</option>`).join('')
+                    : '<option value="">No Hearing Board candidates on this day</option>';
+                setStatus('hb-status', evs.length ? plural(evs.length, 'candidate event') : '');
+            } catch (e) { console.error(e); sel.innerHTML = '<option value="">Could not load events</option>'; }
+        }
+        async function hbPdf() {
+            const day = $('hb-date').value, id = $('hb-event').value;
+            if (!day || !id) throw userError('Pick a date and an event.');
+            const N = await loadNoise(DEMO_FROM, DEMO_TO);   // the whole data period, for the aircraft's history
+            const e = N.events.find(x => x.id === id);
+            if (!e) throw userError('That event could not be found.');
+            const mon = N.monitorById[e.monitorId] || { name: e.monitorId };
+            const op = e.opId ? N.ops.find(o => o.id === e.opId) : null;
+            const lmMs = Date.parse(e.lmaxTimestamp);
+            const track = await loadTrack(e.trackId);
+            const caseNo = `HB-${ymdOf(lmMs).replace(/-/g, '')}-${e.monitorId}-${(e.registration || 'UNK').toUpperCase()}`;
+
+            const D = newDoc('portrait');
+            await header(D, 'Hearing Board Case Packet', `${e.registration || 'Unknown aircraft'} · ${fmtYMDLong(ymdOf(lmMs))} at ${fmtClock(lmMs)}`, `Case ${caseNo}`);
+
+            // Summary
+            const lOver = e.lmax - e.lmaxLimitDb, sOver = e.senel - e.senelLimitDb, worst = Math.max(lOver, sOver);
+            D.pdf.setFillColor(...C.purpleBg); D.pdf.roundedRect(D.mg, D.y, D.pw - D.mg * 2, 14, 1.5, 1.5, 'F');
+            setText(D, 10, 'bold', C.purple);
+            D.pdf.text(pdfSafe(`Meets the Hearing Board standard: ${signed(worst)} dB over the ${worst === lOver ? 'Lmax' : 'SENEL'} limit (standard: at least 1.5 dB over an applicable limit).`), D.mg + 3, D.y + 5.5);
+            setText(D, 8.5, 'normal', C.purple);
+            D.pdf.text(pdfSafe(`${e.period === 'curfew' ? 'Curfew-hours' : 'Standard-hours'} limits applied: ${e.lmaxLimitDb} dBA Lmax / ${e.senelLimitDb} dB SENEL.`), D.mg + 3, D.y + 10.5);
+            D.y += 18;
+
+            sectionTitle(D, 'Event');
+            kvGrid(D, [
+                ['Aircraft', `${e.registration || 'Unknown'}${e.icaoType ? ' · ' + e.icaoType : ''}${e.noiseCategoryLabel ? ' · ' + e.noiseCategoryLabel : ''}`],
+                ['Operation', `${e.operation || '—'}${e.runway ? ' · Runway ' + e.runway : ''}`],
+                ['Monitor', mon.name || monShort(e.monitorId)],
+                ['Time of Lmax', `${fmtYMDShort(ymdOf(lmMs))} ${fmtClock(lmMs)}`],
+                ['Lmax', `${e.lmax.toFixed(1)} dBA (limit ${e.lmaxLimitDb}; ${signed(lOver)} dB)`, lOver > 0 ? C.red : C.ink],
+                ['SENEL', `${e.senel.toFixed(1)} dB (limit ${e.senelLimitDb}; ${signed(sOver)} dB)`, sOver > 0 ? C.red : C.ink],
+                ['Duration', `${e.durationS} s above ${e.thresholdDb} dBA`],
+                ['Period', e.period === 'curfew' ? `Curfew (${CURFEW_TEXT})` : 'Standard hours'],
+                ['Altitude at Lmax', `${(e.altAtLmaxMSL ?? 0).toLocaleString()} ft MSL`],
+                ['Slant distance', `${(e.slantAtLmaxFt ?? 0).toLocaleString()} ft from the monitor`],
+                ['Aircraft match', e.confidence === 'high' ? 'High confidence — only aircraft near the monitor' : 'Needs confirmation'],
+                ['Other aircraft nearby', (e.alternates || []).length ? e.alternates.map(a => a.registration || 'Unknown').join(', ') : 'None'],
+            ], 2);
+
+            // Noise curve
+            const th = e.timeHistory || { values: [] }, t0 = Date.parse(th.startTimestamp), vals = th.values || [];
+            if (vals.length) {
+                const idx = iso => Math.round((Date.parse(iso) - t0) / 1000);
+                const s = idx(e.timestamp), en = idx(e.endTimestamp), lm = idx(e.lmaxTimestamp);
+                const win = { id: 'rpWin', beforeDatasetsDraw(c) { const x = c.scales.x, { top, bottom } = c.chartArea, ctx = c.ctx; ctx.save(); ctx.fillStyle = 'rgba(245,158,11,0.12)';
+                    const x0 = x.getPixelForValue(Math.max(0, s)), x1 = x.getPixelForValue(Math.min(vals.length - 1, en)); ctx.fillRect(x0, top, x1 - x0, bottom - top); ctx.restore(); } };
+                const curve = await chartImage({
+                    type: 'line', plugins: [win],
+                    data: { labels: vals.map((_, i) => fmtClock(t0 + i * 1000)), datasets: [
+                        { label: 'Sound level (dBA)', data: vals, borderColor: '#0057ff', backgroundColor: 'rgba(0,87,255,0.08)', fill: true, borderWidth: 2.2, tension: 0.25,
+                          pointRadius: vals.map((_, i) => i === lm ? 5 : 0), pointBackgroundColor: '#0057ff' },
+                        { label: `Lmax limit (${e.lmaxLimitDb} dBA)`, data: vals.map(() => e.lmaxLimitDb), borderColor: '#dc2626', borderDash: [6, 4], borderWidth: 1.6, pointRadius: 0, fill: false },
+                        { label: `Event threshold (${e.thresholdDb} dBA)`, data: vals.map(() => e.thresholdDb), borderColor: '#9ca3af', borderDash: [3, 3], borderWidth: 1.2, pointRadius: 0, fill: false }] },
+                    options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } }, title: { display: true, text: `Sound level at ${monShort(e.monitorId)} (shaded: event above threshold)`, font: { size: 13, weight: '600' } } },
+                               scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8, maxRotation: 0 } }, y: { suggestedMin: 40, suggestedMax: Math.max(e.lmaxLimitDb + 4, e.lmax + 3), grid: { color: 'rgba(0,0,0,0.06)' } } } },
+                }, 1100, 380);
+                const w = D.pw - D.mg * 2;
+                sectionTitle(D, 'Noise measurement', '', w * 380 / 1100);
+                addImageBlock(D, curve, w, w * 380 / 1100);
+            }
+
+            // Map
+            const pts = (track && Array.isArray(track.track)) ? track.track.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon)) : [];
+            if (pts.length >= 2 || mon.lat) {
+                const tl = track ? (lmMs - Date.parse(track.start || track.timestamp)) / 1000 : null;
+                let pos = null;
+                for (let i = 0; i < pts.length - 1; i++) if (pts[i].t <= tl && pts[i + 1].t >= tl) {
+                    const u = (tl - pts[i].t) / ((pts[i + 1].t - pts[i].t) || 1);
+                    pos = [pts[i].lat + u * (pts[i + 1].lat - pts[i].lat), pts[i].lon + u * (pts[i + 1].lon - pts[i].lon)]; break;
+                }
+                const near = pts.filter(p => Math.abs(p.lat - mon.lat) < 0.06 && Math.abs(p.lon - mon.lon) < 0.08).map(p => [p.lat, p.lon]);
+                const img = await mapImage((m, r) => {
+                    for (let i = 0; i < pts.length - 1; i++) L.polyline([[pts[i].lat, pts[i].lon], [pts[i + 1].lat, pts[i + 1].lon]], { color: altColor(trackAlt(pts[i])), weight: 4, opacity: 0.95, renderer: r, interactive: false }).addTo(m);
+                    if (pos) L.polyline([[mon.lat, mon.lon], pos], { color: '#6d28d9', weight: 2.5, dashArray: '7,6', renderer: r, interactive: false }).addTo(m);
+                    L.circleMarker([mon.lat, mon.lon], { radius: 8, color: '#fff', weight: 2.5, fillColor: '#6d28d9', fillOpacity: 1, renderer: r, interactive: false }).addTo(m);
+                    if (pos) L.circleMarker(pos, { radius: 6, color: '#fff', weight: 2, fillColor: '#111', fillOpacity: 1, renderer: r, interactive: false }).addTo(m);
+                }, (near.length ? near : [[mon.lat, mon.lon]]).concat([[mon.lat, mon.lon]]), 1000, 520, 15,
+                   [{ latlng: [mon.lat, mon.lon], text: monShort(e.monitorId), color: '#6d28d9' }].concat(pos ? [{ latlng: pos, text: `Lmax ${e.lmax.toFixed(1)} dBA`, color: '#111' }] : []));
+                if (img) {
+                    const w = D.pw - D.mg * 2;
+                    sectionTitle(D, 'Flight track past the monitor', 'Track colored by altitude; dashed line = slant distance at Lmax', w * 520 / 1000 + 8);
+                    addImageBlock(D, img, w, w * 520 / 1000, 'JPEG');
+                    altLegend(D);
+                }
+            }
+
+            // Operation classification
+            if (op) {
+                sectionTitle(D, 'How the operation was classified', `${OP_NAMES[op.type] || op.label} · Runway ${op.runway || '—'}`);
+                para(D, op.reason || '', { size: 9 });
+                (op.ruleNotes || []).forEach(n => para(D, '• ' + n, { size: 8.6, color: /prohibit|only|curfew/i.test(n) ? C.red : C.green, gap: 0.5 }));
+                if (op.needsReview && op.reviewReason) para(D, '• ' + op.reviewReason, { size: 8.6, color: C.amber });
+                const ev = op.evidence || {};
+                kvGrid(D, [
+                    ['Lowest over runway', ev.lowestHeightFt != null ? `${Math.max(0, ev.lowestHeightFt)} ft above the field` : '—'], ['Slowest on runway', ev.slowestKt != null ? `${ev.slowestKt} kt` : '—'],
+                    ['Longest stop', ev.longestStopS ? `${ev.longestStopS} s` : 'None'], ['Touched down', ev.touched ? 'Yes' : 'No'],
+                ], 2);
+                const sr = op.series;
+                if (sr && sr.t && sr.t.length > 2) {
+                    const st0 = Date.parse(sr.startTimestamp);
+                    const chart = await chartImage({
+                        type: 'line',
+                        data: { labels: sr.t.map(t => fmtClock(st0 + t * 1000)), datasets: [
+                            { label: 'Height above field (ft)', data: sr.h, yAxisID: 'y', borderColor: '#0057ff', backgroundColor: 'rgba(0,87,255,0.06)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.2 },
+                            { label: 'Ground speed (kt)', data: sr.gs, yAxisID: 'y1', borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, tension: 0.2, fill: false }] },
+                        options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+                                   scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8, maxRotation: 0 } },
+                                             y: { position: 'left', beginAtZero: true, title: { display: true, text: 'ft above field' }, grid: { color: 'rgba(0,0,0,0.06)' } },
+                                             y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'kt' }, grid: { display: false } } } },
+                    }, 1100, 330);
+                    const w = D.pw - D.mg * 2; addImageBlock(D, chart, w, w * 330 / 1100);
+                }
+            }
+
+            // Other monitors for the same pass
+            const samePass = N.events.filter(x => x.trackId && x.trackId === e.trackId && x.id !== e.id && Math.abs(Date.parse(x.lmaxTimestamp) - lmMs) <= PASS_GAP_S * 1000)
+                .sort((a, b) => a.lmaxTimestamp.localeCompare(b.lmaxTimestamp));
+            sectionTitle(D, 'Other monitors that recorded this pass');
+            if (samePass.length) table(D, [{ h: 'Monitor', w: 22 }, { h: 'Time of Lmax', w: 12 }, { h: 'Lmax (dBA)', w: 9, align: 'right' }, { h: 'SENEL (dB)', w: 9, align: 'right' }, { h: 'Over limit', w: 14 }],
+                samePass.map(x => [(N.monitorById[x.monitorId] || {}).name || x.monitorId, fmtClock(Date.parse(x.lmaxTimestamp)),
+                    { t: x.lmax.toFixed(1), color: x.lmax > x.lmaxLimitDb ? C.red : C.ink }, { t: x.senel.toFixed(1), color: x.senel > x.senelLimitDb ? C.red : C.ink },
+                    x.exceedsLimit ? ((x.ruleFlags || []).includes('hearing-board-candidate') ? 'Yes — Hearing Board candidate' : 'Yes') : 'No']), { size: 8.2 });
+            else para(D, 'No other monitor recorded this pass above its event threshold.', { size: 9 });
+
+            // Calibration
+            const cal = N.calibration.find(c => c.monitorId === e.monitorId && c.dateISO === ymdOf(lmMs));
+            sectionTitle(D, 'Monitor calibration on the day of the event');
+            para(D, cal ? `${monShort(e.monitorId)} daily remote calibration at ${cal.time}: measured ${cal.measuredDb.toFixed(1)} dB against the ${cal.referenceDb.toFixed(1)} dB reference (${signed(cal.deviationDb)} dB; tolerance ±${(cal.toleranceDb ?? 0.5).toFixed(1)} dB) — ${cal.result === 'pass' ? 'PASSED' : 'FAILED. This event should not be referred until the monitor data is verified.'}`
+                        : 'No calibration check is recorded for this monitor on this day.', { size: 9, color: cal && cal.result !== 'pass' ? C.red : C.text });
+
+            // Aircraft history
+            const V = buildViolations(N).filter(v => v.registration === e.registration && !(v.kind === 'noise' && v.events.some(x => x.id === e.id)));
+            sectionTitle(D, `Other violations by ${e.registration || 'this aircraft'}`, fmtRange(DEMO_FROM, DEMO_TO));
+            if (V.length) table(D, [{ h: 'Date', w: 9 }, { h: 'Time', w: 9 }, { h: 'Violation', w: 22 }, { h: 'Details', w: 50 }],
+                V.map(v => [new Date(v.dateISO + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'numeric', day: 'numeric' }), fmtHM(v.ms), { t: v.violation, bold: true, color: v.kind === 'noise' ? C.red : C.amber }, v.details]), { size: 7.8 });
+            else para(D, 'No other violations by this aircraft in the data period.', { size: 9 });
+
+            // Staff determination
+            sectionTitle(D, 'Staff review');
+            setText(D, 9, 'normal', C.ink);
+            ensure(D, 30);
+            [['Refer to the Hearing Board', 0], ['Send a violation letter only', 64], ['No further action', 124]].forEach(([t, dx]) => {
+                D.pdf.setDrawColor(120, 120, 120); D.pdf.setLineWidth(0.3); D.pdf.rect(D.mg + dx, D.y, 3.6, 3.6);
+                D.pdf.text(pdfSafe(t), D.mg + dx + 5.5, D.y + 3);
+            });
+            D.y += 7;
+            setText(D, 8, 'normal', C.dim); D.pdf.text('Notes', D.mg, D.y + 3); D.y += 4;
+            for (let i = 0; i < 3; i++) { D.pdf.setDrawColor(200, 200, 200); D.pdf.line(D.mg, D.y + 6, D.pw - D.mg, D.y + 6); D.y += 7; }
+            signatureLines(D, ['Reviewed by', 'Title', 'Date']);
+            footers(D, NOTE_NOISE);
+            D.pdf.save(`TOA_Hearing_Board_Packet_${safeName(caseNo)}.pdf`);
+            return 'Saved';
+        }
+        function altLegend(D) {
+            ensure(D, 7);
+            setText(D, 7.5, 'bold', [80, 80, 80]);
+            D.pdf.text('Altitude (ft MSL):', D.mg, D.y + 3.5);
+            [[[220, 38, 38], '< 500'], [[245, 158, 11], '500 – 1,000'], [[132, 204, 22], '1,000 – 2,000'], [[34, 197, 94], '2,000 – 3,500'], [[59, 130, 246], '> 3,500']]
+                .forEach(([c, l], i) => { const x = D.mg + 28 + i * 30; D.pdf.setFillColor(...c); D.pdf.rect(x, D.y + 0.6, 6, 3.5, 'F'); setText(D, 7.5, 'normal', C.ink); D.pdf.text(l, x + 8, D.y + 3.5); });
+            D.y += 7;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // 4. Violation Letter (draft, with sample owner contact)
+        // ════════════════════════════════════════════════════════════════════
+        // Sample owner contact for the demo — generic, made up from the registration so the same aircraft
+        // always gets the same sample. 555-01xx numbers and example.com addresses are reserved for fiction.
+        function sampleContact(reg) {
+            const FIRST = ['James', 'Maria', 'Robert', 'Linda', 'Michael', 'Susan', 'David', 'Karen', 'Daniel', 'Laura', 'Kevin', 'Nancy', 'Brian', 'Emily', 'Thomas', 'Rachel'];
+            const LAST  = ['Carter', 'Nguyen', 'Brooks', 'Patel', 'Reyes', 'Sullivan', 'Hayes', 'Morgan', 'Foster', 'Kim', 'Bennett', 'Ortiz', 'Coleman', 'Price', 'Ward', 'Hughes'];
+            const STREET = ['Oak', 'Maple', 'Cedar', 'Pine', 'Elm', 'Lakeview', 'Hillcrest', 'Sunset', 'Park', 'Ridge', 'Meadow', 'Willow'];
+            const SUFFIX = ['Street', 'Avenue', 'Drive', 'Lane', 'Road', 'Court'];
+            let h = 2166136261;
+            for (const ch of String(reg || 'N0')) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+            const pick = (arr, k) => arr[(h >>> k) % arr.length];
+            const first = pick(FIRST, 1), last = pick(LAST, 5);
+            const num = 100 + (h % 8900);
+            return {
+                name: `${first} ${last}`, first, last,
+                street: `${num} ${pick(STREET, 9)} ${pick(SUFFIX, 13)}`,
+                city: 'Anytown, ST 00000',
+                phone: `(555) 555-01${pad2(h % 100)}`,
+                email: `${first}.${last}@example.com`.toLowerCase(),
+            };
+        }
+        async function fillViolations() {
+            const day = $('vl-date').value, sel = $('vl-violation');
+            if (!day) { sel.innerHTML = '<option value="">Pick a date first</option>'; return; }
+            sel.innerHTML = '<option value="">Loading…</option>';
+            try {
+                const { list } = await dailyViolations(day);
+                sel.innerHTML = list.length
+                    ? list.map(v => `<option value="${esc(v.id)}">${esc(fmtHM(v.ms))} · ${esc(v.registration)} · ${esc(v.short)}${v.kind === 'noise' ? ' at ' + esc(monShort(v.monitors[0])) : ''}${v.hb ? ' (HB)' : ''}</option>`).join('')
+                    : '<option value="">No violations on this day</option>';
+                setStatus('vl-status', list.length ? plural(list.length, 'violation') : '');
+            } catch (e) { console.error(e); sel.innerHTML = '<option value="">Could not load violations</option>'; }
+        }
+        async function letterPdf() {
+            const day = $('vl-date').value, id = $('vl-violation').value;
+            if (!day || !id) throw userError('Pick a date and a violation.');
+            const { N, list } = await dailyViolations(day);
+            const v = list.find(x => x.id === id);
+            if (!v) throw userError('That violation could not be found.');
+            const who = sampleContact(v.registration);
+            const ref = `TOA-${ymdOf(v.ms).replace(/-/g, '')}-${pad2(tzParts(v.ms).h)}${pad2(tzParts(v.ms).mi)}-${v.registration.toUpperCase()}`;
+            const D = newDoc('portrait'), pdf = D.pdf;
+            D.mg = 22;
+
+            // Watermark
+            pdf.saveGraphicsState();
+            pdf.setGState(new pdf.GState({ opacity: 0.08 }));
+            setText(D, 110, 'bold', [120, 120, 120]);
+            const wmW = pdf.getTextWidth('DRAFT'), ang = 35 * Math.PI / 180;
+            pdf.text('DRAFT', D.pw / 2 - wmW / 2 * Math.cos(ang), D.ph / 2 + wmW / 2 * Math.sin(ang), { angle: 35 });
+            pdf.restoreGraphicsState();
+
+            // Letterhead
+            const logo = await loadLogo();
+            if (logo) { const h = 20, w = h * logo.w / logo.h; pdf.addImage(logo.data, 'PNG', D.mg, 16, w, h); }
+            setText(D, 8.5, 'normal', C.dim);
+            ['Torrance Municipal Airport · Zamperini Field', '3301 Airport Drive', 'Torrance, CA 90505'].forEach((l, i) => pdf.text(l, D.pw - D.mg, 20 + i * 4, { align: 'right' }));
+            pdf.setDrawColor(...C.blue); pdf.setLineWidth(0.6); pdf.line(D.mg, 40, D.pw - D.mg, 40);
+            setText(D, 8, 'bold', C.red);
+            pdf.text('DRAFT — FOR STAFF REVIEW BEFORE SENDING', D.mg, 45);
+            D.y = 54;
+
+            setText(D, 10, 'normal', C.ink);
+            const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            pdf.text(today, D.mg, D.y); D.y += 10;
+            [who.name, `Registered owner, ${v.registration}`, who.street, who.city].forEach(l => { pdf.text(pdfSafe(l), D.mg, D.y); D.y += 4.8; });
+            setText(D, 7.5, 'italic', C.dim);
+            pdf.text(pdfSafe(`${who.phone} · ${who.email} · sample contact (demonstration data)`), D.mg, D.y); D.y += 9;
+
+            setText(D, 10, 'bold', C.ink);
+            const subj = { noise: 'Notice of Noise Limit Violation', training: 'Notice of Training Operation Violation', curfew: 'Notice of Curfew Departure' }[v.kind];
+            pdf.text(pdfSafe(`RE: ${subj} — Aircraft ${v.registration}${v.icaoType ? ' (' + v.icaoType + ')' : ''}`), D.mg, D.y); D.y += 5;
+            setText(D, 9.5, 'normal', C.text);
+            pdf.text(pdfSafe(`Reference ${ref}`), D.mg, D.y); D.y += 9;
+
+            const P = (t, o = {}) => para(D, t, { size: 10, color: C.ink, gap: 3.5, ...o });
+            P(`Dear ${who.first} ${who.last}:`);
+            P(`Records from the Torrance Municipal Airport noise and operations monitoring system show that aircraft ${v.registration}, for which you are listed as the registered owner, was involved in the operation described below on ${fmtYMDLong(v.dateISO)}. Based on these records, the operation did not comply with the airport's noise abatement regulations (Torrance Municipal Code, Division 5 – Airports).`);
+
+            // Event details box
+            const rows = [['Date and time', `${fmtYMDLong(v.dateISO)}, ${fmtClock(v.ms)}`], ['Aircraft', `${v.registration}${v.icaoType ? ' · ' + v.icaoType : ''}`],
+                          ['Operation', `${v.operation}${v.runway ? ' · Runway ' + v.runway : ''}`], ['Violation', v.violation.replace(' (Hearing Board candidate)', '')]];
+            if (v.kind === 'noise') {
+                const e = v.event, mon = N.monitorById[e.monitorId] || {};
+                rows.push(['Measured at', mon.name || monShort(e.monitorId)]);
+                rows.push(['Lmax', `${e.lmax.toFixed(1)} dBA (limit ${e.lmaxLimitDb} dBA)`]);
+                rows.push(['SENEL', `${e.senel.toFixed(1)} dB (limit ${e.senelLimitDb} dB)`]);
+                rows.push(['Altitude / distance', `${(e.altAtLmaxMSL ?? 0).toLocaleString()} ft MSL, ${(e.slantAtLmaxFt ?? 0).toLocaleString()} ft from the monitor`]);
+            } else {
+                rows.push(['Basis', opEvidenceText(v.op)]);
+            }
+            const boxTop = D.y;
+            D.y += 2;
+            D.mg += 3;
+            rows.forEach(([l, val]) => {
+                setText(D, 9, 'bold', [90, 90, 90]); pdf.text(pdfSafe(l), D.mg, D.y + 3.5);
+                setText(D, 9, 'normal', C.ink);
+                const lines = pdf.splitTextToSize(pdfSafe(val), D.pw - D.mg * 2 - 38);
+                pdf.text(lines, D.mg + 38, D.y + 3.5); D.y += Math.max(1, lines.length) * lh(9) + 1.2;
+            });
+            D.mg -= 3;
+            pdf.setDrawColor(...C.line); pdf.setLineWidth(0.3); pdf.rect(D.mg, boxTop, D.pw - D.mg * 2, D.y - boxTop + 2);
+            D.y += 7;
+
+            const rule = {
+                noise: () => `The noise level measured at the airport's monitoring station exceeded the ${v.event.period === 'curfew' ? 'curfew-hours' : 'standard-hours'} limit of ${v.event.lmaxLimitDb} dBA Lmax / ${v.event.senelLimitDb} dB SENEL.`,
+                training: () => (v.op.ruleFlags || []).includes('training-prohibited')
+                    ? 'Touch-and-go and stop-and-go operations are prohibited at Torrance Municipal Airport at all times.'
+                    : 'Taxi-back and low approach operations are permitted at Torrance Municipal Airport only between 10 AM and 6 PM, Monday through Friday.',
+                curfew: () => `The departure took place during the airport's curfew hours (${CURFEW_TEXT}), when departures are restricted under the airport's noise regulations.`,
+            }[v.kind]();
+            P(rule);
+            P('Please review this notice with the pilot in command at the time of the operation and take the steps needed to avoid future violations. If you believe this notice was issued in error — for example, if the operation was directed by air traffic control or conducted under an approved exemption — please contact the Airport Manager\'s office and refer to the reference number above.');
+            P('Repeated violations may be referred to the Hearing Board for further action.');
+            P('Thank you for your cooperation in keeping Torrance Municipal Airport a good neighbor to the surrounding community.');
+            D.y += 2;
+            P('Sincerely,', { gap: 14 });
+            AIRPORT.office.forEach((l, i) => { setText(D, 10, i === 0 ? 'bold' : 'normal', C.ink); pdf.text(l, D.mg, D.y); D.y += 4.8; });
+
+            footers(D, 'DRAFT generated by the noise and operations monitoring system for staff review. Recipient contact details are sample data. Demonstration data: POU traffic, simulated noise levels.');
+            pdf.save(`TOA_Violation_Letter_${safeName(ref)}.pdf`);
+            return 'Saved draft letter';
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // 5. Violation candidates CSV (same as the Noise Monitoring page export)
+        // ════════════════════════════════════════════════════════════════════
+        async function candidatesCsv() {
+            let from = $('vc-from').value, to = $('vc-to').value;
+            if (!from || !to) throw userError('Pick both dates.');
+            if (from > to) [from, to] = [to, from];
+            const N = await loadNoise(from, to);
+            const header = ['Type', 'Date', 'Time', 'Registration', 'ICAO Type', 'Operation', 'Runway', 'Monitor',
+                            'Lmax (dBA)', 'Lmax Limit', 'SENEL (dB)', 'SENEL Limit', 'Period', 'Flags', 'Match Confidence', 'Data Quality'];
+            const opCsvType = o => { const f = o.ruleFlags || [];
+                if (f.includes('training-prohibited')) return `Training — ${o.label.toLowerCase()} (prohibited)`;
+                if (f.includes('training-hours'))      return `Training — ${o.label.toLowerCase()} (outside permitted hours)`;
+                if (f.includes('curfew-departure'))    return 'Curfew departure';
+                return o.label; };
+            const noise = N.events.filter(e => e.source === 'aircraft' && e.exceedsLimit).sort((a, b) => a.lmaxTimestamp.localeCompare(b.lmaxTimestamp))
+                .map(e => ['Noise exceedance', e.date, e.time, e.registration, e.icaoType, e.operation, e.runway, monShort(e.monitorId),
+                           e.lmax.toFixed(1), e.lmaxLimitDb, e.senel.toFixed(1), e.senelLimitDb, e.period, (e.ruleFlags || []).join(' '), e.confidence, e.dataQuality]);
+            const ops = N.ops.filter(o => (o.ruleFlags || []).length)
+                .map(o => [opCsvType(o), o.date, o.time, o.registration, o.icaoType || typeOf(o.registration), o.label, o.runway, '', '', '', '', '',
+                           o.ruleFlags.includes('curfew-departure') ? 'curfew' : '', o.ruleFlags.join(' '), o.needsReview ? 'review' : 'classified from track', '']);
+            if (!noise.length && !ops.length) throw userError(`No data in this range. The demonstration data covers ${fmtRange(DEMO_FROM, DEMO_TO)}.`);
+            downloadCsv([['SIMULATED NOISE DATA — demonstration only (POU traffic evaluated against Torrance limits)'], header, ...noise, ...ops], `violation_candidates_${from}_to_${to}.csv`);
+            return `Saved · ${plural(noise.length + ops.length, 'row')}`;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // 6. Operations Summary (the Dashboard PDF)
+        // ════════════════════════════════════════════════════════════════════
+        const OPC = { takeoff: '#3b82f6', landing: '#22c55e', tng: '#f59e0b' };
+        const CAT_COLORS = { 'A-I': '#60a5fa', 'A-II': '#3b82f6', 'B-I': '#34d399', 'B-II': '#10b981', 'B-III': '#059669', 'C-I': '#fbbf24', 'C-II': '#f59e0b',
+                             'C-III': '#ef4444', 'C-IV': '#dc2626', 'C-V': '#b91c1c', 'C-VI': '#7f1d1d', 'D-II': '#a855f7', 'D-III': '#9333ea', 'D-IV': '#7c3aed',
+                             'D-V': '#6d28d9', 'D-VI': '#4c1d95', 'Rotorcraft': '#000000', 'Unknown': '#888888' };
+        async function loadFlights(from, to) {
+            const { fromISO, toISO } = rangeISO(from, to);
+            const rows = await rangeQuery(COL.flights, 'timestamp', fromISO, toISO);
+            return [...rows].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+        }
+        function stacked3(labels, keyOf, rows) {
+            const c = {}; labels.forEach(l => c[l] = { Takeoff: 0, Landing: 0, 'Touch and Go': 0 });
+            rows.forEach(r => { const k = keyOf(r); if (c[k] && c[k][r.event] != null) c[k][r.event]++; });
+            return [['Takeoff', OPC.takeoff], ['Landing', OPC.landing], ['Touch and Go', OPC.tng]].map(([ev, col]) => ({ label: ev, data: labels.map(l => c[l][ev]), backgroundColor: col, stack: 'a' }));
+        }
+        const barOpts = (title, stacked = true) => ({
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } }, title: { display: true, text: title, font: { size: 14, weight: '600' } } },
+            scales: { x: { stacked, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } }, y: { stacked, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { precision: 0 } } },
+        });
+        async function opsSummaryPdf() {
+            let from = $('os-from').value, to = $('os-to').value;
+            if (!from || !to) throw userError('Pick both dates.');
+            if (from > to) [from, to] = [to, from];
+            const rows = await loadFlights(from, to);
+            if (!rows.length) throw userError('No operations were logged in this range.');
+            const D = newDoc('landscape');
+            await header(D, 'Flight Operations Summary', fmtRange(from, to), plural(rows.length, 'operation'));
+            const n = ev => rows.filter(r => r.event === ev).length;
+            metricBoxes(D, [{ label: 'Total operations', value: rows.length.toLocaleString() }, { label: 'Takeoffs', value: n('Takeoff').toLocaleString() },
+                            { label: 'Landings', value: n('Landing').toLocaleString() }, { label: 'Touch & Gos', value: n('Touch and Go').toLocaleString() },
+                            { label: 'Aircraft', value: new Set(rows.map(r => r.registration)).size.toLocaleString() }]);
+            const days = daysBetween(from, to);
+            const dayLabel = d => { const [, m, dd] = d.split('-'); return `${+m}/${+dd}`; };
+            const byDay = await chartImage({ type: 'bar', data: { labels: days.map(dayLabel), datasets: stacked3(days, r => ymdOf(Date.parse(r.timestamp)), rows) }, options: barOpts('Operations by day') }, 1500, 330);
+            const w = D.pw - D.mg * 2;
+            addImageBlock(D, byDay, w, w * 330 / 1500);
+            const hours = Array.from({ length: 24 }, (_, h) => h);
+            const hoursImg = await chartImage({ type: 'bar', data: { labels: hours.map(h => `${h % 12 || 12}${h < 12 ? 'AM' : 'PM'}`),
+                datasets: [{ label: 'Operations', data: hours.map(h => rows.filter(r => tzParts(Date.parse(r.timestamp)).h === h).length), backgroundColor: '#6366f1' }] },
+                options: { ...barOpts('Busiest hours', false), plugins: { legend: { display: false }, title: { display: true, text: 'Busiest hours', font: { size: 14, weight: '600' } } } } }, 700, 330);
+            const rws = [...new Set(rows.map(r => r.runway).filter(r => r && r !== 'n/a'))].sort();
+            const rwImg = await chartImage({ type: 'bar', data: { labels: rws, datasets: stacked3(rws, r => r.runway, rows) }, options: barOpts('Operations by runway') }, 700, 330);
+            const classes = ['Single-Engine', 'Multi-Engine', 'Turbine', 'Rotorcraft'];
+            const clImg = await chartImage({ type: 'bar', data: { labels: classes, datasets: stacked3(classes, r => r.class, rows) }, options: barOpts('Operations by class') }, 700, 330);
+            const cat = {}; rows.forEach(r => { const k = r.aircraftType || 'Unknown'; if (k === 'Rotorcraft' || k === 'n/a') return; cat[k] = (cat[k] || 0) + 1; });
+            const cats = Object.entries(cat).sort((a, b) => b[1] - a[1]);
+            const catImg = await chartImage({ type: 'bar', data: { labels: cats.map(c => c[0]), datasets: [{ data: cats.map(c => c[1]), backgroundColor: cats.map(c => CAT_COLORS[c[0]] || '#888') }] },
+                options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'AAC/ADG count', font: { size: 14, weight: '600' } } },
+                           scales: { x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { precision: 0 } }, y: { grid: { display: false } } } } }, 700, 330);
+            const gap = 5, cw = (w - gap) / 2, chh = cw * 330 / 700;
+            [[hoursImg, rwImg], [clImg, catImg]].forEach(pair => {
+                ensure(D, chh + 3);
+                pair.forEach((img, i) => D.pdf.addImage(img, 'PNG', D.mg + i * (cw + gap), D.y, cw, chh));
+                D.y += chh + 4;
+            });
+            footers(D, NOTE_OPS);
+            D.pdf.save(`Flight_Operations_${from}_to_${to}.pdf`);
+            return `Saved · ${plural(rows.length, 'operation')}`;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // 7. Flight History CSV
+        // ════════════════════════════════════════════════════════════════════
+        async function flightHistoryCsv() {
+            let from = $('fh-from').value, to = $('fh-to').value;
+            if (!from || !to) throw userError('Pick both dates.');
+            if (from > to) [from, to] = [to, from];
+            const reg = $('fh-reg').value.trim().toUpperCase(), ev = $('fh-event').value;
+            const rows = (await loadFlights(from, to)).reverse()
+                .filter(r => (!reg || (r.registration || '').toUpperCase().includes(reg)) && (!ev || r.event === ev));
+            if (!rows.length) throw userError('No operations match.');
+            downloadCsv([['Date', 'Time', 'Registration', 'Event', 'Runway', 'Aircraft Type', 'Category', 'Class'],
+                ...rows.map(r => { const ms = Date.parse(r.timestamp); return [r.date || fmtMDY(ms), r.time || fmtClock(ms), r.registration, r.event, r.runway || 'n/a', r.aircraftType || '', r.category || 'n/a', r.class || 'n/a']; })],
+                `flight-history-${from}_to_${to}.csv`);
+            return `Saved · ${plural(rows.length, 'operation')}`;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // 8. Flight Track Report (the Noise Abatement PDF)
+        // ════════════════════════════════════════════════════════════════════
+        let dayTracks = [];
+        async function fillTracks() {
+            const day = $('tr-date').value, sel = $('tr-track');
+            if (!day) { sel.innerHTML = '<option value="">Pick a date first</option>'; return; }
+            sel.innerHTML = '<option value="">Loading…</option>';
+            try {
+                const { fromISO, toISO } = rangeISO(day, day);
+                dayTracks = (await rangeQuery(COL.tracks, 'timestamp', fromISO, toISO)).sort((a, b) => (a.start || a.timestamp).localeCompare(b.start || b.timestamp));
+                filterTracks();
+            } catch (e) { console.error(e); sel.innerHTML = '<option value="">Could not load flights</option>'; }
+        }
+        function filterTracks() {
+            const reg = $('tr-reg').value.trim().toUpperCase(), sel = $('tr-track');
+            if (!$('tr-date').value) return;
+            const list = dayTracks.filter(t => !reg || (t.registration || '').toUpperCase().includes(reg));
+            sel.innerHTML = list.length
+                ? list.map(t => { const s = Date.parse(t.start || t.timestamp), pts = t.track || [], dur = pts.length ? pts[pts.length - 1].t : 0;
+                    return `<option value="${esc(t.id)}">${esc(fmtHM(s))} · ${esc(t.registration || 'Unknown')} · ${Math.round(dur / 60)} min</option>`; }).join('')
+                : '<option value="">No flights match</option>';
+            setStatus('tr-status', list.length ? plural(list.length, 'flight') : '');
+        }
+        function fmtDur(seconds) { const m = Math.floor(seconds / 60), s = Math.round(seconds % 60); return m ? `${m}m ${s}s` : `${s}s`; }
+        async function trackPdf() {
+            const id = $('tr-track').value;
+            if (!id) throw userError('Pick a flight.');
+            const d = dayTracks.find(t => t.id === id) || await loadTrack(id);
+            if (!d) throw userError('That flight could not be found.');
+            const pts = (d.track || []).filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+            const s = Date.parse(d.start || d.timestamp);
+            const alts = pts.map(p => p.alt).filter(Number.isFinite), gss = pts.map(p => p.gs).filter(Number.isFinite);
+            const minAlt = alts.length ? Math.min(...alts) : null, maxAlt = alts.length ? Math.max(...alts) : null;
+            const belowPatt = (d.minAltMSL ?? minAlt) != null && (d.minAltMSL ?? minAlt) < SOURCE_FIELD_ELEV_FT + 1000;
+            const D = newDoc('portrait');
+            await header(D, 'Flight Track Report', `${d.registration || 'Unknown'} · ${fmtYMDLong(ymdOf(s))}`);
+            sectionTitle(D, 'Flight information');
+            kvGrid(D, [
+                ['Registration', d.registration || '—'], ['AAC/ADG', d.aircraftType || '—'],
+                ['Type', typeOf(d.registration) || '—'], ['Date', d.date || fmtMDY(s)],
+                ['Start time', d.time || fmtClock(s)], ['Duration', pts.length ? fmtDur(pts[pts.length - 1].t) : '—'],
+                ['Min altitude', minAlt != null ? `${minAlt.toLocaleString()} ft MSL` : '—'], ['Max altitude', maxAlt != null ? `${maxAlt.toLocaleString()} ft MSL` : '—'],
+                ['Max groundspeed', gss.length ? `${Math.max(...gss)} kt` : '—'], ['Data points', pts.length.toLocaleString()],
+                ['Below pattern altitude', belowPatt ? 'YES (below 1,000 ft above the field)' : 'No', belowPatt ? C.red : C.ink],
+            ], 2);
+            if (pts.length >= 2) {
+                const img = await mapImage((m, r) => {
+                    for (let i = 0; i < pts.length - 1; i++) L.polyline([[pts[i].lat, pts[i].lon], [pts[i + 1].lat, pts[i + 1].lon]], { color: altColor(pts[i].alt), weight: 3, opacity: 0.95, renderer: r, interactive: false }).addTo(m);
+                    L.circleMarker([pts[0].lat, pts[0].lon], { radius: 6, color: '#166534', fillColor: '#22c55e', fillOpacity: 1, weight: 2, renderer: r, interactive: false }).addTo(m);
+                    const lp = pts[pts.length - 1];
+                    L.circleMarker([lp.lat, lp.lon], { radius: 6, color: '#991b1b', fillColor: '#dc2626', fillOpacity: 1, weight: 2, renderer: r, interactive: false }).addTo(m);
+                }, pts.map(p => [p.lat, p.lon]), 900, 560, 14);
+                if (img) {
+                    const w = D.pw - D.mg * 2;
+                    sectionTitle(D, 'Flight track', 'Green = start, red = end', w * 560 / 900 + 8);
+                    addImageBlock(D, img, w, w * 560 / 900, 'JPEG');
+                    altLegend(D);
+                }
+            }
+            footers(D, 'Source: ADS-B via on-field receiver · For informational purposes only. ' + NOTE_OPS);
+            D.pdf.save(`Track_${safeName(d.registration || 'Unknown')}_${ymdOf(s)}.pdf`);
+            return 'Saved';
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Init
+        // ════════════════════════════════════════════════════════════════════
+        function init() {
+            // Noise reports: limited to the dates with simulated noise data
+            ['dv-date', 'hb-date', 'vl-date', 'vc-from', 'vc-to', 'pr-from', 'pr-to'].forEach(id => { $(id).min = DEMO_FROM; $(id).max = DEMO_TO; });
+            $('dv-date').value = DEMO_FROM; $('hb-date').value = DEMO_FROM; $('vl-date').value = DEMO_FROM;
+            $('vc-from').value = DEMO_FROM; $('vc-to').value = DEMO_TO;
+            $('pr-from').value = DEMO_FROM; $('pr-to').value = DEMO_TO;
+            $('pr-month').value = DEMO_FROM.slice(0, 7);
+            const y = +DEMO_FROM.slice(0, 4);
+            $('pr-quarter').innerHTML = [y - 1, y].flatMap(yy => [1, 2, 3, 4].map(q => `<option value="${yy}-Q${q}">Q${q} ${yy}</option>`)).join('');
+            $('pr-quarter').value = `${y}-Q${Math.floor((+DEMO_FROM.slice(5, 7) - 1) / 3) + 1}`;
+            $('pr-preset').addEventListener('change', () => {
+                const p = $('pr-preset').value;
+                $('pr-month-wrap').style.display = p === 'month' ? '' : 'none';
+                $('pr-quarter-wrap').style.display = p === 'quarter' ? '' : 'none';
+                $('pr-from-wrap').style.display = $('pr-to-wrap').style.display = p === 'custom' ? '' : 'none';
+            });
+            // Operations reports: any date (default: the same week)
+            const today = todayYMD();
+            ['os-from', 'os-to', 'fh-from', 'fh-to', 'tr-date'].forEach(id => { $(id).max = today; });
+            $('os-from').value = DEMO_FROM; $('os-to').value = DEMO_TO;
+            $('fh-from').value = DEMO_FROM; $('fh-to').value = DEMO_TO;
+            $('tr-date').value = DEMO_FROM;
+
+            $('dv-pdf').addEventListener('click', () => run('dv-pdf', 'dv-status', dailyPdf));
+            $('dv-csv').addEventListener('click', () => run('dv-csv', 'dv-status', dailyCsv));
+            $('pr-pdf').addEventListener('click', () => run('pr-pdf', 'pr-status', periodPdf));
+            $('hb-date').addEventListener('change', fillHbEvents);
+            $('hb-pdf').addEventListener('click', () => run('hb-pdf', 'hb-status', hbPdf));
+            $('vl-date').addEventListener('change', fillViolations);
+            $('vl-pdf').addEventListener('click', () => run('vl-pdf', 'vl-status', letterPdf));
+            $('vc-csv').addEventListener('click', () => run('vc-csv', 'vc-status', candidatesCsv));
+            $('os-pdf').addEventListener('click', () => run('os-pdf', 'os-status', opsSummaryPdf));
+            $('fh-csv').addEventListener('click', () => run('fh-csv', 'fh-status', flightHistoryCsv));
+            $('tr-date').addEventListener('change', fillTracks);
+            $('tr-reg').addEventListener('input', filterTracks);
+            $('tr-pdf').addEventListener('click', () => run('tr-pdf', 'tr-status', trackPdf));
+
+            fillHbEvents();
+            fillViolations();
+            fillTracks();
+            loadLogo();
+        }
+    </script>
+</body>
+</html>

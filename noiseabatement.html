@@ -12,6 +12,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="main.js"></script>
+    <script src="toa-demo-nav.js"></script>   <!-- [TOA DEMO] Noise dropdown -->
     <script src="basedaircraft_pou.js"></script>
     <script src="icaocodeRegistry.js"></script>
     <script src="feeschedule_pou.js"></script>
@@ -459,6 +460,9 @@
         }
         .na-3d-link:hover { background: #0057ff; color: #fff; }
         .na-3d-note { color: #999; font-size: 13px; }
+
+        /* [TOA DEMO] larger Torrance logo, top-aligned with the title so the navbar doesn't cover it */
+        #page-airport-logo[src$="toa-logo.png"] { height: 72px; top: 6px; transform: none; }
     </style>
 </head>
 
@@ -779,6 +783,121 @@
         };
         // ────────────────────────────────────────────────────────────────────
 
+        // ── [TOA DEMO] demo_toa account ─────────────────────────────────────
+        // Torrance map, logo, hot spot and noise monitor sites. No track data of its
+        // own (tracks_demo_toa / flights_demo_toa don't exist), so the list stays empty.
+        // Hot spot and monitor positions are from KTOA.kml.
+        AIRPORT_COLLECTIONS.demo_toa         = 'tracks_demo_toa';
+        AIRPORT_FLIGHTS_COLLECTIONS.demo_toa = 'flights_demo_toa';
+        AIRPORT_LABELS.demo_toa              = 'TOA — Torrance Municipal (Demo)';
+        AIRPORT_LOGOS.demo_toa               = 'toa-logo.png';
+        AIRPORT_COORDS.demo_toa              = [33.8034, -118.3396];
+        AIRPORT_ELEV.demo_toa                = 103;     // field elevation MSL (ft)
+        AIRPORT_TRACK_RADIUS_KM.demo_toa     = 11.27;   // same as POU / PNS
+        AIRPORT_OPERATION_LABELS.demo_toa    = 'TOA Operation';
+        AIRPORT_TZ.demo_toa                  = 'America/Los_Angeles';
+        AIRPORT_ADDR_PLACEHOLDER.demo_toa    = 'e.g. 12 Main St, Torrance, CA';
+        // HS 1 — centre and radius of the circle drawn in KTOA.kml (~24 m radius)
+        HOTSPOTS_BY_AIRPORT.demo_toa = [
+            { label: 'HS 1', lat: 33.800282, lon: -118.335687, radius: 24 },
+        ];
+        const TOA_MONITORS = [
+            { label: 'NMT 1', lat: 33.8119152, lon: -118.3552440 },
+            { label: 'NMT 2', lat: 33.8178323, lon: -118.3454233 },
+            { label: 'NMT 3', lat: 33.8136698, lon: -118.3311128 },
+            { label: 'NMT 4', lat: 33.8043334, lon: -118.3093232 },
+            { label: 'NMT 5', lat: 33.7967903, lon: -118.3075185 },
+            { label: 'NMT 6', lat: 33.7936842, lon: -118.3438300 },
+            { label: 'NMT 7', lat: 33.8046510, lon: -118.3534542 },
+        ];
+        let toaMonitorLayer = null, toaMonitorsWired = false;
+        // Draws the monitor sites when demo_toa is the current airport, removes them otherwise
+        function toaDrawMonitors() {
+            if (!map) return;
+            if (toaMonitorLayer) { map.removeLayer(toaMonitorLayer); toaMonitorLayer = null; }
+            if (currentAirportKey !== 'demo_toa') return;
+            toaMonitorLayer = L.layerGroup().addTo(map);
+            TOA_MONITORS.forEach(m => {
+                L.circleMarker([m.lat, m.lon], {
+                    radius: 7, color: '#fff', weight: 2, fillColor: '#7c3aed', fillOpacity: 1
+                }).bindTooltip(`Noise monitor — ${m.label}`).addTo(toaMonitorLayer);
+                L.marker([m.lat, m.lon], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<span style="font-size:11px;font-weight:700;color:#6d28d9;
+                                      background:rgba(255,255,255,0.85);padding:1px 4px;
+                                      border-radius:3px;white-space:nowrap;">${m.label}</span>`,
+                        iconAnchor: [-10, 7]
+                    }),
+                    interactive: false
+                }).addTo(toaMonitorLayer);
+            });
+        }
+        // Called once from initUser after the map is up; also redraws when an admin switches airports
+        function initToaMonitors() {
+            toaDrawMonitors();
+            if (toaMonitorsWired) return;
+            toaMonitorsWired = true;
+            const sel = document.getElementById('airport-select');
+            if (sel) sel.addEventListener('change', toaDrawMonitors);
+        }
+        // ────────────────────────────────────────────────────────────────────
+
+        // ── [TOA DEMO] Runway 29 westbound departure corridor ───────────────
+        // Visual only. Torrance recommends no left turn on a west departure before
+        // reaching the ocean or 1,500 ft unless directed by ATC (straight-out
+        // departures; not South Pattern training or missed approaches).
+        // Geometry: from the 11R end (FAA runway end coordinates), along the runway
+        // heading (308° true) to the shoreline (approx. lon -118.3915 at Redondo Beach).
+        // Edges sit 1,000 ft outside the 29L (south) and 29R (north) extended centerlines.
+        const TOA_CORRIDOR = {
+            southStart: [33.803108, -118.346145],   // 1,000 ft left of 29L centerline
+            southEnd:   [33.832651, -118.391500],
+            northEnd:   [33.841401, -118.391500],   // 1,000 ft right of 29R centerline
+            northStart: [33.808542, -118.341053],
+            label:      [33.841401, -118.391500],   // above the shoreline end
+        };
+        let toaCorridorLayer = null, toaCorridorWired = false;
+        function toaDrawCorridor() {
+            if (!map) return;
+            if (toaCorridorLayer) { map.removeLayer(toaCorridorLayer); toaCorridorLayer = null; }
+            if (currentAirportKey !== 'demo_toa') return;
+            const c = TOA_CORRIDOR;
+            toaCorridorLayer = L.layerGroup().addTo(map);
+            // Shaded corridor — not clickable, so monitors inside it keep their hover
+            L.polygon([c.southStart, c.southEnd, c.northEnd, c.northStart], {
+                color: '#f59e0b', weight: 1, fillColor: '#f59e0b', fillOpacity: 0.12, interactive: false
+            }).addTo(toaCorridorLayer);
+            // Shoreline end of the corridor
+            L.polyline([c.southEnd, c.northEnd], {
+                color: '#0284c7', weight: 3, interactive: false
+            }).addTo(toaCorridorLayer);
+            // South (left-turn) boundary
+            L.polyline([c.southStart, c.southEnd], {
+                color: '#dc2626', weight: 3, dashArray: '8,6'
+            }).bindTooltip('No left turn before shoreline or 1,500 ft unless directed by ATC (Rwy 29 straight-out departures)', { sticky: true })
+              .addTo(toaCorridorLayer);
+            L.marker(c.label, {
+                icon: L.divIcon({
+                    className: '',
+                    html: `<span style="font-size:11px;font-weight:700;color:#b45309;
+                                  background:rgba(255,255,255,0.85);padding:1px 4px;
+                                  border-radius:3px;white-space:nowrap;">Rwy 29 departure corridor</span>`,
+                    iconAnchor: [-6, 22]
+                }),
+                interactive: false
+            }).addTo(toaCorridorLayer);
+        }
+        // Called once from initUser after the map is up; also redraws when an admin switches airports
+        function initToaCorridor() {
+            toaDrawCorridor();
+            if (toaCorridorWired) return;
+            toaCorridorWired = true;
+            const sel = document.getElementById('airport-select');
+            if (sel) sel.addEventListener('change', toaDrawCorridor);
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         function getFieldElev()   { return AIRPORT_ELEV[currentAirportKey]      || 49; }
         function getAirportLabel(){ return AIRPORT_LABELS[currentAirportKey]     || 'OWD — Norwood Memorial Airport'; }
         function getAirportCoord(){ return AIRPORT_COORDS[currentAirportKey]     || [42.1905, -71.1728]; }
@@ -900,6 +1019,7 @@
                 const snap = await getDoc(doc(db, 'Users', user.uid));
                 if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
                 const profile = snap.data();
+                if (window.toaDemoNav) toaDemoNav(profile.airport);   // [TOA DEMO] Noise dropdown, demo_toa only
 
                 if (profile.role === 'admin') {
                     const selector = document.getElementById('airport-selector');
@@ -929,6 +1049,8 @@
                 } else {
                     switchAirport(currentAirportKey);
                 }
+                initToaMonitors();   // [TOA DEMO] does nothing unless the airport is demo_toa
+                initToaCorridor();   // [TOA DEMO] Rwy 29 departure corridor, demo_toa only
 
                 // If a specific track ID was passed in the URL, load the list first
                 // then boot the track — so loadTracks doesn't cancel the animation

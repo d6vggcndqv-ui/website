@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <script src="main.js"></script>
+    <script src="toa-demo-nav.js"></script>   <!-- [TOA DEMO] Noise dropdown -->
     <link rel="icon" href="/favicon1.ico" type="image/x-icon">
     <style>
         .page-header-row { position:relative; text-align:center; margin-bottom:1rem; }
@@ -150,6 +151,9 @@
             transition: background 0.15s;
         }
         #btn-export-pdf:hover { background: #e8e8e8; }
+
+        /* [TOA DEMO] larger Torrance logo, top-aligned with the title so the navbar doesn't cover it */
+        #page-airport-logo[src$="toa-logo.png"] { height: 72px; top: 6px; transform: none; }
 
         /* ── Auth ─────────────────────────────────────────────────── */
         #auth-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
@@ -347,9 +351,9 @@
         const db = getFirestore(app);
 
         const AIRPORT_COLLECTIONS = { owd: 'flights', pou: 'flights_pou', pns: 'flights_pns' };
-        const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional', pns: 'PNS — Pensacola International' };
+        const AIRPORT_LABELS = { owd: 'OWD — Norwood Memorial', pou: 'POU — Hudson Valley Regional', pns: 'PNS — Pensacola International', demo_toa: 'TOA — Torrance Municipal (Demo)' };
         // Matches portal.html's AIRPORT_INFO logo convention
-        const AIRPORT_LOGOS = { pou: 'pou-logo.jpg', pns: 'pns-logo.jpg' };
+        const AIRPORT_LOGOS = { pou: 'pou-logo.jpg', pns: 'pns-logo.jpg', demo_toa: 'toa-logo.png' };
         // Collections whose logging history doesn't go back to the beginning of time —
         // "All time" for these should be qualified with when the data actually starts.
         const ALL_TIME_START = { flights_pou: '5/21/26', flights_pns: '10/28/26' };
@@ -409,6 +413,7 @@
             const snap = await getDoc(doc(db, 'Users', user.uid));
             if (!snap.exists()) { showAuth(); document.getElementById('auth-error').textContent = 'Account not configured.'; return; }
             const profile = snap.data();
+            if (window.toaDemoNav) toaDemoNav(profile.airport);   // [TOA DEMO] Noise dropdown, demo_toa only
             if (profile.role === 'admin') {
                 const selector = document.getElementById('airport-selector');
                 selector.style.display = 'flex';
