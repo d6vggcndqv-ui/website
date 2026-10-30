@@ -73113,6 +73113,7 @@ const registrationRegistry = {
   "a2d98a": "N283EF",
   "a2d9a2": "N283FE",
   "a2d9a9": "N283FM",
+  "a2d9b3": "N283FX",
   "a2d9b6": "N283G",
   "a2d9c8": "N283GT",
   "a2d9d0": "N283HA",
