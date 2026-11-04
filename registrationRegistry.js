@@ -312749,4 +312749,5 @@ const registrationRegistry = {
   "ac6ccc": "N9ZU",
   "ac6ccd": "N9ZV",
   "ac6ccf": "N9ZX",
+  "c05271": "CGFFS",
 };
