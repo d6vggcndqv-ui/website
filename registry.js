@@ -174381,7 +174381,7 @@ const aircraftRegistry = {
   "adf7c5": "A-I",
   "c036d9": "A-I",
   "c05e59": "A-I",
-  "c05271": "B-I",
+  "c05271": "B-II",
   "c06c5b": "B-II",
   "c06442": "A-I",
 };
