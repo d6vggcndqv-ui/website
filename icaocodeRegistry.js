@@ -7,6 +7,7 @@
 
 const typeCodeRegistry = {
   'CGPAW': 'C56X',
+  'CGFFS': 'C25B',
   'N10000': 'SR22',
   'N10004': 'C182',
   'N10007': 'C210',
