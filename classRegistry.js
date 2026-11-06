@@ -153480,6 +153480,7 @@ const classRegistry = {
   "a73e8b": "Multi-Engine",
   "a73e92": "Single-Engine",
   "a73eae": "Single-Engine",
+  "a73eb2": "Single-Engine",
   "a73eb7": "Single-Engine",
   "a73ebf": "Single-Engine",
   "a73ec5": "Multi-Engine",
