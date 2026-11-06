@@ -70342,6 +70342,7 @@ const registrationRegistry = {
   "a2b99d": "N275FS",
   "a2b99f": "N275FU",
   "a2b9a1": "N275FW",
+  "a2b9a2": "N275FX",
   "a2b9a8": "N275GC",
   "a2b9ae": "N275GJ",
   "a2b9b7": "N275GT",
