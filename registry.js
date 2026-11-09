@@ -2360,6 +2360,7 @@ const aircraftRegistry = {
   "a02a74": "A-I",
   "a02a75": "A-I",
   "a02a76": "A-I",
+  "a02a79": "C-I",
   "a02a7a": "A-I",
   "a02a7c": "A-I",
   "a02a7d": "A-I",
