@@ -16,6 +16,7 @@ const FEE_TIERS_POU = {
   'C208':  { tier: 'Light Turboprop',   fee: 35 },
   'C425':  { tier: 'Light Turboprop',   fee: 35 },
   'PAY1':  { tier: 'Light Turboprop',   fee: 35 },
+  'K100':  { tier: 'Light Turboprop',   fee: 35 },
   'PAY2':  { tier: 'Light Turboprop',   fee: 35 },
   'PA31':  { tier: 'Light Turboprop',   fee: 35 },
   'AT3T':  { tier: 'Light Turboprop',   fee: 35 },
