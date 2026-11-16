@@ -564,7 +564,7 @@
         meta.textContent = `Showing ${filteredRows.length} result${filteredRows.length !== 1 ? 's' : ''}`;
 
         if (currentCollection === 'flights_pou') {
-            attachCameraIcons(pageRows);
+            attachCameraIcons(pageRows, { flagMissing: true });
         }
 
         // If a row is expanded and present on this page, populate its panel.

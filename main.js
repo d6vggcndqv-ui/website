@@ -13,7 +13,7 @@ const CAMERA_API_KEY  = '9fd29c198dc4214cc570e438eb37c09fe53d3687842a5014d9f0671
  * @param {number} windowSeconds - tolerance window around the timestamp (default 60s)
  * @returns {Promise<object|null>} the matched event object, or null if none found
  */
-async function findCameraEvent(registration, isoTimestamp, windowSeconds = 60) {
+async function findCameraEvent(registration, isoTimestamp, windowSeconds = 60, status = null) { // CHANGED: optional status object (see below)
     const d = new Date(isoTimestamp);
     if (isNaN(d.getTime())) return null;
 
@@ -37,6 +37,7 @@ async function findCameraEvent(registration, isoTimestamp, windowSeconds = 60) {
             const res = await fetch(`${CAMERA_API_BASE}/events?${params}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (status) status.answered = true; // ADDED: server responded, so "no event" is a real miss (not an outage)
             return data.total > 0 ? pickCameraEventWithMedia(data.events) : null; // CHANGED: first event that has media (was events[0])
         } catch (e) {
             const isLastAttempt = attempt === MAX_ATTEMPTS;
@@ -103,13 +104,14 @@ async function downloadCameraVideo(eventId, linkEl) {
  * or if the slot has since been removed from the DOM (e.g. pagination changed).
  * @param {Array<{docId: string, registration: string, timestamp: string}>} pageRows
  */
-function attachCameraIcons(pageRows) {
+function attachCameraIcons(pageRows, options = {}) { // CHANGED: optional { flagMissing: true } (flight history only)
     pageRows.forEach(r => {
-        findCameraEvent(r.registration, r.timestamp, 60).then(event => {
-            if (!event) return;
+        const lookupStatus = {}; // ADDED
+        findCameraEvent(r.registration, r.timestamp, 60, lookupStatus).then(event => {
+            if (!event) return flagMissingCameraEvent(r, lookupStatus, options); // CHANGED: was "return;"
             if (event.registration && event.registration.toUpperCase() !== r.registration.toUpperCase()) {
                 console.warn(`Camera event registration mismatch: expected ${r.registration}, got ${event.registration}`);
-                return;
+                return flagMissingCameraEvent(r, lookupStatus, options); // CHANGED: was "return;"
             }
             const slot = document.querySelector(`[data-camera-slot="${r.docId}"]`);
             if (!slot) return; // page changed since lookup started
@@ -253,4 +255,36 @@ function applyCameraMediaFlags(slot, ev) {
     if (t !== null) a.setAttribute('data-has-thumbnail', String(t));
     if (v !== null) a.setAttribute('data-has-video', String(v));
     if (ev.in_progress === true) a.setAttribute('data-in-progress', 'true');
+}
+
+// ── Missing-footage review flag (ADDED, flight history only) ──
+// When attachCameraIcons(pageRows, { flagMissing: true }) finds no usable camera
+// event for a row, shows a small grey flag telling the airport manager the miss
+// has been flagged so the camera system can be improved.
+//   - Only when the camera server actually answered (an outage flags nothing)
+//   - Not for flights in the last CAMERA_FLAG_GRACE_MINUTES (footage may still be processing)
+
+const CAMERA_FLAG_GRACE_MINUTES = 10;
+const CAMERA_FLAG_TEXT = "Flagged for review: the camera didn't capture this event. We're looking into why so we can improve the system.";
+
+function cameraFlagHtml() {
+    return `<span data-camera-flag title="${CAMERA_FLAG_TEXT}" style="margin-left:4px;cursor:help;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bb463e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M4 22V4"></path><path d="M4 4h13l-2.5 4.5L17 13H4"></path></svg></span>`;
+}
+
+/**
+ * Places the review flag in a row's camera slot, if enabled and appropriate.
+ * @param {{docId: string, timestamp: string}} r
+ * @param {{answered?: boolean}} lookupStatus - set by findCameraEvent when the server responded
+ * @param {{flagMissing?: boolean}} options
+ */
+function flagMissingCameraEvent(r, lookupStatus, options) {
+    if (!options || !options.flagMissing) return;  // other pages: unchanged behavior
+    if (!lookupStatus || !lookupStatus.answered) return; // server unreachable: not the event's fault
+
+    const ts = new Date(r.timestamp).getTime();
+    if (isNaN(ts) || Date.now() - ts < CAMERA_FLAG_GRACE_MINUTES * 60 * 1000) return; // too recent
+
+    const slot = document.querySelector(`[data-camera-slot="${r.docId}"]`);
+    if (!slot || slot.innerHTML.trim() !== '') return; // page changed, or slot already filled
+    slot.innerHTML = cameraFlagHtml();
 }
