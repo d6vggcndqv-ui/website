@@ -204920,6 +204920,7 @@ const classRegistry = {
   "aa051e": "Single-Engine",
   "aa0524": "Single-Engine",
   "aa0527": "Single-Engine",
+  "aa0529": "Single-Engine",
   "aa052d": "Single-Engine",
   "aa052e": "Multi-Engine",
   "aa052f": "Single-Engine",
