@@ -177050,4 +177050,5 @@ const aircraftRegistry = {
   "ad839d": "B-I",
   "addc16": "B-I",
   // ===== End 2026-11-16 additions =====
+  "c0670f": "B-II",
 };
