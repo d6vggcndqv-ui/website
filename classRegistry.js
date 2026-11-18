@@ -279403,4 +279403,5 @@ const classRegistry = {
   "c05271": "Turbine",
   "c06c5b": "Turbine",
   "c06442": "Turbine",
+  "c0670f": "Turbine",
 };
