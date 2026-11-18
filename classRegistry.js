@@ -252144,6 +252144,7 @@ const classRegistry = {
   "ac832e": "Turbine",
   "ac833a": "Turbine",
   "ac833b": "Single-Engine",
+  "ac833d": "Single-Engine",
   "ac8340": "Single-Engine",
   "ac8341": "Turbine",
   "ac8347": "Single-Engine",
