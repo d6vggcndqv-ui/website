@@ -312752,4 +312752,5 @@ const registrationRegistry = {
   "ac6ccd": "N9ZV",
   "ac6ccf": "N9ZX",
   "c05271": "CGFFS",
+  "c0670f": "CGNAS",
 };
