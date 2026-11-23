@@ -58872,7 +58872,6 @@ const typeCodeRegistry = {
   'N4517Q': 'GLF5',
   'N45187': 'GLF5',
   'N45188': 'C177',
-  'N4518B': 'GLF5',
   'N4518C': 'C170',
   'N4518E': 'GLF5',
   'N4518K': 'GLF5',
