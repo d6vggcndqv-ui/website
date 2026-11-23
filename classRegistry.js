@@ -1,4 +1,5 @@
 const classRegistry = {
+  "0d028d": "Turbine",
   "a004b3": "Single-Engine",
   "a00725": "Single-Engine",
   "a00726": "Single-Engine",
