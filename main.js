@@ -268,7 +268,8 @@ const CAMERA_FLAG_GRACE_MINUTES = 10;
 const CAMERA_FLAG_TEXT = "Flagged for review: the camera didn't capture this event. We're looking into why so we can improve the system.";
 
 function cameraFlagHtml() {
-    return `<span data-camera-flag title="${CAMERA_FLAG_TEXT}" style="margin-left:4px;cursor:help;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bb463e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M4 22V4"></path><path d="M4 4h13l-2.5 4.5L17 13H4"></path></svg></span>`;
+    // CHANGED: was title="..." (browser tooltip has a built-in delay); instant tooltip below reads aria-label
+    return `<span data-camera-flag aria-label="${CAMERA_FLAG_TEXT}" style="margin-left:4px;cursor:help;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bb463e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M4 22V4"></path><path d="M4 4h13l-2.5 4.5L17 13H4"></path></svg></span>`;
 }
 
 /**
@@ -288,3 +289,53 @@ function flagMissingCameraEvent(r, lookupStatus, options) {
     if (!slot || slot.innerHTML.trim() !== '') return; // page changed, or slot already filled
     slot.innerHTML = cameraFlagHtml();
 }
+// ── Instant tooltip for the review flag (ADDED) ──────────────
+// The browser's built-in title tooltip waits ~0.5–1s before showing, so the
+// flag uses this custom tooltip instead: it appears as soon as the mouse is
+// over the flag and disappears when it leaves. On touch screens, tapping the
+// flag shows it; tapping elsewhere hides it.
+
+let cameraFlagTipEl = null;
+
+function hideCameraFlagTip() {
+    if (cameraFlagTipEl) cameraFlagTipEl.remove();
+    cameraFlagTipEl = null;
+}
+
+function showCameraFlagTip(flagEl) {
+    hideCameraFlagTip();
+    const tip = document.createElement('div');
+    tip.textContent = flagEl.getAttribute('aria-label') || CAMERA_FLAG_TEXT;
+    tip.style.cssText =
+        'position:fixed;z-index:10000;max-width:260px;padding:8px 10px;' +
+        'background:#1f2937;color:#fff;font-size:12px;line-height:1.4;' +
+        'border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.2);' +
+        'pointer-events:none;white-space:normal;';
+    document.body.appendChild(tip);
+
+    // Just below the flag; keep it inside the viewport.
+    const r = flagEl.getBoundingClientRect();
+    const t = tip.getBoundingClientRect();
+    let left = r.left;
+    let top  = r.bottom + 6;
+    if (left + t.width > window.innerWidth - 8) left = window.innerWidth - t.width - 8;
+    if (top + t.height > window.innerHeight - 8) top = r.top - t.height - 6; // flip above if no room below
+    tip.style.left = `${Math.max(8, left)}px`;
+    tip.style.top  = `${Math.max(8, top)}px`;
+    cameraFlagTipEl = tip;
+}
+
+document.addEventListener('mouseover', (e) => {
+    const flag = e.target.closest && e.target.closest('[data-camera-flag]');
+    if (flag && !(e.relatedTarget && flag.contains(e.relatedTarget))) showCameraFlagTip(flag);
+});
+document.addEventListener('mouseout', (e) => {
+    const flag = e.target.closest && e.target.closest('[data-camera-flag]');
+    if (flag && !(e.relatedTarget && flag.contains(e.relatedTarget))) hideCameraFlagTip();
+});
+document.addEventListener('click', (e) => {
+    const flag = e.target.closest('[data-camera-flag]');
+    if (flag) showCameraFlagTip(flag); else hideCameraFlagTip();
+});
+window.addEventListener('scroll', hideCameraFlagTip, true);
+window.addEventListener('resize', hideCameraFlagTip);
