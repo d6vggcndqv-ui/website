@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-analytics.js";
-import { getFirestore, collection, addDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFl5lTFABQa7MvO0vt5R4rbzOtLtkScs0",
@@ -113,6 +113,80 @@ function isOnGround(alt) {
   return alt === "ground";
 }
 
+// ════════════════════════════════════════════════════════════════════
+// [ROUTE] FLIGHT ROUTE TAGS (added 2026-11-24)
+// For airline-style callsigns, looks up the route on adsbdb (cached per
+// callsign per day) and adds `route` (e.g. "PNS-IAD") and `routeCallsign`
+// to the flight doc logFlight just wrote. Strict: a route is stored only
+// when PNS is on it in the right direction for the event (Takeoff ->
+// PNS-xxx, Landing -> xxx-PNS); anything else is logged as "Route
+// rejected". Runs after the write, so it never delays logging.
+// ════════════════════════════════════════════════════════════════════
+const ROUTE_AIRPORT_IATA        = "PNS";
+const ROUTE_CALLSIGN_MAX_AGE_MS = 15 * 60 * 1000;  // ignore a callsign not seen in the last 15 min
+const ROUTE_FETCH_TIMEOUT_MS    = 8000;
+const ROUTE_AIRLINE_CALLSIGN    = /^[A-Z]{3}[0-9]{1,4}[A-Z]{0,2}$/;  // e.g. DAL1640, ASH6210; skips N-numbers
+
+const routeCallsignByReg = {};   // registration -> { callsign, lastSeenMs }, filled in fetchAndDetect
+const routeLookupCache   = {};   // "CALLSIGN|YYYY-MM-DD" -> Promise<["PNS","IAD"] | null>
+
+// adsbdb lookup, cached per callsign per day
+function routeLookup(callsign) {
+  const key = callsign + "|" + new Date().toISOString().slice(0, 10);
+  if (!routeLookupCache[key]) {
+    routeLookupCache[key] = (async () => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), ROUTE_FETCH_TIMEOUT_MS);
+      try {
+        const r = await fetch("https://api.adsbdb.com/v0/callsign/" + encodeURIComponent(callsign), { signal: ctrl.signal });
+        if (!r.ok) return null;                                   // 404 = unknown callsign
+        const d = await r.json();
+        const f = d && d.response && d.response.flightroute;
+        if (!f || !f.origin || !f.destination) return null;
+        return [f.origin, f.midpoint, f.destination]
+          .filter(Boolean).map(a => a.iata_code).filter(Boolean);  // e.g. ["PNS","IAD"] or ["IAD","PNS","MSY"]
+      } catch (error) {
+        delete routeLookupCache[key];                             // network error: allow a later retry
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
+  }
+  return routeLookupCache[key];
+}
+
+// Pick the leg that matches the event; null if PNS isn't on it the right way
+function routeLegForEvent(legs, event) {
+  const i = legs.indexOf(ROUTE_AIRPORT_IATA);
+  if (i === -1) return null;
+  if (event === "Takeoff") return i < legs.length - 1 ? legs[i] + "-" + legs[i + 1] : null;
+  if (event === "Landing") return i > 0 ? legs[i - 1] + "-" + legs[i] : null;
+  return legs.join("-");                                          // Touch and Go: whole route
+}
+
+// Add the route to the doc logFlight just wrote
+async function attachRoute(docRef, registration, event) {
+  try {
+    const seen = routeCallsignByReg[registration];
+    if (!seen || Date.now() - seen.lastSeenMs > ROUTE_CALLSIGN_MAX_AGE_MS) return;
+    const callsign = seen.callsign;
+    if (!ROUTE_AIRLINE_CALLSIGN.test(callsign)) return;          // GA / military: no route expected
+    const legs = await routeLookup(callsign);
+    if (!legs) return;                                            // unknown to adsbdb
+    const leg = routeLegForEvent(legs, event);
+    if (!leg) {
+      console.log(`[Route] Route rejected for ${callsign}: ${legs.join("-")} (${event})`);
+      return;
+    }
+    await updateDoc(docRef, { route: leg, routeCallsign: callsign });
+    console.log(`[Route] ${event} ${registration} (${callsign}) -> ${leg}`);
+  } catch (error) {
+    console.error("[Route] Error saving route:", error);
+  }
+}
+// ═══════════════════════════ end [ROUTE] ═══════════════════════════
+
 async function logFlight(registration, aacAdg, category, aircraftClass, event, runway = "n/a") {
   try {
     if (category === "Rotorcraft") runway = "n/a";
@@ -137,7 +211,7 @@ async function logFlight(registration, aacAdg, category, aircraftClass, event, r
     const seconds = String(now.getSeconds()).padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12 || 12;
-    await addDoc(collection(db, "flights_pns"), {
+    const routeDocRef = await addDoc(collection(db, "flights_pns"), {   // [ROUTE] keep the new doc's reference
       registration: registration ? registration.trim() : "Unknown",
       aircraftType: aacAdg || "Unknown",
       category: category,
@@ -149,6 +223,7 @@ async function logFlight(registration, aacAdg, category, aircraftClass, event, r
       time: `${hours}:${minutes}:${seconds} ${ampm}`
     });
     console.log(`Logged ${event} for ${registration}`);
+    attachRoute(routeDocRef, registration ? registration.trim() : "Unknown", event);   // [ROUTE] not awaited, never delays logging
   } catch (error) {
     console.error("Error logging flight:", error);
   }
@@ -171,6 +246,12 @@ async function fetchAndDetect() {
       if (distance > MAX_DISTANCE_KM) return;
 
       currentAircraft[flight.hex] = flight;
+
+      // [ROUTE] remember this aircraft's callsign under the same registration logFlight will receive
+      if (flight.flight) {
+        routeCallsignByReg[(registrationRegistry[flight.hex.toLowerCase()] || flight.r || flight.flight).trim()] =
+          { callsign: flight.flight.trim().toUpperCase(), lastSeenMs: now };
+      }
 
       // Resolve AAC-ADG from registry, cache per hex so it only runs once per aircraft
       if (!aircraftTypeCache[flight.hex]) {
